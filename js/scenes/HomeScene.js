@@ -157,35 +157,13 @@ class HomeScene extends Scene {
       console.log(`[HomeScene] 关卡${level.id}未解锁`);
       return;
     }
-    console.log(`[HomeScene] 选择关卡: ${level.id}`);
+    console.log(`[HomeScene] 选择关卡: ${level.id}，直接进入游戏`);
     
-    // 显示关卡预览弹窗
-    console.log(`[HomeScene] 创建 LevelPreviewDialog: stage=${this.currentStage}, level=${level.id}`);
-    let previewDialog;
-    try {
-      previewDialog = new LevelPreviewDialog({
-        screenWidth: this.screenWidth,
-        screenHeight: this.screenHeight,
-        stage: this.currentStage,
-        levelId: level.id,
-        levelName: level.name,
-        stars: level.stars,
-        onStart: () => {
-          // 点击开始按钮后进入游戏
-          globalEvent.emit('scene:switch', 'GameplayScene', { 
-            levelId: level.id,
-            stage: this.currentStage 
-          });
-        }
-      });
-      console.log(`[HomeScene] LevelPreviewDialog 创建成功:`, previewDialog);
-    } catch (err) {
-      console.error(`[HomeScene] LevelPreviewDialog 创建失败:`, err);
-      return;
-    }
-    
-    // 注册并显示弹窗
-    globalEvent.emit('dialog:open', 'LevelPreviewDialog', previewDialog);
+    // 直接切换到游戏场景（首页已有预览卡片，无需弹窗）
+    globalEvent.emit('scene:switch', 'GameplayScene', { 
+      levelId: level.id,
+      stage: this.currentStage 
+    });
   }
   
   /**

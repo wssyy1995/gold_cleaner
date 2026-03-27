@@ -58,7 +58,7 @@ class HomeScene extends Scene {
         console.warn(`[HomeScene] 图标加载失败: ${name}`);
         loadedCount++;
       };
-      img.src = `images/ui/ui-icon-${name}.png`;
+      img.src = `images/ui/icon/ui-icon-${name}.png`;
     });
   }
 

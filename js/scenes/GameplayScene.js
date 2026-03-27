@@ -604,15 +604,13 @@ class GameplayScene extends Scene {
       // 选中高亮
       if (index === this.currentToolIndex) {
         ctx.fillStyle = tool.color;
-        ctx.beginPath();
-        ctx.roundRect(x - 5 * s, y - 5 * s, size + 10 * s, size + 10 * s, 16 * s);
+        this._drawRoundedRect(ctx, x - 5 * s, y - 5 * s, size + 10 * s, size + 10 * s, 16 * s);
         ctx.fill();
       }
       
       // 工具背景
       ctx.fillStyle = index === this.currentToolIndex ? 'rgba(255,255,255,0.9)' : '#F5F5F5';
-      ctx.beginPath();
-      ctx.roundRect(x, y, size, size, 12 * s);
+      this._drawRoundedRect(ctx, x, y, size, size, 12 * s);
       ctx.fill();
       
       // 工具图标
@@ -706,6 +704,25 @@ class GameplayScene extends Scene {
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  /**
+   * 绘制圆角矩形路径（兼容小程序）
+   * @param {CanvasRenderingContext2D} ctx 
+   * @param {number} x 
+   * @param {number} y 
+   * @param {number} width 
+   * @param {number} height 
+   * @param {number} radius 
+   */
+  _drawRoundedRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + width, y, x + width, y + height, radius);
+    ctx.arcTo(x + width, y + height, x, y + height, radius);
+    ctx.arcTo(x, y + height, x, y, radius);
+    ctx.arcTo(x, y, x + width, y, radius);
+    ctx.closePath();
   }
 
   onTouchStart(x, y) {

@@ -41,6 +41,10 @@ class LoadingScene extends Scene {
     // 资源加载器
     this.resourceLoader = new ResourceLoader();
 
+    // 背景图
+    this.bgImage = null;
+    this.bgLoaded = false;
+
     // UI组件
     this.progressBar = null;
     this.titleText = null;
@@ -56,8 +60,27 @@ class LoadingScene extends Scene {
    */
   onLoad() {
     console.log('[LoadingScene] 加载场景');
+    this._loadBackground();
     this._initUI();
     this.resourceLoader.init();
+  }
+
+  /**
+   * 加载背景图
+   */
+  _loadBackground() {
+    if (typeof wx !== 'undefined') {
+      const img = wx.createImage();
+      img.onload = () => {
+        console.log('[LoadingScene] 背景图加载完成');
+        this.bgImage = img;
+        this.bgLoaded = true;
+      };
+      img.onerror = () => {
+        console.warn('[LoadingScene] 背景图加载失败');
+      };
+      img.src = 'images/backgrounds/bg-001-loading.png';
+    }
   }
 
   /**
@@ -293,15 +316,39 @@ class LoadingScene extends Scene {
     const width = this.screenWidth;
     const height = this.screenHeight;
 
-    // 绘制背景
-    ctx.fillStyle = '#F5F5F5';
-    ctx.fillRect(0, 0, width, height);
-
-    // 绘制装饰圆形
-    ctx.fillStyle = 'rgba(74, 144, 217, 0.05)';
-    ctx.beginPath();
-    ctx.arc(width / 2, 350, 200, 0, Math.PI * 2);
-    ctx.fill();
+    // 绘制背景图
+    if (this.bgImage && this.bgLoaded) {
+      // 按比例缩放背景图填满屏幕
+      const imgRatio = this.bgImage.width / this.bgImage.height;
+      const screenRatio = width / height;
+      let drawWidth, drawHeight, drawX, drawY;
+      
+      if (imgRatio > screenRatio) {
+        // 图片更宽，以高度为准
+        drawHeight = height;
+        drawWidth = height * imgRatio;
+        drawX = (width - drawWidth) / 2;
+        drawY = 0;
+      } else {
+        // 图片更高，以宽度为准
+        drawWidth = width;
+        drawHeight = width / imgRatio;
+        drawX = 0;
+        drawY = (height - drawHeight) / 2;
+      }
+      
+      ctx.drawImage(this.bgImage, drawX, drawY, drawWidth, drawHeight);
+    } else {
+      // 备用背景色
+      ctx.fillStyle = '#F5F5F5';
+      ctx.fillRect(0, 0, width, height);
+      
+      // 绘制装饰圆形
+      ctx.fillStyle = 'rgba(74, 144, 217, 0.05)';
+      ctx.beginPath();
+      ctx.arc(width / 2, 350, 200, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // 检查UI是否已初始化
     if (!this.titleText) return;

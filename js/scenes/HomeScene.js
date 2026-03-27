@@ -16,11 +16,34 @@ class HomeScene extends Scene {
     this.currentStage = 1;
     this.levels = [];
     this.uiElements = [];
+    
+    // 背景图
+    this.bgImage = null;
+    this.bgLoaded = false;
   }
 
   onLoad() {
     this.generateLevels();
+    this._loadBackground();
     this._initUI();
+  }
+
+  /**
+   * 加载背景图
+   */
+  _loadBackground() {
+    if (typeof wx !== 'undefined') {
+      const img = wx.createImage();
+      img.onload = () => {
+        console.log('[HomeScene] 背景图加载完成');
+        this.bgImage = img;
+        this.bgLoaded = true;
+      };
+      img.onerror = () => {
+        console.warn('[HomeScene] 背景图加载失败');
+      };
+      img.src = 'images/backgrounds/bg-002-home.png';
+    }
   }
 
   generateLevels() {
@@ -73,13 +96,37 @@ class HomeScene extends Scene {
   }
 
   onRender(ctx) {
-    // 背景
-    ctx.fillStyle = '#F5F5F5';
-    ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
-
-    // 顶部栏背景
-    ctx.fillStyle = '#4A90D9';
-    ctx.fillRect(0, 0, this.screenWidth, 120);
+    // 绘制背景图
+    if (this.bgImage && this.bgLoaded) {
+      // 按比例缩放背景图填满屏幕
+      const imgRatio = this.bgImage.width / this.bgImage.height;
+      const screenRatio = this.screenWidth / this.screenHeight;
+      let drawWidth, drawHeight, drawX, drawY;
+      
+      if (imgRatio > screenRatio) {
+        // 图片更宽，以高度为准
+        drawHeight = this.screenHeight;
+        drawWidth = this.screenHeight * imgRatio;
+        drawX = (this.screenWidth - drawWidth) / 2;
+        drawY = 0;
+      } else {
+        // 图片更高，以宽度为准
+        drawWidth = this.screenWidth;
+        drawHeight = this.screenWidth / imgRatio;
+        drawX = 0;
+        drawY = (this.screenHeight - drawHeight) / 2;
+      }
+      
+      ctx.drawImage(this.bgImage, drawX, drawY, drawWidth, drawHeight);
+    } else {
+      // 备用背景色
+      ctx.fillStyle = '#F5F5F5';
+      ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
+      
+      // 顶部栏背景
+      ctx.fillStyle = '#4A90D9';
+      ctx.fillRect(0, 0, this.screenWidth, 120);
+    }
 
     // 检查UI是否已初始化
     if (!this.titleText) return;

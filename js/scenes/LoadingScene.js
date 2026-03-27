@@ -319,6 +319,30 @@ class LoadingScene extends Scene {
   }
 
   /**
+   * 绘制背景图 - cover模式保持比例填满屏幕
+   */
+  _drawBackground(ctx, img, sw, sh) {
+    const imgRatio = img.width / img.height;
+    const screenRatio = sw / sh;
+    
+    let dw, dh, dx, dy;
+    if (imgRatio > screenRatio) {
+      // 图片更宽，以高度为基准
+      dh = sh;
+      dw = sh * imgRatio;
+      dx = (sw - dw) / 2;
+      dy = 0;
+    } else {
+      // 图片更高，以宽度为基准
+      dw = sw;
+      dh = sw / imgRatio;
+      dx = 0;
+      dy = (sh - dh) / 2;
+    }
+    ctx.drawImage(img, dx, dy, dw, dh);
+  }
+
+  /**
    * 渲染
    */
   onRender(ctx) {
@@ -326,9 +350,9 @@ class LoadingScene extends Scene {
     const width = this.screenWidth;
     const height = this.screenHeight;
 
-    // 绘制背景图 - 使用物理像素填满整个 Canvas
+    // 绘制背景图 - cover模式保持比例填满屏幕
     if (this.bgImage && this.bgLoaded) {
-      ctx.drawImage(this.bgImage, 0, 0, width, height);
+      this._drawBackground(ctx, this.bgImage, width, height);
     } else {
       // 备用背景色
       ctx.fillStyle = '#F5F5F5';

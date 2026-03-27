@@ -199,6 +199,11 @@ class LoadingScene extends Scene {
   _onProgressUpdate(progress) {
     this.progress = progress.progress;
 
+    // 检查UI是否已初始化
+    if (!this.progressBar || !this.percentText || !this.tipText) {
+      return;
+    }
+
     // 更新进度条
     this.progressBar.setProgress(this.progress);
 
@@ -254,8 +259,10 @@ class LoadingScene extends Scene {
    */
   _onLoadingError(message) {
     this.loadingState = 'error';
-    this.tipText.setText(`加载失败: ${message}`);
-    this.tipText.setColor('#FF6B6B');
+    if (this.tipText) {
+      this.tipText.setText(`加载失败: ${message}`);
+      this.tipText.setColor('#FF6B6B');
+    }
 
     // 显示重试按钮（简化版，实际可以用Button组件）
     console.error('[LoadingScene] 加载错误:', message);
@@ -266,7 +273,9 @@ class LoadingScene extends Scene {
    */
   onUpdate(deltaTime) {
     // 更新进度条动画
-    this.progressBar.update(deltaTime);
+    if (this.progressBar) {
+      this.progressBar.update(deltaTime);
+    }
 
     // 更新旋转动画角度
     this._rotation = (this._rotation || 0) + deltaTime * 0.005;
@@ -292,20 +301,23 @@ class LoadingScene extends Scene {
     ctx.arc(width / 2, 350, 200, 0, Math.PI * 2);
     ctx.fill();
 
+    // 检查UI是否已初始化
+    if (!this.titleText) return;
+
     // 绘制标题
     this.titleText.onRender(ctx);
-    this.subtitleText.onRender(ctx);
+    if (this.subtitleText) this.subtitleText.onRender(ctx);
 
     // 5.3.2 实现加载动画 - 绘制旋转的加载图标
     this._drawLoadingIcon(ctx, width / 2, 620);
 
     // 绘制进度条
-    this.progressBar.onRender(ctx);
-    this.percentText.onRender(ctx);
-    this.tipText.onRender(ctx);
+    if (this.progressBar) this.progressBar.onRender(ctx);
+    if (this.percentText) this.percentText.onRender(ctx);
+    if (this.tipText) this.tipText.onRender(ctx);
 
     // 绘制版本号
-    this.versionText.onRender(ctx);
+    if (this.versionText) this.versionText.onRender(ctx);
   }
 
   /**

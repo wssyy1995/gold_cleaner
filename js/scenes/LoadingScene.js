@@ -233,9 +233,11 @@ class LoadingScene extends Scene {
     setTimeout(() => {
       this.loadingState = 'complete';
       this.progress = 1;
-      this.progressBar.setProgress(1);
-      this.percentText.setText('100%');
-      this.tipText.setText('准备就绪！');
+      
+      // 检查UI是否还存在（可能场景已切换）
+      if (this.progressBar) this.progressBar.setProgress(1);
+      if (this.percentText) this.percentText.setText('100%');
+      if (this.tipText) this.tipText.setText('准备就绪！');
 
       // 5.3.5 加载完成后切换到首页
       this._switchToHome();

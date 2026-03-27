@@ -8,6 +8,8 @@ import Text from '../ui/components/Text';
 import ProgressBar from '../ui/components/ProgressBar';
 import { globalEvent } from '../core/EventEmitter';
 
+import PauseMenu from '../ui/dialogs/PauseMenu';
+
 class GameplayScene extends Scene {
   constructor() {
     super({ name: 'GameplayScene' });
@@ -18,6 +20,7 @@ class GameplayScene extends Scene {
     this.toolSlots = [];
     this.currentToolIndex = 0;
     this.dirtObjects = [];
+    this.isPaused = false;
     
     // 视图状态
     this.viewMode = 'room'; // 'room' | 'zoom'
@@ -75,6 +78,14 @@ class GameplayScene extends Scene {
       text: '0%', 
       fontSize: 24 * s, fontWeight: 'bold', 
       color: '#4CAF50', align: 'center' 
+    });
+    
+    // 暂停按钮
+    this.pauseBtn = new Button({
+      x: 600 * s, y: 40 * s, width: 60 * s, height: 50 * s,
+      text: '⏸', fontSize: 24 * s,
+      bgColor: 'transparent', textColor: '#333333',
+      onClick: () => this._showPauseMenu()
     });
 
     // 工具槽（支持滑动）
@@ -264,11 +275,43 @@ class GameplayScene extends Scene {
     });
   }
 
+  /**
+   * 显示暂停菜单
+   */
+  _showPauseMenu() {
+    this.isPaused = true;
+    globalEvent.emit('game:pause');
+    
+    const s = this.screenWidth / 750;
+    const pauseMenu = new PauseMenu({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight,
+      onResume: () => {
+        this.isPaused = false;
+        globalEvent.emit('game:resume');
+      },
+      onRestart: () => {
+        this.isPaused = false;
+        globalEvent.emit('scene:switch', 'GameplayScene', { levelId: this.levelId });
+      },
+      onHome: () => {
+        this.isPaused = false;
+        globalEvent.emit('scene:switch', 'HomeScene');
+      }
+    });
+    
+    globalEvent.emit('dialog:show', 'PauseMenu', pauseMenu);
+  }
+
   onUpdate(deltaTime) {
+    // 暂停时不更新游戏逻辑
+    if (this.isPaused) return;
+    
     const s = this.screenWidth / 750;
     
     // 更新按钮
     if (this.backBtn) this.backBtn.update(deltaTime);
+    if (this.pauseBtn) this.pauseBtn.update(deltaTime);
     if (this.exitZoomBtn) this.exitZoomBtn.update(deltaTime);
     
     // 更新清洁度

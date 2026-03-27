@@ -340,8 +340,8 @@ class HomeScene extends Scene {
    * @param {number} s 缩放比例
    */
   _drawLevelPreviewCard(ctx, level, s) {
-    const cardWidth = 140 * s;
-    const cardHeight = 180 * s;
+    const cardWidth = 140 * s * 1.5;  // 宽度放大1.5倍
+    const cardHeight = 180 * s * 1.2; // 高度放大1.2倍
     
     // 卡片位置：在关卡图标右侧
     const iconX = level.x * s;

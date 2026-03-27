@@ -29,6 +29,9 @@ class HomeScene extends Scene {
       pass: null
     };
     this.iconsLoaded = false;
+    
+    // 关卡预览图缓存
+    this._previewImages = {};
   }
 
   onLoad() {
@@ -36,6 +39,22 @@ class HomeScene extends Scene {
     this._loadIcons();  // 加载关卡图标
     this._loadBackground();
     this._initUI();
+    
+    // 预加载当前关卡的预览图
+    this._preloadCurrentLevelPreview();
+  }
+
+  /**
+   * 预加载当前关卡的预览图
+   */
+  _preloadCurrentLevelPreview() {
+    // 延迟一点执行，确保 levels 已生成
+    setTimeout(() => {
+      const currentLevel = this._getCurrentLevel();
+      if (currentLevel) {
+        this._loadPreviewImage(this.currentStage, currentLevel.id);
+      }
+    }, 100);
   }
 
   /**
@@ -187,6 +206,9 @@ class HomeScene extends Scene {
     if (nextLevel && nextLevel.status === 'locked') {
       nextLevel.status = 'unlocked';
       console.log(`[HomeScene] 解锁关卡${nextLevel.id}`);
+      
+      // 预加载下一关的预览图
+      this._loadPreviewImage(this.currentStage, nextLevel.id);
     }
   }
 
@@ -258,6 +280,22 @@ class HomeScene extends Scene {
   }
 
   /**
+   * 获取当前关卡（第一个未解锁或已解锁未通关的关卡）
+   */
+  _getCurrentLevel() {
+    // 优先找已解锁但未通关的关卡
+    const unlockedLevel = this.levels.find(l => l.status === 'unlocked');
+    if (unlockedLevel) return unlockedLevel;
+    
+    // 如果没有，找第一个锁定的关卡
+    const lockedLevel = this.levels.find(l => l.status === 'locked');
+    if (lockedLevel) return lockedLevel;
+    
+    // 如果都通关了，返回最后一个关卡
+    return this.levels[this.levels.length - 1];
+  }
+
+  /**
    * 绘制关卡图标
    */
   _drawLevelIcons(ctx) {
@@ -265,6 +303,9 @@ class HomeScene extends Scene {
     
     const s = this.screenWidth / 750;
     const iconSize = this.iconSize;
+    
+    // 获取当前关卡，在其旁边绘制预览卡片
+    const currentLevel = this._getCurrentLevel();
     
     this.levels.forEach(level => {
       // 根据状态选择图标
@@ -284,7 +325,178 @@ class HomeScene extends Scene {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(level.id.toString(), x, y + iconSize/2 + 16 * s);
+      
+      // 如果是当前关卡，在旁边绘制预览卡片
+      if (currentLevel && level.id === currentLevel.id) {
+        this._drawLevelPreviewCard(ctx, level, s);
+      }
     });
+  }
+
+  /**
+   * 绘制关卡预览卡片
+   * @param {CanvasRenderingContext2D} ctx 
+   * @param {Object} level 关卡数据
+   * @param {number} s 缩放比例
+   */
+  _drawLevelPreviewCard(ctx, level, s) {
+    const cardWidth = 140 * s;
+    const cardHeight = 180 * s;
+    
+    // 卡片位置：在关卡图标右侧
+    const iconX = level.x * s;
+    const iconY = level.y * s;
+    const cardX = iconX + 50 * s; // 图标右侧偏移
+    const cardY = iconY - cardHeight / 2; // 垂直居中
+    
+    // 卡片尺寸参数
+    const sphereRadius = cardWidth * 0.18;
+    const cardBorderRadius = cardWidth * 0.08;
+    const cardBorderWidth = Math.max(2, cardWidth * 0.02);
+    
+    // 球体中心坐标（在卡片顶部上方）
+    const sphereCenterX = cardX + cardWidth / 2;
+    const sphereCenterY = cardY + sphereRadius;
+    
+    // 卡片主体区域
+    const cardBodyX = cardX;
+    const cardBodyY = cardY + sphereRadius;
+    const cardBodyW = cardWidth;
+    const cardBodyH = cardHeight - sphereRadius;
+    
+    // 内容区域内边距
+    const contentPadding = cardBodyW * 0.08;
+    
+    // 预览图片框
+    const previewImgX = cardBodyX + contentPadding;
+    const previewImgY = cardBodyY + contentPadding;
+    const previewImgW = cardBodyW - 2 * contentPadding;
+    const levelNameHeight = cardBodyH * 0.18;
+    const previewImgH = cardBodyH - 2 * contentPadding - levelNameHeight;
+    
+    // 关卡名位置
+    const nameTextX = cardX + cardWidth / 2;
+    const nameTextY = previewImgY + previewImgH + levelNameHeight / 2;
+    
+    // --- 1. 绘制卡片主体背景 ---
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(cardBodyX, cardBodyY, cardBodyW, cardBodyH, cardBorderRadius);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    ctx.restore();
+    
+    // --- 2. 绘制卡片边框 ---
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(cardBodyX, cardBodyY, cardBodyW, cardBodyH, cardBorderRadius);
+    ctx.strokeStyle = '#FFD700'; // 金色边框
+    ctx.lineWidth = cardBorderWidth;
+    ctx.stroke();
+    ctx.restore();
+    
+    // --- 3. 绘制预览图片 ---
+    const previewImgKey = `preview_${this.currentStage}_${level.id}`;
+    let previewImg = this._previewImages && this._previewImages[previewImgKey];
+    
+    if (previewImg && previewImg.loaded && previewImg.img) {
+      const img = previewImg.img;
+      const imgRatio = img.width / img.height;
+      const frameRatio = previewImgW / previewImgH;
+      
+      let drawW, drawH, drawX, drawY;
+      if (imgRatio > frameRatio) {
+        drawH = previewImgH;
+        drawW = previewImgH * imgRatio;
+        drawX = previewImgX + (previewImgW - drawW) / 2;
+        drawY = previewImgY;
+      } else {
+        drawW = previewImgW;
+        drawH = previewImgW / imgRatio;
+        drawX = previewImgX;
+        drawY = previewImgY + (previewImgH - drawH) / 2;
+      }
+      
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(previewImgX, previewImgY, previewImgW, previewImgH, cardBorderRadius * 0.5);
+      ctx.clip();
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+      ctx.restore();
+    } else {
+      // 图片未加载，显示占位符
+      ctx.save();
+      ctx.fillStyle = '#E8E8E8';
+      ctx.beginPath();
+      ctx.roundRect(previewImgX, previewImgY, previewImgW, previewImgH, cardBorderRadius * 0.5);
+      ctx.fill();
+      
+      // 加载中文字
+      ctx.fillStyle = '#999999';
+      ctx.font = `${12 * s}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('预览图', previewImgX + previewImgW / 2, previewImgY + previewImgH / 2);
+      ctx.restore();
+      
+      // 异步加载图片
+      this._loadPreviewImage(this.currentStage, level.id);
+    }
+    
+    // --- 4. 绘制关卡名称 ---
+    ctx.save();
+    ctx.fillStyle = '#333333';
+    ctx.font = `bold ${Math.max(12, cardWidth * 0.08)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(level.name, nameTextX, nameTextY);
+    ctx.restore();
+    
+    // --- 5. 绘制关卡数字球体 ---
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(sphereCenterX, sphereCenterY, sphereRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = '#FFA500'; // 橙色
+    ctx.fill();
+    ctx.strokeStyle = '#FFD700'; // 金色边框
+    ctx.lineWidth = cardBorderWidth * 1.5;
+    ctx.stroke();
+    ctx.restore();
+    
+    // --- 6. 绘制关卡数字 ---
+    ctx.save();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold ${sphereRadius * 1.2}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(level.id.toString(), sphereCenterX, sphereCenterY);
+    ctx.restore();
+  }
+
+  /**
+   * 加载预览图片
+   */
+  _loadPreviewImage(stage, levelId) {
+    if (!this._previewImages) this._previewImages = {};
+    
+    const key = `preview_${stage}_${levelId}`;
+    if (this._previewImages[key]) return; // 已在加载中
+    
+    this._previewImages[key] = { loaded: false, img: null };
+    
+    if (typeof wx !== 'undefined') {
+      const img = wx.createImage();
+      img.onload = () => {
+        if (this._previewImages[key]) {
+          this._previewImages[key].loaded = true;
+          this._previewImages[key].img = img;
+        }
+      };
+      img.onerror = () => {
+        console.warn(`[HomeScene] 预览图加载失败: ${key}`);
+      };
+      img.src = `images/game/game_stage${stage}_l${levelId}_home.png`;
+    }
   }
 
   /**

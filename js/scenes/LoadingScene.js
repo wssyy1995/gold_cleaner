@@ -319,27 +319,23 @@ class LoadingScene extends Scene {
   }
 
   /**
-   * Contain 模式绘制背景图 - 保持比例，完整显示，可能有黑边
+   * Cover 模式绘制背景图 - 保持比例，填满屏幕，裁剪溢出
    */
-  _drawBackgroundContain(ctx, img, sw, sh) {
+  _drawBackgroundCover(ctx, img, sw, sh) {
     // 计算两个方向的缩放比例
-    const scaleX = sw / img.width;   // 按宽度缩放的比例
-    const scaleY = sh / img.height;  // 按高度缩放的比例
+    const scaleX = sw / img.width;
+    const scaleY = sh / img.height;
     
-    // Contain 模式：选择较小的缩放比例，确保图片完整显示
-    const scale = Math.min(scaleX, scaleY);
+    // Cover 模式：选择较大的缩放比例，确保填满屏幕
+    const scale = Math.max(scaleX, scaleY);
     
-    // 计算绘制尺寸
+    // 计算绘制尺寸（可能超出屏幕）
     const dw = img.width * scale;
     const dh = img.height * scale;
     
-    // 居中显示
+    // 居中显示（超出部分自动被裁剪）
     const dx = (sw - dw) / 2;
     const dy = (sh - dh) / 2;
-    
-    // 绘制黑边背景
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, sw, sh);
     
     // 绘制图片
     ctx.drawImage(img, dx, dy, dw, dh);
@@ -359,9 +355,9 @@ class LoadingScene extends Scene {
       this._logged = true;
     }
 
-    // 绘制背景图 - Contain 模式保持比例完整显示
+    // 绘制背景图 - Cover 模式填满屏幕（保持比例，裁剪溢出）
     if (this.bgImage && this.bgLoaded) {
-      this._drawBackgroundContain(ctx, this.bgImage, width, height);
+      this._drawBackgroundCover(ctx, this.bgImage, width, height);
     } else {
       // 备用背景色
       ctx.fillStyle = '#F5F5F5';

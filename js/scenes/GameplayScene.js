@@ -110,6 +110,15 @@ class GameplayScene extends Scene {
       bgColor: 'transparent', textColor: '#333333',
       onClick: () => this._showPauseMenu()
     });
+    
+    // 退出按钮（右上角）
+    this.quitBtn = new Button({
+      x: 670 * s, y: 40 * s, width: 70 * s, height: 50 * s,
+      text: '退出', fontSize: 22 * s,
+      bgColor: 'rgba(255, 107, 107, 0.9)', textColor: '#FFFFFF',
+      borderRadius: 8 * s,
+      onClick: () => this._onQuitClick()
+    });
 
     // 工具槽（支持滑动）
     this.tools = [
@@ -326,6 +335,23 @@ class GameplayScene extends Scene {
     globalEvent.emit('dialog:show', 'PauseMenu', pauseMenu);
   }
 
+  /**
+   * 退出按钮点击处理
+   */
+  _onQuitClick() {
+    // 显示确认弹窗
+    globalEvent.emit('dialog:show', 'ConfirmDialog', {
+      title: '确认退出',
+      message: '确定要退出当前关卡吗？进度将不会保存。',
+      confirmText: '退出',
+      cancelText: '继续游戏',
+      onConfirm: () => {
+        // 返回首页
+        globalEvent.emit('scene:switch', 'HomeScene');
+      }
+    });
+  }
+
   onUpdate(deltaTime) {
     // 暂停时不更新游戏逻辑
     if (this.isPaused) return;
@@ -335,6 +361,7 @@ class GameplayScene extends Scene {
     // 更新按钮
     if (this.backBtn) this.backBtn.update(deltaTime);
     if (this.pauseBtn) this.pauseBtn.update(deltaTime);
+    if (this.quitBtn) this.quitBtn.update(deltaTime);
     if (this.exitZoomBtn) this.exitZoomBtn.update(deltaTime);
     
     // 更新清洁度
@@ -430,6 +457,8 @@ class GameplayScene extends Scene {
     if (this.backBtn) this.backBtn.onRender(ctx);
     if (this.levelText) this.levelText.onRender(ctx);
     if (this.cleanlinessText) this.cleanlinessText.onRender(ctx);
+    if (this.pauseBtn) this.pauseBtn.onRender(ctx);
+    if (this.quitBtn) this.quitBtn.onRender(ctx);
 
     // 绘制清洁度球
     this._renderCleanlinessBall(ctx, s);
@@ -714,6 +743,8 @@ class GameplayScene extends Scene {
     
     // 房间视图模式
     if (this.backBtn && this.backBtn.onTouchStart(x, y)) return true;
+    if (this.pauseBtn && this.pauseBtn.onTouchStart(x, y)) return true;
+    if (this.quitBtn && this.quitBtn.onTouchStart(x, y)) return true;
     
     // 检查工具槽滑动
     if (y > 1100 * s) {
@@ -800,6 +831,8 @@ class GameplayScene extends Scene {
     
     // 房间视图模式
     if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
+    if (this.pauseBtn && this.pauseBtn.onTouchEnd(x, y)) return true;
+    if (this.quitBtn && this.quitBtn.onTouchEnd(x, y)) return true;
     
     // 结束工具槽滑动
     if (this.toolSlotDragging) {

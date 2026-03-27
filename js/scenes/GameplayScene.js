@@ -430,8 +430,12 @@ class GameplayScene extends Scene {
     
     // 绘制关卡背景图（在游戏区域内，占屏幕下方 90%）
     if (this.bgImage && this.bgLoaded) {
-      // 使用 Cover 模式绘制背景图在游戏区域
+      // 使用 Cover 模式绘制背景图在游戏区域，并裁剪到游戏区域内
+      ctx.save();
+      ctx.rect(0, gameAreaY, this.screenWidth, gameAreaHeight);
+      ctx.clip(); // 裁剪，防止图片覆盖 top_bar
       this._drawBackgroundCover(ctx, this.bgImage, 0, gameAreaY, this.screenWidth, gameAreaHeight);
+      ctx.restore();
     } else {
       // 未加载时显示默认背景
       ctx.fillStyle = '#F5F5DC';

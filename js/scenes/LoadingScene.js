@@ -96,26 +96,26 @@ class LoadingScene extends Scene {
    */
   _initUI() {
     const centerX = this.screenWidth / 2;
-    const scale = this.screenWidth / 750; // 缩放比例
+    const s = this.screenWidth / 750; // 缩放比例
 
-    // 5.3.1 设计加载页布局 - 标题
+    // 5.3.1 设计加载页布局 - 标题（所有坐标和尺寸乘以 s）
     this.titleText = new Text({
       x: centerX,
-      y: 400,
+      y: 400 * s,
       text: GameConfig.gameName,
-      fontSize: 56,
+      fontSize: 56 * s,
       fontWeight: 'bold',
       color: '#4A90D9',
       align: 'center',
-      shadow: { color: 'rgba(0,0,0,0.1)', blur: 4, offsetX: 2, offsetY: 2 }
+      shadow: { color: 'rgba(0,0,0,0.1)', blur: 4 * s, offsetX: 2 * s, offsetY: 2 * s }
     });
 
     // 副标题
     this.subtitleText = new Text({
       x: centerX,
-      y: 480,
+      y: 480 * s,
       text: '金牌保洁，从这里开始',
-      fontSize: 28,
+      fontSize: 28 * s,
       color: '#666666',
       align: 'center'
     });
@@ -124,15 +124,15 @@ class LoadingScene extends Scene {
 
     // 5.3.3 实现加载进度显示 - 进度条
     this.progressBar = new ProgressBar({
-      x: centerX - 250,
-      y: 750,
-      width: 500,
-      height: 16,
+      x: centerX - 250 * s,
+      y: 750 * s,
+      width: 500 * s,
+      height: 16 * s,
       progress: 0,
       bgColor: '#E8E8E8',
       fillColor: '#4A90D9',
       fillGradient: { start: '#4A90D9', end: '#5BA0E9' },
-      borderRadius: 8,
+      borderRadius: 8 * s,
       striped: true,
       animated: true
     });
@@ -140,9 +140,9 @@ class LoadingScene extends Scene {
     // 进度百分比文字
     this.percentText = new Text({
       x: centerX,
-      y: 790,
+      y: 790 * s,
       text: '0%',
-      fontSize: 24,
+      fontSize: 24 * s,
       color: '#4A90D9',
       align: 'center'
     });
@@ -150,9 +150,9 @@ class LoadingScene extends Scene {
     // 提示文字
     this.tipText = new Text({
       x: centerX,
-      y: 850,
+      y: 850 * s,
       text: this.tips[0],
-      fontSize: 24,
+      fontSize: 24 * s,
       color: '#999999',
       align: 'center'
     });
@@ -160,9 +160,9 @@ class LoadingScene extends Scene {
     // 版本号
     this.versionText = new Text({
       x: centerX,
-      y: this.screenHeight - 60,
+      y: this.screenHeight - 60 * s,
       text: `v${GameConfig.version}`,
-      fontSize: 20,
+      fontSize: 20 * s,
       color: '#CCCCCC',
       align: 'center'
     });
@@ -382,7 +382,8 @@ class LoadingScene extends Scene {
     if (this.subtitleText) this.subtitleText.onRender(ctx);
 
     // 5.3.2 实现加载动画 - 绘制旋转的加载图标
-    this._drawLoadingIcon(ctx, width / 2, 620);
+    const s = this.screenWidth / 750;
+    this._drawLoadingIcon(ctx, width / 2, 620 * s, s);
 
     // 绘制进度条
     if (this.progressBar) this.progressBar.onRender(ctx);
@@ -397,15 +398,15 @@ class LoadingScene extends Scene {
    * 5.3.2 实现加载动画
    * 绘制加载图标
    */
-  _drawLoadingIcon(ctx, x, y) {
+  _drawLoadingIcon(ctx, x, y, s = 1) {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(this._rotation || 0);
 
-    // 绘制旋转的小圆点
+    // 绘制旋转的小圆点（尺寸乘以缩放比例）
     const dotCount = 8;
-    const radius = 30;
-    const dotRadius = 6;
+    const radius = 30 * s;
+    const dotRadius = 6 * s;
 
     for (let i = 0; i < dotCount; i++) {
       const angle = (i / dotCount) * Math.PI * 2;

@@ -53,31 +53,42 @@ class HomeScene extends Scene {
   }
 
   _initUI() {
-    // 顶部栏
-    this.titleText = new Text({ x: 375, y: 60, text: '金牌保洁升职记', fontSize: 36, fontWeight: 'bold', color: '#FFFFFF', align: 'center' });
-    this.coinText = new Text({ x: 20, y: 60, text: '💰 100', fontSize: 28, color: '#FFFFFF', align: 'left' });
+    const s = this.screenWidth / 750; // 缩放比例
+    const cx = this.screenWidth / 2;  // 屏幕中心
+    
+    // 顶部栏（所有坐标和尺寸乘以 s）
+    this.titleText = new Text({ x: cx, y: 60 * s, text: '金牌保洁升职记', fontSize: 36 * s, fontWeight: 'bold', color: '#FFFFFF', align: 'center' });
+    this.coinText = new Text({ x: 20 * s, y: 60 * s, text: '💰 100', fontSize: 28 * s, color: '#FFFFFF', align: 'left' });
     
     // 阶段标题
-    this.stageText = new Text({ x: 375, y: 160, text: `阶段 ${this.currentStage}`, fontSize: 32, fontWeight: 'bold', color: '#333333', align: 'center' });
+    this.stageText = new Text({ x: cx, y: 160 * s, text: `阶段 ${this.currentStage}`, fontSize: 32 * s, fontWeight: 'bold', color: '#333333', align: 'center' });
 
     // 关卡按钮
     this.levelButtons = [];
     const startY = 250, gapY = 180;
+    const btnSize = 100 * s;
     this.levels.forEach((level, index) => {
       const btn = new Button({
-        x: 325, y: startY + index * gapY, width: 100, height: 100,
-        text: level.id.toString(), fontSize: 36, fontWeight: 'bold',
+        x: cx - btnSize / 2, 
+        y: (startY + index * gapY) * s, 
+        width: btnSize, 
+        height: btnSize,
+        text: level.id.toString(), 
+        fontSize: 36 * s, 
+        fontWeight: 'bold',
         bgColor: level.unlocked ? '#4A90D9' : '#CCCCCC',
-        borderRadius: 50,
+        borderRadius: btnSize / 2,
         onClick: () => this._onLevelClick(level)
       });
       this.levelButtons.push(btn);
     });
 
     // 底部功能栏按钮
-    this.shopBtn = new Button({ x: 50, y: 1200, width: 120, height: 80, text: '商店', fontSize: 24, bgColor: '#FF9500', borderRadius: 8, onClick: () => globalEvent.emit('scene:switch', 'ShopScene') });
-    this.toolBtn = new Button({ x: 200, y: 1200, width: 120, height: 80, text: '工具包', fontSize: 24, bgColor: '#4CAF50', borderRadius: 8, onClick: () => globalEvent.emit('scene:switch', 'ToolScene') });
-    this.settingBtn = new Button({ x: 350, y: 1200, width: 120, height: 80, text: '设置', fontSize: 24, bgColor: '#9C27B0', borderRadius: 8, onClick: () => globalEvent.emit('scene:switch', 'SettingScene') });
+    const btnW = 120 * s, btnH = 80 * s;
+    const btnY = this.screenHeight - 150 * s;
+    this.shopBtn = new Button({ x: 50 * s, y: btnY, width: btnW, height: btnH, text: '商店', fontSize: 24 * s, bgColor: '#FF9500', borderRadius: 8 * s, onClick: () => globalEvent.emit('scene:switch', 'ShopScene') });
+    this.toolBtn = new Button({ x: 200 * s, y: btnY, width: btnW, height: btnH, text: '工具包', fontSize: 24 * s, bgColor: '#4CAF50', borderRadius: 8 * s, onClick: () => globalEvent.emit('scene:switch', 'ToolScene') });
+    this.settingBtn = new Button({ x: 350 * s, y: btnY, width: btnW, height: btnH, text: '设置', fontSize: 24 * s, bgColor: '#9C27B0', borderRadius: 8 * s, onClick: () => globalEvent.emit('scene:switch', 'SettingScene') });
   }
 
   _onLevelClick(level) {

@@ -193,6 +193,10 @@ class Main {
     // 弹窗显示事件
     globalEvent.on('dialog:show', (dialogName, dialogInstance) => {
       console.log(`[Main] 显示弹窗: ${dialogName}`);
+      if (!dialogInstance) {
+        console.error(`[Main] 弹窗实例为 null: ${dialogName}`);
+        return;
+      }
       this.dialogManager.register(dialogName, dialogInstance);
       this.dialogManager.show(dialogName);
     });

@@ -84,10 +84,19 @@ class LoadingScene extends Scene {
   }
 
   /**
+   * 设计分辨率转物理像素
+   */
+  _px(value) {
+    // 设计分辨率 750x1334 转物理像素
+    return value * (this.screenWidth / 750);
+  }
+
+  /**
    * 初始化UI
    */
   _initUI() {
     const centerX = this.screenWidth / 2;
+    const scale = this.screenWidth / 750; // 缩放比例
 
     // 5.3.1 设计加载页布局 - 标题
     this.titleText = new Text({
@@ -313,14 +322,12 @@ class LoadingScene extends Scene {
    * 渲染
    */
   onRender(ctx) {
-    // 使用逻辑像素（Canvas 已经通过 ctx.scale(dpr, dpr) 缩放）
+    // 使用物理像素
     const width = this.screenWidth;
     const height = this.screenHeight;
 
-    // 绘制背景图
+    // 绘制背景图 - 使用物理像素填满整个 Canvas
     if (this.bgImage && this.bgLoaded) {
-      // 直接填满屏幕（使用逻辑像素坐标）
-      // Canvas 已经缩放了，所以直接画 0,0 到 width,height 即可
       ctx.drawImage(this.bgImage, 0, 0, width, height);
     } else {
       // 备用背景色

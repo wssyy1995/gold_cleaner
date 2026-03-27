@@ -86,30 +86,28 @@ class Main {
     if (typeof wx !== 'undefined') {
       const sysInfo = wx.getSystemInfoSync();
       this.dpr = sysInfo.pixelRatio;
-      this.screenWidth = sysInfo.windowWidth;
-      this.screenHeight = sysInfo.windowHeight;
+      // 使用物理像素作为屏幕尺寸
+      this.screenWidth = sysInfo.windowWidth * this.dpr;
+      this.screenHeight = sysInfo.windowHeight * this.dpr;
       
       this.canvas = wx.createCanvas();
       this.ctx = this.canvas.getContext('2d');
       
-      this.canvas.width = this.screenWidth * this.dpr;
-      this.canvas.height = this.screenHeight * this.dpr;
-      this.canvas.style.width = this.screenWidth + 'px';
-      this.canvas.style.height = this.screenHeight + 'px';
+      // 设置 Canvas 为物理像素尺寸
+      this.canvas.width = this.screenWidth;
+      this.canvas.height = this.screenHeight;
       
-      this.ctx.scale(this.dpr, this.dpr);
-      
-      console.log(`[Main] Canvas: ${this.screenWidth}x${this.screenHeight}, DPR: ${this.dpr}`);
+      console.log(`[Main] Canvas物理像素: ${this.screenWidth}x${this.screenHeight}, DPR: ${this.dpr}`);
     } else {
       // 浏览器环境
       this.canvas = document.createElement('canvas');
       this.ctx = this.canvas.getContext('2d');
-      this.screenWidth = 375;
-      this.screenHeight = 667;
       this.dpr = 2;
+      this.screenWidth = 375 * this.dpr;
+      this.screenHeight = 667 * this.dpr;
       
-      this.canvas.width = this.screenWidth * this.dpr;
-      this.canvas.height = this.screenHeight * this.dpr;
+      this.canvas.width = this.screenWidth;
+      this.canvas.height = this.screenHeight;
       
       document.body.appendChild(this.canvas);
     }
@@ -125,7 +123,7 @@ class Main {
     const gameplayScene = new GameplayScene();
     const shopScene = new ShopScene();
     
-    // 设置屏幕尺寸
+    // 设置屏幕尺寸（物理像素）
     loadingScene.screenWidth = this.screenWidth;
     loadingScene.screenHeight = this.screenHeight;
     homeScene.screenWidth = this.screenWidth;
@@ -134,6 +132,12 @@ class Main {
     gameplayScene.screenHeight = this.screenHeight;
     shopScene.screenWidth = this.screenWidth;
     shopScene.screenHeight = this.screenHeight;
+    
+    // 保存dpr供场景使用
+    loadingScene.dpr = this.dpr;
+    homeScene.dpr = this.dpr;
+    gameplayScene.dpr = this.dpr;
+    shopScene.dpr = this.dpr;
     
     // 注册到场景管理器
     this.sceneManager.register('LoadingScene', LoadingScene);

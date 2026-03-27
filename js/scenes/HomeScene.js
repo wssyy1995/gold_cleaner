@@ -96,9 +96,9 @@ class HomeScene extends Scene {
   }
 
   onRender(ctx) {
-    // 使用逻辑像素（Canvas 已经通过 ctx.scale(dpr, dpr) 缩放）
+    // 使用物理像素
     
-    // 绘制背景图 - 直接填满屏幕
+    // 绘制背景图 - 使用物理像素填满整个 Canvas
     if (this.bgImage && this.bgLoaded) {
       ctx.drawImage(this.bgImage, 0, 0, this.screenWidth, this.screenHeight);
     } else {

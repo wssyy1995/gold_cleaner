@@ -313,31 +313,15 @@ class LoadingScene extends Scene {
    * 渲染
    */
   onRender(ctx) {
+    // 使用逻辑像素（Canvas 已经通过 ctx.scale(dpr, dpr) 缩放）
     const width = this.screenWidth;
     const height = this.screenHeight;
 
     // 绘制背景图
     if (this.bgImage && this.bgLoaded) {
-      // 按比例缩放背景图填满屏幕
-      const imgRatio = this.bgImage.width / this.bgImage.height;
-      const screenRatio = width / height;
-      let drawWidth, drawHeight, drawX, drawY;
-      
-      if (imgRatio > screenRatio) {
-        // 图片更宽，以高度为准
-        drawHeight = height;
-        drawWidth = height * imgRatio;
-        drawX = (width - drawWidth) / 2;
-        drawY = 0;
-      } else {
-        // 图片更高，以宽度为准
-        drawWidth = width;
-        drawHeight = width / imgRatio;
-        drawX = 0;
-        drawY = (height - drawHeight) / 2;
-      }
-      
-      ctx.drawImage(this.bgImage, drawX, drawY, drawWidth, drawHeight);
+      // 直接填满屏幕（使用逻辑像素坐标）
+      // Canvas 已经缩放了，所以直接画 0,0 到 width,height 即可
+      ctx.drawImage(this.bgImage, 0, 0, width, height);
     } else {
       // 备用背景色
       ctx.fillStyle = '#F5F5F5';
@@ -346,7 +330,7 @@ class LoadingScene extends Scene {
       // 绘制装饰圆形
       ctx.fillStyle = 'rgba(74, 144, 217, 0.05)';
       ctx.beginPath();
-      ctx.arc(width / 2, 350, 200, 0, Math.PI * 2);
+      ctx.arc(width / 2, height * 0.3, 200, 0, Math.PI * 2);
       ctx.fill();
     }
 

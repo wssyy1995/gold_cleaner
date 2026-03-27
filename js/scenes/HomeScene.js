@@ -96,28 +96,11 @@ class HomeScene extends Scene {
   }
 
   onRender(ctx) {
-    // 绘制背景图
+    // 使用逻辑像素（Canvas 已经通过 ctx.scale(dpr, dpr) 缩放）
+    
+    // 绘制背景图 - 直接填满屏幕
     if (this.bgImage && this.bgLoaded) {
-      // 按比例缩放背景图填满屏幕
-      const imgRatio = this.bgImage.width / this.bgImage.height;
-      const screenRatio = this.screenWidth / this.screenHeight;
-      let drawWidth, drawHeight, drawX, drawY;
-      
-      if (imgRatio > screenRatio) {
-        // 图片更宽，以高度为准
-        drawHeight = this.screenHeight;
-        drawWidth = this.screenHeight * imgRatio;
-        drawX = (this.screenWidth - drawWidth) / 2;
-        drawY = 0;
-      } else {
-        // 图片更高，以宽度为准
-        drawWidth = this.screenWidth;
-        drawHeight = this.screenWidth / imgRatio;
-        drawX = 0;
-        drawY = (this.screenHeight - drawHeight) / 2;
-      }
-      
-      ctx.drawImage(this.bgImage, drawX, drawY, drawWidth, drawHeight);
+      ctx.drawImage(this.bgImage, 0, 0, this.screenWidth, this.screenHeight);
     } else {
       // 备用背景色
       ctx.fillStyle = '#F5F5F5';

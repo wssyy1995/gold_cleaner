@@ -191,24 +191,14 @@ class Main {
       this.dialogManager.show('settlement');
     });
     
-    // 绑定触摸事件
+    // 绑定触摸事件 - 只需要绑定一次
     if (typeof wx !== 'undefined') {
       wx.onTouchStart((e) => {
         const touch = e.touches[0];
         const x = touch.clientX;
         const y = touch.clientY;
         
-        // 先检查弹窗
-        if (this.dialogManager.hasVisibleDialog()) {
-          this.dialogManager.onTouchStart(x, y);
-          return;
-        }
-        
-        // 再检查当前场景
-        const currentScene = this.sceneManager.currentScene;
-        if (currentScene && currentScene.onTouchStart) {
-          currentScene.onTouchStart(x, y);
-        }
+        this._handleTouchStart(x, y);
       });
       
       wx.onTouchMove((e) => {
@@ -216,15 +206,7 @@ class Main {
         const x = touch.clientX;
         const y = touch.clientY;
         
-        if (this.dialogManager.hasVisibleDialog()) {
-          this.dialogManager.onTouchMove(x, y);
-          return;
-        }
-        
-        const currentScene = this.sceneManager.currentScene;
-        if (currentScene && currentScene.onTouchMove) {
-          currentScene.onTouchMove(x, y);
-        }
+        this._handleTouchMove(x, y);
       });
       
       wx.onTouchEnd((e) => {
@@ -232,16 +214,55 @@ class Main {
         const x = touch.clientX;
         const y = touch.clientY;
         
-        if (this.dialogManager.hasVisibleDialog()) {
-          this.dialogManager.onTouchEnd(x, y);
-          return;
-        }
-        
-        const currentScene = this.sceneManager.currentScene;
-        if (currentScene && currentScene.onTouchEnd) {
-          currentScene.onTouchEnd(x, y);
-        }
+        this._handleTouchEnd(x, y);
       });
+    }
+  }
+
+  /**
+   * 处理触摸开始
+   */
+  _handleTouchStart(x, y) {
+    // 先检查弹窗
+    if (this.dialogManager.hasVisibleDialog()) {
+      this.dialogManager.onTouchStart(x, y);
+      return;
+    }
+    
+    // 再检查当前场景
+    const currentScene = this.sceneManager.currentScene;
+    if (currentScene && currentScene.onTouchStart) {
+      currentScene.onTouchStart(x, y);
+    }
+  }
+
+  /**
+   * 处理触摸移动
+   */
+  _handleTouchMove(x, y) {
+    if (this.dialogManager.hasVisibleDialog()) {
+      this.dialogManager.onTouchMove(x, y);
+      return;
+    }
+    
+    const currentScene = this.sceneManager.currentScene;
+    if (currentScene && currentScene.onTouchMove) {
+      currentScene.onTouchMove(x, y);
+    }
+  }
+
+  /**
+   * 处理触摸结束
+   */
+  _handleTouchEnd(x, y) {
+    if (this.dialogManager.hasVisibleDialog()) {
+      this.dialogManager.onTouchEnd(x, y);
+      return;
+    }
+    
+    const currentScene = this.sceneManager.currentScene;
+    if (currentScene && currentScene.onTouchEnd) {
+      currentScene.onTouchEnd(x, y);
     }
   }
 

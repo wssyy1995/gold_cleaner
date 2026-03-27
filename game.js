@@ -3,7 +3,7 @@
  * 初始化游戏并开始主循环
  */
 
-import GameApp from './app';
+import Main from './js/main';
 
 // 启动游戏
-new GameApp();
+GameGlobal.game = new Main();

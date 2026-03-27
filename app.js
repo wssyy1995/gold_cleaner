@@ -40,13 +40,27 @@ class GameApp {
     this.gameManager = null;
     // 数据管理器
     this.dataManager = null;
+
+    // 绑定生命周期
+    this._bindLifecycle();
   }
 
   /**
-   * 应用启动时调用
+   * 绑定微信生命周期
    */
-  onLaunch(options) {
-    console.log('[GameApp] onLaunch', options);
+  _bindLifecycle() {
+    if (typeof wx !== 'undefined') {
+      // 小游戏使用 wx.onShow / wx.onHide
+      wx.onShow((options) => this.onShow(options));
+      wx.onHide(() => this.onHide());
+    }
+  }
+
+  /**
+   * 启动游戏
+   */
+  launch(options = {}) {
+    console.log('[GameApp] launch', options);
 
     // 获取系统信息
     this.getSystemInfo();
@@ -154,16 +168,14 @@ class GameApp {
   }
 }
 
-// 创建应用实例
+// 创建应用实例并导出
 const app = new GameApp();
-
-// 微信小游戏生命周期绑定
-if (typeof wx !== 'undefined') {
-  App({
-    onLaunch: (options) => app.onLaunch(options),
-    onShow: (options) => app.onShow(options),
-    onHide: () => app.onHide()
-  });
-}
-
 export default app;
+
+// 在小游戏环境中自动启动
+if (typeof wx !== 'undefined') {
+  // 延迟启动，等待微信环境准备就绪
+  setTimeout(() => {
+    app.launch();
+  }, 0);
+}

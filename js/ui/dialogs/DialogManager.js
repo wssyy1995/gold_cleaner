@@ -33,32 +33,7 @@ class DialogManager {
    */
   init() {
     console.log('[DialogManager] 初始化弹窗管理器');
-    this._bindTouchEvents();
-  }
-
-  /**
-   * 绑定触摸事件
-   */
-  _bindTouchEvents() {
-    if (typeof wx !== 'undefined') {
-      // 触摸开始
-      wx.onTouchStart((e) => {
-        const touch = e.touches[0];
-        this.onTouchStart(touch.clientX, touch.clientY);
-      });
-
-      // 触摸移动
-      wx.onTouchMove((e) => {
-        const touch = e.touches[0];
-        this.onTouchMove(touch.clientX, touch.clientY);
-      });
-
-      // 触摸结束
-      wx.onTouchEnd((e) => {
-        const touch = e.changedTouches[0];
-        this.onTouchEnd(touch.clientX, touch.clientY);
-      });
-    }
+    // 触摸事件由外部（Main）统一处理，不在此处绑定
   }
 
   /**

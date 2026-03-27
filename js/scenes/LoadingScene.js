@@ -353,6 +353,12 @@ class LoadingScene extends Scene {
     const width = this.screenWidth;
     const height = this.screenHeight;
 
+    // 调试日志
+    if (this.bgImage && !this._logged) {
+      console.log(`[LoadingScene] 屏幕: ${width}x${height}, 图片: ${this.bgImage.width}x${this.bgImage.height}`);
+      this._logged = true;
+    }
+
     // 绘制背景图 - Contain 模式保持比例完整显示
     if (this.bgImage && this.bgLoaded) {
       this._drawBackgroundContain(ctx, this.bgImage, width, height);

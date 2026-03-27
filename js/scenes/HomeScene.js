@@ -82,18 +82,18 @@ class HomeScene extends Scene {
 
   generateLevels() {
     // 定义10个关卡的自定义位置（基于750x1334设计稿，从下往上）
-    // 可以根据地图背景自由调整每个关卡的位置
+    // 图标变大，y间距增大
     const positions = [
-      { x: 375, y: 1150 }, // 关卡1（最下方）
-      { x: 375, y: 1050 }, // 关卡2
-      { x: 280, y: 950 },  // 关卡3（向左偏移）
-      { x: 470, y: 950 },  // 关卡4（向右偏移）
-      { x: 375, y: 850 },  // 关卡5
-      { x: 200, y: 780 },  // 关卡6
-      { x: 550, y: 780 },  // 关卡7
-      { x: 375, y: 700 },  // 关卡8
-      { x: 280, y: 600 },  // 关卡9
-      { x: 470, y: 600 },  // 关卡10（最上方）
+      { x: 375, y: 1180 }, // 关卡1（最下方）
+      { x: 375, y: 1060 }, // 关卡2（间距120）
+      { x: 250, y: 940 },  // 关卡3（向左偏移，间距120）
+      { x: 500, y: 940 },  // 关卡4（向右偏移）
+      { x: 375, y: 820 },  // 关卡5（间距120）
+      { x: 180, y: 720 },  // 关卡6（向左偏移，间距100）
+      { x: 570, y: 720 },  // 关卡7（向右偏移）
+      { x: 375, y: 620 },  // 关卡8（间距100）
+      { x: 250, y: 520 },  // 关卡9（向左偏移，间距100）
+      { x: 500, y: 520 },  // 关卡10（最上方，向右偏移）
     ];
     
     for (let i = 1; i <= 10; i++) {
@@ -120,9 +120,9 @@ class HomeScene extends Scene {
     // 阶段标题
     this.stageText = new Text({ x: cx, y: 160 * s, text: `阶段 ${this.currentStage}`, fontSize: 32 * s, fontWeight: 'bold', color: '#333333', align: 'center' });
 
-    // 关卡图标尺寸
-    this.iconSize = 50 * s;
-    this.iconHitArea = 60 * s; // 点击检测范围
+    // 关卡图标尺寸（变大）
+    this.iconSize = 80 * s;
+    this.iconHitArea = 100 * s; // 点击检测范围
 
     // 底部功能栏按钮
     const btnW = 120 * s, btnH = 80 * s;
@@ -250,12 +250,12 @@ class HomeScene extends Scene {
       // 绘制图标（居中）
       ctx.drawImage(iconImg, x - iconSize/2, y - iconSize/2, iconSize, iconSize);
       
-      // 绘制关卡编号
+      // 绘制关卡编号（字体随图标变大）
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = `bold ${14 * s}px Arial`;
+      ctx.font = `bold ${18 * s}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(level.id.toString(), x, y + iconSize/2 + 12 * s);
+      ctx.fillText(level.id.toString(), x, y + iconSize/2 + 16 * s);
     });
   }
 

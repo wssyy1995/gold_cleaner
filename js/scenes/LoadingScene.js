@@ -319,6 +319,36 @@ class LoadingScene extends Scene {
   }
 
   /**
+   * Contain 模式绘制背景图 - 保持比例，完整显示，可能有黑边
+   */
+  _drawBackgroundContain(ctx, img, sw, sh) {
+    const imgRatio = img.width / img.height;
+    const screenRatio = sw / sh;
+    
+    let dw, dh, dx, dy;
+    if (imgRatio > screenRatio) {
+      // 图片更宽，以宽度为基准，上下留白
+      dw = sw;
+      dh = sw / imgRatio;
+      dx = 0;
+      dy = (sh - dh) / 2;
+    } else {
+      // 图片更高，以高度为基准，左右留白
+      dh = sh;
+      dw = sh * imgRatio;
+      dx = (sw - dw) / 2;
+      dy = 0;
+    }
+    
+    // 绘制黑边背景
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, sw, sh);
+    
+    // 绘制图片
+    ctx.drawImage(img, dx, dy, dw, dh);
+  }
+
+  /**
    * 渲染
    */
   onRender(ctx) {
@@ -326,10 +356,9 @@ class LoadingScene extends Scene {
     const width = this.screenWidth;
     const height = this.screenHeight;
 
-    // 绘制背景图 - 逻辑像素单位，强制填满（拉伸）
-    // 如需保持比例，请使用 mode='cover' 或 'contain'
+    // 绘制背景图 - Contain 模式保持比例完整显示
     if (this.bgImage && this.bgLoaded) {
-      ctx.drawImage(this.bgImage, 0, 0, width, height);
+      this._drawBackgroundContain(ctx, this.bgImage, width, height);
     } else {
       // 备用背景色
       ctx.fillStyle = '#F5F5F5';

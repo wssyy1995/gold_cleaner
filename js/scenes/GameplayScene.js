@@ -167,14 +167,20 @@ class GameplayScene extends Scene {
       { type: 'grime', name: '油垢', color: '#3E2723', recipes: [['spray', 'brush'], ['sponge', 'sponge']] },
     ];
     
+    // 游戏区域是屏幕下方 90%
+    const gameAreaHeight = this.screenHeight * 0.9;
+    
     for (let i = 0; i < 5; i++) {
       const dirtType = dirtTypes[Math.floor(Math.random() * dirtTypes.length)];
+      // y 坐标基于游戏区域（0 ~ gameAreaHeight），渲染时会加上 top_bar 偏移
+      const relativeY = (50 + Math.random() * (gameAreaHeight / s - 150)) * s;
+      
       this.dirtObjects.push({
         id: i,
         type: dirtType.type,
         name: dirtType.name,
         x: (80 + Math.random() * 590) * s,
-        y: (200 + Math.random() * 700) * s,
+        y: relativeY, // 相对于游戏区域的 y 坐标
         width: 100 * s, 
         height: 100 * s,
         state: 'dirty', // dirty, cleaning, clean
@@ -411,45 +417,51 @@ class GameplayScene extends Scene {
 
   /**
    * 渲染房间视图
+   * 布局：顶部 10% 为 top_bar，下方 90% 为游戏区域
    */
   _renderRoomView(ctx, s) {
-    // 绘制关卡背景图（如果已加载）
+    const topBarHeight = this.screenHeight * 0.1; // 顶部栏高度 10%
+    const gameAreaY = topBarHeight; // 游戏区域起始 Y
+    const gameAreaHeight = this.screenHeight - topBarHeight; // 游戏区域高度 90%
+    
+    // 先绘制顶部栏背景（防止图片覆盖）
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, this.screenWidth, topBarHeight);
+    
+    // 绘制关卡背景图（在游戏区域内，占屏幕下方 90%）
     if (this.bgImage && this.bgLoaded) {
-      // 使用 Cover 模式绘制背景图填满屏幕
-      this._drawBackgroundCover(ctx, this.bgImage, this.screenWidth, this.screenHeight);
+      // 使用 Cover 模式绘制背景图在游戏区域
+      this._drawBackgroundCover(ctx, this.bgImage, 0, gameAreaY, this.screenWidth, gameAreaHeight);
     } else {
       // 未加载时显示默认背景
       ctx.fillStyle = '#F5F5DC';
-      ctx.fillRect(20 * s, 140 * s, 710 * s, 950 * s);
+      ctx.fillRect(20 * s, gameAreaY + 20 * s, this.screenWidth - 40 * s, gameAreaHeight - 40 * s);
     }
-
-    // 顶部栏
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, this.screenWidth, 120 * s);
 
     // 检查UI是否已初始化
     if (!this.dirtObjects) return;
-
-    // 绘制污垢
+    
+    // 绘制污垢（y 坐标加上 gameAreaY 偏移，因为图片区域下移了）
     this.dirtObjects.forEach(dirt => {
       if (dirt.state !== 'clean') {
+        const dy = dirt.y + gameAreaY; // 加上游戏区域偏移
         const alpha = 1 - (dirt.cleanProgress / dirt.maxProgress) * 0.5;
         ctx.fillStyle = this._hexToRgba(dirt.color, alpha);
-        ctx.fillRect(dirt.x, dirt.y, dirt.width, dirt.height);
+        ctx.fillRect(dirt.x, dy, dirt.width, dirt.height);
         ctx.strokeStyle = this._hexToRgba(dirt.color, 0.8);
         ctx.lineWidth = 2 * s;
-        ctx.strokeRect(dirt.x, dirt.y, dirt.width, dirt.height);
+        ctx.strokeRect(dirt.x, dy, dirt.width, dirt.height);
         
         // 绘制进度
         if (dirt.cleanProgress > 0) {
           ctx.fillStyle = '#4CAF50';
-          ctx.fillRect(dirt.x, dirt.y - 10 * s, dirt.width * (dirt.cleanProgress / dirt.maxProgress), 6 * s);
+          ctx.fillRect(dirt.x, dy - 10 * s, dirt.width * (dirt.cleanProgress / dirt.maxProgress), 6 * s);
         }
         
         ctx.fillStyle = '#FFFFFF';
         ctx.font = `${14 * s}px sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText('双击', dirt.x + dirt.width / 2, dirt.y + dirt.height / 2 + 5 * s);
+        ctx.fillText('双击', dirt.x + dirt.width / 2, dy + dirt.height / 2 + 5 * s);
       }
     });
 
@@ -468,22 +480,26 @@ class GameplayScene extends Scene {
   }
 
   /**
-   * Cover 模式绘制背景图 - 保持比例，填满屏幕，裁剪溢出
+   * Cover 模式绘制背景图 - 保持比例，填满指定区域，裁剪溢出
+   * @param {number} targetX - 目标区域 X
+   * @param {number} targetY - 目标区域 Y  
+   * @param {number} targetW - 目标区域宽度
+   * @param {number} targetH - 目标区域高度
    */
-  _drawBackgroundCover(ctx, img, sw, sh) {
-    const scaleX = sw / img.width;
-    const scaleY = sh / img.height;
+  _drawBackgroundCover(ctx, img, targetX, targetY, targetW, targetH) {
+    const scaleX = targetW / img.width;
+    const scaleY = targetH / img.height;
     
-    // Cover 模式：选择较大的缩放比例，确保填满屏幕
+    // Cover 模式：选择较大的缩放比例，确保填满区域
     const scale = Math.max(scaleX, scaleY);
     
-    // 计算绘制尺寸（可能超出屏幕）
+    // 计算绘制尺寸
     const dw = img.width * scale;
     const dh = img.height * scale;
     
     // 居中显示（超出部分自动被裁剪）
-    const dx = (sw - dw) / 2;
-    const dy = (sh - dh) / 2;
+    const dx = targetX + (targetW - dw) / 2;
+    const dy = targetY + (targetH - dh) / 2;
     
     // 绘制图片
     ctx.drawImage(img, dx, dy, dw, dh);
@@ -883,9 +899,15 @@ class GameplayScene extends Scene {
   }
 
   _findDirtAt(x, y) {
+    // 将屏幕坐标转换为游戏区域坐标（减去 top_bar 高度）
+    const gameAreaY = this.screenHeight * 0.1;
+    const gameY = y - gameAreaY;
+    
     for (let i = this.dirtObjects.length - 1; i >= 0; i--) {
       const dirt = this.dirtObjects[i];
-      if (dirt.state !== 'clean' && x >= dirt.x && x <= dirt.x + dirt.width && y >= dirt.y && y <= dirt.y + dirt.height) {
+      // 使用游戏区域坐标进行比较
+      if (dirt.state !== 'clean' && x >= dirt.x && x <= dirt.x + dirt.width && 
+          gameY >= dirt.y && gameY <= dirt.y + dirt.height) {
         return dirt;
       }
     }

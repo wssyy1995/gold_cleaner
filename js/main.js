@@ -15,7 +15,7 @@ import ShopScene from './scenes/ShopScene';
 
 // 导入弹窗管理器
 import DialogManager from './ui/dialogs/DialogManager';
-import SettlementDialog from './scenes/SettlementDialog';
+import SettlementDialog from './ui/dialogs/SettlementDialog';
 
 // 导入配置
 import LevelManager from './game/LevelManager';

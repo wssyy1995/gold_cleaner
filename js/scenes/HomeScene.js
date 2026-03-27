@@ -350,7 +350,7 @@ class HomeScene extends Scene {
     const cardY = iconY - cardHeight / 2; // 垂直居中
     
     // 卡片尺寸参数
-    const sphereRadius = cardWidth * 0.18;
+    const sphereRadius = cardWidth * 0.12; // 数字球变小（从0.18改为0.12）
     const cardBorderRadius = cardWidth * 0.08;
     const cardBorderWidth = Math.max(2, cardWidth * 0.02);
     

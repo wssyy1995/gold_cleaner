@@ -77,12 +77,16 @@ class GameplayScene extends Scene {
   }
 
   onUpdate(deltaTime) {
-    this.toolButtons.forEach(btn => btn.update(deltaTime));
+    if (this.toolButtons) {
+      this.toolButtons.forEach(btn => btn.update(deltaTime));
+    }
     
     // 更新清洁度
-    const cleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
-    this.cleanProgress = cleaned / this.dirtObjects.length;
-    this.cleanlinessText.setText(`${Math.floor(this.cleanProgress * 100)}%`);
+    if (this.dirtObjects && this.cleanlinessText) {
+      const cleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+      this.cleanProgress = cleaned / this.dirtObjects.length;
+      this.cleanlinessText.setText(`${Math.floor(this.cleanProgress * 100)}%`);
+    }
   }
 
   onRender(ctx) {
@@ -97,6 +101,9 @@ class GameplayScene extends Scene {
     // 顶部栏
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, this.screenWidth, 120);
+
+    // 检查UI是否已初始化
+    if (!this.dirtObjects) return;
 
     // 绘制污垢
     this.dirtObjects.forEach(dirt => {
@@ -116,9 +123,9 @@ class GameplayScene extends Scene {
     });
 
     // UI元素
-    this.backBtn.onRender(ctx);
-    this.levelText.onRender(ctx);
-    this.cleanlinessText.onRender(ctx);
+    if (this.backBtn) this.backBtn.onRender(ctx);
+    if (this.levelText) this.levelText.onRender(ctx);
+    if (this.cleanlinessText) this.cleanlinessText.onRender(ctx);
 
     // 绘制清洁度球背景
     ctx.fillStyle = '#E0E0E0';
@@ -141,9 +148,11 @@ class GameplayScene extends Scene {
   onTouchStart(x, y) {
     this._touchStartTime = Date.now();
     
-    if (this.backBtn.onTouchStart(x, y)) return true;
-    for (const btn of this.toolButtons) {
-      if (btn.onTouchStart(x, y)) return true;
+    if (this.backBtn && this.backBtn.onTouchStart(x, y)) return true;
+    if (this.toolButtons) {
+      for (const btn of this.toolButtons) {
+        if (btn.onTouchStart(x, y)) return true;
+      }
     }
 
     // 检查污垢点击
@@ -163,9 +172,11 @@ class GameplayScene extends Scene {
   }
 
   onTouchEnd(x, y) {
-    if (this.backBtn.onTouchEnd(x, y)) return true;
-    for (const btn of this.toolButtons) {
-      if (btn.onTouchEnd(x, y)) return true;
+    if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
+    if (this.toolButtons) {
+      for (const btn of this.toolButtons) {
+        if (btn.onTouchEnd(x, y)) return true;
+      }
     }
     return false;
   }

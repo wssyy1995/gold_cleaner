@@ -54,9 +54,9 @@ class ShopScene extends Scene {
   }
 
   onUpdate(deltaTime) {
-    this.backBtn.update(deltaTime);
-    this.toolsTab.update(deltaTime);
-    this.itemsTab.update(deltaTime);
+    if (this.backBtn) this.backBtn.update(deltaTime);
+    if (this.toolsTab) this.toolsTab.update(deltaTime);
+    if (this.itemsTab) this.itemsTab.update(deltaTime);
   }
 
   onRender(ctx) {
@@ -67,14 +67,18 @@ class ShopScene extends Scene {
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, this.screenWidth, 200);
 
+    // 检查UI是否已初始化
+    if (!this.backBtn) return;
+
     this.backBtn.onRender(ctx);
-    this.titleText.onRender(ctx);
-    this.coinText.onRender(ctx);
-    this.toolsTab.onRender(ctx);
-    this.itemsTab.onRender(ctx);
+    if (this.titleText) this.titleText.onRender(ctx);
+    if (this.coinText) this.coinText.onRender(ctx);
+    if (this.toolsTab) this.toolsTab.onRender(ctx);
+    if (this.itemsTab) this.itemsTab.onRender(ctx);
 
     // 商品列表
-    this.products.forEach(product => {
+    if (this.products) {
+      this.products.forEach(product => {
       // 商品卡片背景
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(product.x, product.y, 320, 180);
@@ -103,20 +107,21 @@ class ShopScene extends Scene {
       ctx.font = '20px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('购买', product.x + 250, product.y + 132);
-    });
+      });
+    }
   }
 
   onTouchStart(x, y) {
-    if (this.backBtn.onTouchStart(x, y)) return true;
-    if (this.toolsTab.onTouchStart(x, y)) return true;
-    if (this.itemsTab.onTouchStart(x, y)) return true;
+    if (this.backBtn && this.backBtn.onTouchStart(x, y)) return true;
+    if (this.toolsTab && this.toolsTab.onTouchStart(x, y)) return true;
+    if (this.itemsTab && this.itemsTab.onTouchStart(x, y)) return true;
     return false;
   }
 
   onTouchEnd(x, y) {
-    if (this.backBtn.onTouchEnd(x, y)) return true;
-    if (this.toolsTab.onTouchEnd(x, y)) return true;
-    if (this.itemsTab.onTouchEnd(x, y)) return true;
+    if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
+    if (this.toolsTab && this.toolsTab.onTouchEnd(x, y)) return true;
+    if (this.itemsTab && this.itemsTab.onTouchEnd(x, y)) return true;
     return false;
   }
 }

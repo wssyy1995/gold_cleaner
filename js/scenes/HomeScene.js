@@ -64,10 +64,12 @@ class HomeScene extends Scene {
   }
 
   onUpdate(deltaTime) {
-    this.levelButtons.forEach(btn => btn.update(deltaTime));
-    this.shopBtn.update(deltaTime);
-    this.toolBtn.update(deltaTime);
-    this.settingBtn.update(deltaTime);
+    if (this.levelButtons) {
+      this.levelButtons.forEach(btn => btn.update(deltaTime));
+    }
+    if (this.shopBtn) this.shopBtn.update(deltaTime);
+    if (this.toolBtn) this.toolBtn.update(deltaTime);
+    if (this.settingBtn) this.settingBtn.update(deltaTime);
   }
 
   onRender(ctx) {
@@ -79,37 +81,46 @@ class HomeScene extends Scene {
     ctx.fillStyle = '#4A90D9';
     ctx.fillRect(0, 0, this.screenWidth, 120);
 
+    // 检查UI是否已初始化
+    if (!this.titleText) return;
+
     // 标题
     this.titleText.onRender(ctx);
-    this.coinText.onRender(ctx);
-    this.stageText.onRender(ctx);
+    if (this.coinText) this.coinText.onRender(ctx);
+    if (this.stageText) this.stageText.onRender(ctx);
 
     // 关卡按钮
-    this.levelButtons.forEach(btn => btn.onRender(ctx));
+    if (this.levelButtons) {
+      this.levelButtons.forEach(btn => btn.onRender(ctx));
+    }
 
     // 底部按钮
-    this.shopBtn.onRender(ctx);
-    this.toolBtn.onRender(ctx);
-    this.settingBtn.onRender(ctx);
+    if (this.shopBtn) this.shopBtn.onRender(ctx);
+    if (this.toolBtn) this.toolBtn.onRender(ctx);
+    if (this.settingBtn) this.settingBtn.onRender(ctx);
   }
 
   onTouchStart(x, y) {
+    if (!this.levelButtons) return false;
+    
     for (const btn of this.levelButtons) {
       if (btn.onTouchStart(x, y)) return true;
     }
-    if (this.shopBtn.onTouchStart(x, y)) return true;
-    if (this.toolBtn.onTouchStart(x, y)) return true;
-    if (this.settingBtn.onTouchStart(x, y)) return true;
+    if (this.shopBtn && this.shopBtn.onTouchStart(x, y)) return true;
+    if (this.toolBtn && this.toolBtn.onTouchStart(x, y)) return true;
+    if (this.settingBtn && this.settingBtn.onTouchStart(x, y)) return true;
     return false;
   }
 
   onTouchEnd(x, y) {
+    if (!this.levelButtons) return false;
+    
     for (const btn of this.levelButtons) {
       if (btn.onTouchEnd(x, y)) return true;
     }
-    if (this.shopBtn.onTouchEnd(x, y)) return true;
-    if (this.toolBtn.onTouchEnd(x, y)) return true;
-    if (this.settingBtn.onTouchEnd(x, y)) return true;
+    if (this.shopBtn && this.shopBtn.onTouchEnd(x, y)) return true;
+    if (this.toolBtn && this.toolBtn.onTouchEnd(x, y)) return true;
+    if (this.settingBtn && this.settingBtn.onTouchEnd(x, y)) return true;
     return false;
   }
 }

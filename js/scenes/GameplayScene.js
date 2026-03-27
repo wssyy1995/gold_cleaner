@@ -18,6 +18,26 @@ class GameplayScene extends Scene {
     this.toolSlots = [];
     this.currentToolIndex = 0;
     this.dirtObjects = [];
+    
+    // 视图状态
+    this.viewMode = 'room'; // 'room' | 'zoom'
+    this.zoomedDirt = null; // 当前放大的污垢
+    this.zoomAnimation = 0; // 放大动画进度 0-1
+    
+    // 工具槽滑动
+    this.toolSlotOffset = 0; // 滑动偏移
+    this.toolSlotDragging = false;
+    this.toolSlotStartX = 0;
+    this.toolSlotLastX = 0;
+    
+    // 工具拖动清洁
+    this.isDraggingTool = false;
+    this.dragStartPos = { x: 0, y: 0 };
+    this.dragCurrentPos = { x: 0, y: 0 };
+    
+    // 动画效果
+    this.sparkles = []; // 清洁完成时的闪光粒子
+    this.toolShake = 0; // 错误工具震动效果
   }
 
   onLoad(data = {}) {
@@ -27,59 +47,229 @@ class GameplayScene extends Scene {
   }
 
   _initUI() {
+    const s = this.screenWidth / 750;
+    
     // 顶部栏
-    this.backBtn = new Button({ x: 20, y: 40, width: 100, height: 50, text: '← 返回', fontSize: 24, bgColor: 'transparent', textColor: '#333333', onClick: () => globalEvent.emit('scene:switch', 'HomeScene') });
-    this.levelText = new Text({ x: 375, y: 65, text: `关卡 ${this.levelId}`, fontSize: 32, fontWeight: 'bold', color: '#333333', align: 'center' });
+    this.backBtn = new Button({ 
+      x: 20 * s, y: 40 * s, width: 100 * s, height: 50 * s, 
+      text: '← 返回', fontSize: 24 * s, 
+      bgColor: 'transparent', textColor: '#333333', 
+      onClick: () => {
+        if (this.viewMode === 'zoom') {
+          this._exitZoomView();
+        } else {
+          globalEvent.emit('scene:switch', 'HomeScene');
+        }
+      }
+    });
+    this.levelText = new Text({ 
+      x: 375 * s, y: 65 * s, 
+      text: `关卡 ${this.levelId}`, 
+      fontSize: 32 * s, fontWeight: 'bold', 
+      color: '#333333', align: 'center' 
+    });
     
     // 清洁度球
-    this.cleanlinessText = new Text({ x: 680, y: 65, text: '0%', fontSize: 24, fontWeight: 'bold', color: '#4CAF50', align: 'center' });
-
-    // 工具槽
-    this.toolButtons = [];
-    const toolNames = ['抹布', '海绵', '刷子', '喷雾'];
-    toolNames.forEach((name, index) => {
-      const btn = new Button({
-        x: 60 + index * 160, y: 1150, width: 120, height: 120,
-        text: name, fontSize: 20,
-        bgColor: index === 0 ? '#4A90D9' : '#E0E0E0',
-        textColor: index === 0 ? '#FFFFFF' : '#333333',
-        borderRadius: 12,
-        onClick: () => this._selectTool(index)
-      });
-      this.toolButtons.push(btn);
+    this.cleanlinessText = new Text({ 
+      x: 680 * s, y: 65 * s, 
+      text: '0%', 
+      fontSize: 24 * s, fontWeight: 'bold', 
+      color: '#4CAF50', align: 'center' 
     });
+
+    // 工具槽（支持滑动）
+    this.tools = [
+      { id: 'cloth', name: '抹布', icon: '🧽', color: '#4A90D9' },
+      { id: 'sponge', name: '海绵', icon: '🧼', color: '#66BB6A' },
+      { id: 'brush', name: '刷子', icon: '🪥', color: '#FFA726' },
+      { id: 'spray', name: '喷雾', icon: '🧴', color: '#AB47BC' },
+      { id: 'vacuum', name: '吸尘器', icon: '🌪️', color: '#EF5350' },
+    ];
+    this.currentToolIndex = 0;
+    this.toolSlotOffset = 0;
+    
+    // 工具提示框
+    this.toolTipText = new Text({
+      x: 375 * s, y: 950 * s,
+      text: '点击拖动清洁',
+      fontSize: 20 * s,
+      color: '#666666',
+      align: 'center'
+    });
+    this.showToolTip = true;
 
     // 污垢点击处理
     this._touchStartTime = 0;
     this._lastClickDirt = null;
+    this._lastClickTime = 0;
+    
+    // 退出放大视图按钮
+    this.exitZoomBtn = new Button({
+      x: 20 * s, y: 100 * s, width: 80 * s, height: 40 * s,
+      text: '✕', fontSize: 24 * s,
+      bgColor: 'rgba(0,0,0,0.5)', textColor: '#FFFFFF',
+      borderRadius: 20 * s,
+      onClick: () => this._exitZoomView()
+    });
   }
 
   _generateDirts() {
+    const s = this.screenWidth / 750;
     this.dirtObjects = [];
+    
+    // 定义几种污垢类型和对应的清洁配方
+    const dirtTypes = [
+      { type: 'dust', name: '灰尘', color: '#8B4513', recipes: [['cloth'], ['sponge']] },
+      { type: 'stain', name: '污渍', color: '#654321', recipes: [['spray', 'cloth'], ['sponge']] },
+      { type: 'grime', name: '油垢', color: '#3E2723', recipes: [['spray', 'brush'], ['sponge', 'sponge']] },
+    ];
+    
     for (let i = 0; i < 5; i++) {
+      const dirtType = dirtTypes[Math.floor(Math.random() * dirtTypes.length)];
       this.dirtObjects.push({
         id: i,
-        x: 100 + Math.random() * 500,
-        y: 250 + Math.random() * 600,
-        width: 80, height: 80,
-        state: 'dirty',
-        cleanProgress: 0
+        type: dirtType.type,
+        name: dirtType.name,
+        x: (80 + Math.random() * 590) * s,
+        y: (200 + Math.random() * 700) * s,
+        width: 100 * s, 
+        height: 100 * s,
+        state: 'dirty', // dirty, cleaning, clean
+        cleanProgress: 0,
+        maxProgress: dirtType.recipes[0].length * 100, // 需要多少次清洁
+        currentRecipe: dirtType.recipes[0],
+        currentStep: 0, // 当前清洁步骤
+        color: dirtType.color,
+        recipes: dirtType.recipes
       });
     }
   }
 
   _selectTool(index) {
     this.currentToolIndex = index;
-    this.toolButtons.forEach((btn, i) => {
-      btn.bgColor = i === index ? '#4A90D9' : '#E0E0E0';
-      btn.textColor = i === index ? '#FFFFFF' : '#333333';
+    this.showToolTip = true;
+    // 重置提示框定时器
+    if (this._toolTipTimer) clearTimeout(this._toolTipTimer);
+    this._toolTipTimer = setTimeout(() => {
+      this.showToolTip = false;
+    }, 2000);
+  }
+
+  /**
+   * 进入放大视图
+   */
+  _enterZoomView(dirt) {
+    this.zoomedDirt = dirt;
+    this.viewMode = 'zoom';
+    this.zoomAnimation = 0;
+    this.showToolTip = true;
+    
+    // 2秒后隐藏提示
+    if (this._toolTipTimer) clearTimeout(this._toolTipTimer);
+    this._toolTipTimer = setTimeout(() => {
+      this.showToolTip = false;
+    }, 2000);
+  }
+
+  /**
+   * 退出放大视图
+   */
+  _exitZoomView() {
+    this.viewMode = 'room';
+    this.zoomedDirt = null;
+    this.zoomAnimation = 0;
+    this.isDraggingTool = false;
+  }
+
+  /**
+   * 检查工具是否匹配当前步骤
+   */
+  _checkToolMatch(dirt) {
+    const currentTool = this.tools[this.currentToolIndex].id;
+    const requiredTool = dirt.currentRecipe[dirt.currentStep];
+    return currentTool === requiredTool;
+  }
+
+  /**
+   * 使用工具清洁
+   */
+  _useToolOnDirt(dirt) {
+    if (!this._checkToolMatch(dirt)) {
+      // 工具不匹配 - 触发震动效果
+      this.toolShake = 1;
+      setTimeout(() => { this.toolShake = 0; }, 500);
+      return false;
+    }
+    
+    // 正确工具 - 增加进度
+    dirt.cleanProgress += 100;
+    dirt.currentStep++;
+    dirt.state = 'cleaning';
+    
+    // 检查是否完成所有步骤
+    if (dirt.currentStep >= dirt.currentRecipe.length) {
+      this._completeCleanDirt(dirt);
+    }
+    
+    return true;
+  }
+
+  /**
+   * 完成清洁污垢
+   */
+  _completeCleanDirt(dirt) {
+    dirt.state = 'clean';
+    
+    // 添加闪光粒子效果
+    const s = this.screenWidth / 750;
+    for (let i = 0; i < 8; i++) {
+      this.sparkles.push({
+        x: dirt.x + dirt.width / 2,
+        y: dirt.y + dirt.height / 2,
+        vx: (Math.random() - 0.5) * 10 * s,
+        vy: (Math.random() - 0.5) * 10 * s,
+        life: 1,
+        size: (5 + Math.random() * 10) * s
+      });
+    }
+    
+    // 检查是否全部清洁完成
+    if (this.dirtObjects.every(d => d.state === 'clean')) {
+      setTimeout(() => {
+        this._showSettlement();
+      }, 1000);
+    }
+  }
+
+  /**
+   * 显示结算弹窗
+   */
+  _showSettlement() {
+    const stars = 3; // 根据时间和清洁度计算
+    const coins = 100 + Math.floor(Math.random() * 50);
+    
+    globalEvent.emit('dialog:show', 'SettlementDialog', {
+      levelId: this.levelId,
+      stars: stars,
+      coins: coins,
+      onNext: () => {
+        globalEvent.emit('scene:switch', 'GameplayScene', { levelId: this.levelId + 1 });
+      },
+      onReplay: () => {
+        globalEvent.emit('scene:switch', 'GameplayScene', { levelId: this.levelId });
+      },
+      onHome: () => {
+        globalEvent.emit('scene:switch', 'HomeScene');
+      }
     });
   }
 
   onUpdate(deltaTime) {
-    if (this.toolButtons) {
-      this.toolButtons.forEach(btn => btn.update(deltaTime));
-    }
+    const s = this.screenWidth / 750;
+    
+    // 更新按钮
+    if (this.backBtn) this.backBtn.update(deltaTime);
+    if (this.exitZoomBtn) this.exitZoomBtn.update(deltaTime);
     
     // 更新清洁度
     if (this.dirtObjects && this.cleanlinessText) {
@@ -87,20 +277,56 @@ class GameplayScene extends Scene {
       this.cleanProgress = cleaned / this.dirtObjects.length;
       this.cleanlinessText.setText(`${Math.floor(this.cleanProgress * 100)}%`);
     }
+    
+    // 更新粒子
+    this.sparkles.forEach((p, i) => {
+      p.life -= deltaTime * 0.002;
+      if (p.life <= 0) this.sparkles.splice(i, 1);
+    });
+    
+    // 震动效果衰减
+    if (this.toolShake > 0) {
+      this.toolShake -= deltaTime * 0.002;
+      if (this.toolShake < 0) this.toolShake = 0;
+    }
+    
+    // 检查是否全部完成
+    if (this.dirtObjects && this.dirtObjects.length > 0 && 
+        this.dirtObjects.every(d => d.state === 'clean') && 
+        !this._completed) {
+      this._completed = true;
+      setTimeout(() => this._showSettlement(), 500);
+    }
   }
 
   onRender(ctx) {
+    const s = this.screenWidth / 750;
+    
     // 背景
     ctx.fillStyle = '#E8E8E8';
     ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
 
+    if (this.viewMode === 'zoom' && this.zoomedDirt) {
+      this._renderZoomView(ctx, s);
+    } else {
+      this._renderRoomView(ctx, s);
+    }
+    
+    // 绘制闪光粒子
+    this._renderSparkles(ctx);
+  }
+
+  /**
+   * 渲染房间视图
+   */
+  _renderRoomView(ctx, s) {
     // 房间区域
     ctx.fillStyle = '#F5F5DC';
-    ctx.fillRect(20, 140, 710, 950);
+    ctx.fillRect(20 * s, 140 * s, 710 * s, 950 * s);
 
     // 顶部栏
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, this.screenWidth, 120);
+    ctx.fillRect(0, 0, this.screenWidth, 120 * s);
 
     // 检查UI是否已初始化
     if (!this.dirtObjects) return;
@@ -108,17 +334,23 @@ class GameplayScene extends Scene {
     // 绘制污垢
     this.dirtObjects.forEach(dirt => {
       if (dirt.state !== 'clean') {
-        const alpha = 1 - dirt.cleanProgress * 0.5;
-        ctx.fillStyle = `rgba(139, 69, 19, ${alpha})`;
+        const alpha = 1 - (dirt.cleanProgress / dirt.maxProgress) * 0.5;
+        ctx.fillStyle = this._hexToRgba(dirt.color, alpha);
         ctx.fillRect(dirt.x, dirt.y, dirt.width, dirt.height);
-        ctx.strokeStyle = 'rgba(160, 82, 45, 0.8)';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = this._hexToRgba(dirt.color, 0.8);
+        ctx.lineWidth = 2 * s;
         ctx.strokeRect(dirt.x, dirt.y, dirt.width, dirt.height);
         
+        // 绘制进度
+        if (dirt.cleanProgress > 0) {
+          ctx.fillStyle = '#4CAF50';
+          ctx.fillRect(dirt.x, dirt.y - 10 * s, dirt.width * (dirt.cleanProgress / dirt.maxProgress), 6 * s);
+        }
+        
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '14px sans-serif';
+        ctx.font = `${14 * s}px sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText('双击', dirt.x + dirt.width / 2, dirt.y + dirt.height / 2 + 5);
+        ctx.fillText('双击', dirt.x + dirt.width / 2, dirt.y + dirt.height / 2 + 5 * s);
       }
     });
 
@@ -127,41 +359,289 @@ class GameplayScene extends Scene {
     if (this.levelText) this.levelText.onRender(ctx);
     if (this.cleanlinessText) this.cleanlinessText.onRender(ctx);
 
-    // 绘制清洁度球背景
-    ctx.fillStyle = '#E0E0E0';
-    ctx.beginPath();
-    ctx.arc(680, 65, 40, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = `rgba(76, 175, 80, ${this.cleanProgress})`;
-    ctx.beginPath();
-    ctx.arc(680, 65, 40 * this.cleanProgress, 0, Math.PI * 2);
-    ctx.fill();
+    // 绘制清洁度球
+    this._renderCleanlinessBall(ctx, s);
 
+    // 工具栏
+    this._renderToolSlot(ctx, s);
+  }
+
+  /**
+   * 渲染放大视图
+   */
+  _renderZoomView(ctx, s) {
+    const dirt = this.zoomedDirt;
+    if (!dirt) return;
+    
+    // 深色背景
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
+    
+    // 顶部栏（简化）
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillRect(0, 0, this.screenWidth, 80 * s);
+    
+    if (this.exitZoomBtn) this.exitZoomBtn.onRender(ctx);
+    
+    // 绘制污垢名称
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold ${24 * s}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(dirt.name, 375 * s, 120 * s);
+    
+    // 绘制放大的污垢
+    const centerX = 375 * s;
+    const centerY = 600 * s;
+    const size = 300 * s;
+    
+    const progress = dirt.cleanProgress / dirt.maxProgress;
+    const alpha = 1 - progress * 0.5;
+    
+    ctx.fillStyle = this._hexToRgba(dirt.color, alpha);
+    ctx.fillRect(centerX - size/2, centerY - size/2, size, size);
+    ctx.strokeStyle = this._hexToRgba(dirt.color, 0.8);
+    ctx.lineWidth = 4 * s;
+    ctx.strokeRect(centerX - size/2, centerY - size/2, size, size);
+    
+    // 绘制进度条
+    ctx.fillStyle = '#E0E0E0';
+    ctx.fillRect(centerX - 100 * s, centerY + size/2 + 20 * s, 200 * s, 10 * s);
+    ctx.fillStyle = '#4CAF50';
+    ctx.fillRect(centerX - 100 * s, centerY + size/2 + 20 * s, 200 * s * progress, 10 * s);
+    
+    // 显示当前需要的工具
+    if (dirt.state !== 'clean') {
+      const requiredTool = this.tools.find(t => t.id === dirt.currentRecipe[dirt.currentStep]);
+      if (requiredTool) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `${18 * s}px sans-serif`;
+        ctx.fillText(`需要使用: ${requiredTool.name}`, centerX, centerY + size/2 + 60 * s);
+      }
+    }
+    
+    // 绘制工具提示
+    if (this.showToolTip && this.toolTipText) {
+      this.toolTipText.onRender(ctx);
+    }
+    
+    // 绘制工具槽
+    this._renderToolSlot(ctx, s);
+    
+    // 绘制拖动的工具
+    if (this.isDraggingTool) {
+      const tool = this.tools[this.currentToolIndex];
+      const shakeX = this.toolShake > 0 ? (Math.random() - 0.5) * 10 * s : 0;
+      const shakeY = this.toolShake > 0 ? (Math.random() - 0.5) * 10 * s : 0;
+      
+      ctx.fillStyle = tool.color;
+      ctx.beginPath();
+      ctx.arc(this.dragCurrentPos.x + shakeX, this.dragCurrentPos.y + shakeY, 30 * s, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = `${24 * s}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(tool.icon, this.dragCurrentPos.x + shakeX, this.dragCurrentPos.y + shakeY);
+      
+      // 错误提示
+      if (this.toolShake > 0) {
+        ctx.strokeStyle = '#FF5252';
+        ctx.lineWidth = 3 * s;
+        ctx.beginPath();
+        ctx.arc(this.dragCurrentPos.x, this.dragCurrentPos.y, 35 * s, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  /**
+   * 渲染工具槽
+   */
+  _renderToolSlot(ctx, s) {
+    const slotY = 1100 * s;
+    const slotHeight = 234 * s;
+    
     // 工具栏背景
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 1100, this.screenWidth, 234);
+    ctx.fillRect(0, slotY, this.screenWidth, slotHeight);
+    
+    // 绘制工具项
+    const toolWidth = 140 * s;
+    const startX = 40 * s + this.toolSlotOffset;
+    
+    this.tools.forEach((tool, index) => {
+      const x = startX + index * toolWidth;
+      const y = slotY + 30 * s;
+      const size = 120 * s;
+      
+      // 只绘制可见的
+      if (x + size < 0 || x > this.screenWidth) return;
+      
+      // 选中高亮
+      if (index === this.currentToolIndex) {
+        ctx.fillStyle = tool.color;
+        ctx.beginPath();
+        ctx.roundRect(x - 5 * s, y - 5 * s, size + 10 * s, size + 10 * s, 16 * s);
+        ctx.fill();
+      }
+      
+      // 工具背景
+      ctx.fillStyle = index === this.currentToolIndex ? 'rgba(255,255,255,0.9)' : '#F5F5F5';
+      ctx.beginPath();
+      ctx.roundRect(x, y, size, size, 12 * s);
+      ctx.fill();
+      
+      // 工具图标
+      ctx.fillStyle = tool.color;
+      ctx.font = `${48 * s}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(tool.icon, x + size/2, y + size/2 - 10 * s);
+      
+      // 工具名称
+      ctx.fillStyle = '#333333';
+      ctx.font = `${16 * s}px sans-serif`;
+      ctx.fillText(tool.name, x + size/2, y + size - 20 * s);
+    });
+    
+    // 分页指示器
+    const pageCount = this.tools.length;
+    const dotSize = 8 * s;
+    const dotGap = 16 * s;
+    const totalWidth = pageCount * dotGap - dotGap;
+    const startDotX = (this.screenWidth - totalWidth) / 2;
+    
+    for (let i = 0; i < pageCount; i++) {
+      const dotX = startDotX + i * dotGap;
+      const dotY = slotY + slotHeight - 20 * s;
+      const isActive = i === this.currentToolIndex;
+      
+      ctx.fillStyle = isActive ? '#4A90D9' : '#CCCCCC';
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, isActive ? dotSize : dotSize/2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
-    // 工具按钮
-    this.toolButtons.forEach(btn => btn.onRender(ctx));
+  /**
+   * 渲染清洁度球
+   */
+  _renderCleanlinessBall(ctx, s) {
+    const cx = 680 * s;
+    const cy = 65 * s;
+    const radius = 40 * s;
+    
+    // 背景圆
+    ctx.fillStyle = '#E0E0E0';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 进度圆
+    ctx.fillStyle = `rgba(76, 175, 80, ${this.cleanProgress})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * this.cleanProgress, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 边框
+    ctx.strokeStyle = '#4CAF50';
+    ctx.lineWidth = 2 * s;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  /**
+   * 渲染闪光粒子
+   */
+  _renderSparkles(ctx) {
+    for (let i = this.sparkles.length - 1; i >= 0; i--) {
+      const p = this.sparkles[i];
+      
+      ctx.fillStyle = `rgba(255, 215, 0, ${p.life})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // 更新粒子
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= 0.02;
+      
+      if (p.life <= 0) {
+        this.sparkles.splice(i, 1);
+      }
+    }
+  }
+
+  /**
+   * Hex颜色转RGBA
+   */
+  _hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
   onTouchStart(x, y) {
     this._touchStartTime = Date.now();
+    this._touchStartPos = { x, y };
     
-    if (this.backBtn && this.backBtn.onTouchStart(x, y)) return true;
-    if (this.toolButtons) {
-      for (const btn of this.toolButtons) {
-        if (btn.onTouchStart(x, y)) return true;
+    const s = this.screenWidth / 750;
+    
+    // 放大视图模式
+    if (this.viewMode === 'zoom') {
+      // 检查退出按钮
+      if (this.exitZoomBtn && this.exitZoomBtn.onTouchStart(x, y)) return true;
+      
+      // 检查是否在工具槽区域（开始拖动）
+      if (y > 1100 * s) {
+        const toolIndex = this._getToolIndexAt(x);
+        if (toolIndex >= 0) {
+          this._selectTool(toolIndex);
+          this.isDraggingTool = true;
+          this.dragStartPos = { x, y };
+          this.dragCurrentPos = { x, y };
+          this.showToolTip = false;
+          return true;
+        }
       }
+      
+      // 检查是否点击污垢区域（开始拖动工具）
+      if (this.isDraggingTool) {
+        this.dragCurrentPos = { x, y };
+        return true;
+      }
+      
+      return true;
+    }
+    
+    // 房间视图模式
+    if (this.backBtn && this.backBtn.onTouchStart(x, y)) return true;
+    
+    // 检查工具槽滑动
+    if (y > 1100 * s) {
+      this.toolSlotDragging = true;
+      this.toolSlotStartX = x;
+      this.toolSlotLastX = x;
+      
+      // 检查是否点击了某个工具
+      const toolIndex = this._getToolIndexAt(x);
+      if (toolIndex >= 0) {
+        this._selectTool(toolIndex);
+      }
+      return true;
     }
 
-    // 检查污垢点击
+    // 检查污垢点击（双击检测）
     const clickedDirt = this._findDirtAt(x, y);
     if (clickedDirt) {
       const now = Date.now();
       if (this._lastClickDirt === clickedDirt && now - this._lastClickTime < 300) {
-        // 双击 - 进入放大视图（简化版）
-        this._cleanDirt(clickedDirt);
+        // 双击 - 进入放大视图
+        this._enterZoomView(clickedDirt);
       }
       this._lastClickTime = now;
       this._lastClickDirt = clickedDirt;
@@ -171,14 +651,91 @@ class GameplayScene extends Scene {
     return false;
   }
 
-  onTouchEnd(x, y) {
-    if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
-    if (this.toolButtons) {
-      for (const btn of this.toolButtons) {
-        if (btn.onTouchEnd(x, y)) return true;
-      }
+  onTouchMove(x, y) {
+    const s = this.screenWidth / 750;
+    
+    if (this.viewMode === 'zoom' && this.isDraggingTool) {
+      // 放大视图中的工具拖动
+      this.dragCurrentPos = { x, y };
+      return true;
     }
+    
+    if (this.toolSlotDragging) {
+      // 工具槽滑动
+      const deltaX = x - this.toolSlotLastX;
+      this.toolSlotOffset += deltaX;
+      
+      // 限制滑动范围
+      const minOffset = -(this.tools.length - 4) * 140 * s;
+      this.toolSlotOffset = Math.max(minOffset, Math.min(0, this.toolSlotOffset));
+      
+      this.toolSlotLastX = x;
+      return true;
+    }
+    
     return false;
+  }
+
+  onTouchEnd(x, y) {
+    const s = this.screenWidth / 750;
+    
+    // 放大视图模式
+    if (this.viewMode === 'zoom') {
+      if (this.exitZoomBtn && this.exitZoomBtn.onTouchEnd(x, y)) return true;
+      
+      // 检查工具拖动结束
+      if (this.isDraggingTool && this.zoomedDirt) {
+        // 检查是否在污垢区域内
+        const dirt = this.zoomedDirt;
+        const centerX = 375 * s;
+        const centerY = 600 * s;
+        const size = 300 * s;
+        
+        if (x >= centerX - size/2 && x <= centerX + size/2 &&
+            y >= centerY - size/2 && y <= centerY + size/2) {
+          // 在污垢区域内使用工具
+          this._useToolOnDirt(dirt);
+        }
+        
+        this.isDraggingTool = false;
+        return true;
+      }
+      
+      return true;
+    }
+    
+    // 房间视图模式
+    if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
+    
+    // 结束工具槽滑动
+    if (this.toolSlotDragging) {
+      this.toolSlotDragging = false;
+      
+      // 吸附到最近的工具
+      const toolWidth = 140 * s;
+      const index = Math.round(-this.toolSlotOffset / toolWidth);
+      const clampedIndex = Math.max(0, Math.min(this.tools.length - 1, index));
+      this.toolSlotOffset = -clampedIndex * toolWidth;
+      
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * 获取点击位置的工具索引
+   */
+  _getToolIndexAt(x) {
+    const s = this.screenWidth / 750;
+    const startX = 40 * s + this.toolSlotOffset;
+    const toolWidth = 140 * s;
+    
+    const index = Math.floor((x - startX) / toolWidth);
+    if (index >= 0 && index < this.tools.length) {
+      return index;
+    }
+    return -1;
   }
 
   _findDirtAt(x, y) {

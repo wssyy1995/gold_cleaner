@@ -166,7 +166,7 @@ class HomeScene extends Scene {
     }
     
     // 注册并显示弹窗
-    globalEvent.emit('dialog:show', 'LevelPreviewDialog', previewDialog);
+    globalEvent.emit('dialog:open', 'LevelPreviewDialog', previewDialog);
   }
   
   /**

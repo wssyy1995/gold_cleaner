@@ -20,12 +20,46 @@ class HomeScene extends Scene {
     // 背景图
     this.bgImage = null;
     this.bgLoaded = false;
+    
+    // 关卡图标图片
+    this.iconImages = {
+      locked: null,
+      unlocked: null,
+      pass: null
+    };
+    this.iconsLoaded = false;
   }
 
   onLoad() {
     this.generateLevels();
+    this._loadIcons();  // 加载关卡图标
     this._loadBackground();
     this._initUI();
+  }
+
+  /**
+   * 加载关卡图标图片
+   */
+  _loadIcons() {
+    const iconNames = ['locked', 'unlocked', 'pass'];
+    let loadedCount = 0;
+    
+    iconNames.forEach(name => {
+      const img = wx.createImage();
+      img.onload = () => {
+        this.iconImages[name] = img;
+        loadedCount++;
+        if (loadedCount === 3) {
+          this.iconsLoaded = true;
+          console.log('[HomeScene] 关卡图标加载完成');
+        }
+      };
+      img.onerror = () => {
+        console.warn(`[HomeScene] 图标加载失败: ${name}`);
+        loadedCount++;
+      };
+      img.src = `images/ui/ui-icon-${name}.png`;
+    });
   }
 
   /**
@@ -47,8 +81,33 @@ class HomeScene extends Scene {
   }
 
   generateLevels() {
+    // 定义12个关卡的自定义位置（基于750x1334设计稿，从下往上）
+    // 可以根据地图背景自由调整每个关卡的位置
+    const positions = [
+      { x: 375, y: 1150 }, // 关卡1（最下方）
+      { x: 375, y: 1050 }, // 关卡2
+      { x: 280, y: 950 },  // 关卡3（向左偏移）
+      { x: 470, y: 950 },  // 关卡4（向右偏移）
+      { x: 375, y: 850 },  // 关卡5
+      { x: 200, y: 780 },  // 关卡6
+      { x: 550, y: 780 },  // 关卡7
+      { x: 375, y: 700 },  // 关卡8
+      { x: 280, y: 600 },  // 关卡9
+      { x: 470, y: 600 },  // 关卡10
+      { x: 375, y: 500 },  // 关卡11
+      { x: 375, y: 400 },  // 关卡12（最上方）
+    ];
+    
     for (let i = 1; i <= 12; i++) {
-      this.levels.push({ id: i, stage: this.currentStage, name: `关卡 ${i}`, unlocked: i === 1, stars: 0 });
+      this.levels.push({ 
+        id: i, 
+        stage: this.currentStage, 
+        name: `关卡 ${i}`, 
+        status: i === 1 ? 'unlocked' : 'locked',  // locked, unlocked, pass
+        stars: 0,
+        x: positions[i-1].x,
+        y: positions[i-1].y
+      });
     }
   }
 
@@ -63,25 +122,9 @@ class HomeScene extends Scene {
     // 阶段标题
     this.stageText = new Text({ x: cx, y: 160 * s, text: `阶段 ${this.currentStage}`, fontSize: 32 * s, fontWeight: 'bold', color: '#333333', align: 'center' });
 
-    // 关卡按钮
-    this.levelButtons = [];
-    const startY = 250, gapY = 180;
-    const btnSize = 100 * s;
-    this.levels.forEach((level, index) => {
-      const btn = new Button({
-        x: cx - btnSize / 2, 
-        y: (startY + index * gapY) * s, 
-        width: btnSize, 
-        height: btnSize,
-        text: level.id.toString(), 
-        fontSize: 36 * s, 
-        fontWeight: 'bold',
-        bgColor: level.unlocked ? '#4A90D9' : '#CCCCCC',
-        borderRadius: btnSize / 2,
-        onClick: () => this._onLevelClick(level)
-      });
-      this.levelButtons.push(btn);
-    });
+    // 关卡图标尺寸
+    this.iconSize = 50 * s;
+    this.iconHitArea = 60 * s; // 点击检测范围
 
     // 底部功能栏按钮
     const btnW = 120 * s, btnH = 80 * s;
@@ -92,9 +135,33 @@ class HomeScene extends Scene {
   }
 
   _onLevelClick(level) {
-    if (!level.unlocked) return;
+    if (level.status === 'locked') {
+      console.log(`[HomeScene] 关卡${level.id}未解锁`);
+      return;
+    }
     console.log(`[HomeScene] 选择关卡: ${level.id}`);
     globalEvent.emit('scene:switch', 'GameplayScene', { levelId: level.id });
+  }
+  
+  /**
+   * 通关后更新关卡状态（由 SettlementDialog 调用）
+   * @param {number} levelId - 通关的关卡ID
+   * @param {number} stars - 获得的星级
+   */
+  passLevel(levelId, stars) {
+    const level = this.levels.find(l => l.id === levelId);
+    if (!level) return;
+    
+    // 更新当前关卡状态
+    level.status = 'pass';
+    level.stars = stars;
+    
+    // 解锁下一关
+    const nextLevel = this.levels.find(l => l.id === levelId + 1);
+    if (nextLevel && nextLevel.status === 'locked') {
+      nextLevel.status = 'unlocked';
+      console.log(`[HomeScene] 解锁关卡${nextLevel.id}`);
+    }
   }
 
   onUpdate(deltaTime) {
@@ -155,10 +222,8 @@ class HomeScene extends Scene {
     if (this.coinText) this.coinText.onRender(ctx);
     if (this.stageText) this.stageText.onRender(ctx);
 
-    // 关卡按钮
-    if (this.levelButtons) {
-      this.levelButtons.forEach(btn => btn.onRender(ctx));
-    }
+    // 绘制关卡图标
+    this._drawLevelIcons(ctx);
 
     // 底部按钮
     if (this.shopBtn) this.shopBtn.onRender(ctx);
@@ -166,28 +231,77 @@ class HomeScene extends Scene {
     if (this.settingBtn) this.settingBtn.onRender(ctx);
   }
 
-  onTouchStart(x, y) {
-    if (!this.levelButtons) return false;
+  /**
+   * 绘制关卡图标
+   */
+  _drawLevelIcons(ctx) {
+    if (!this.iconsLoaded || !this.levels.length) return;
     
-    for (const btn of this.levelButtons) {
-      if (btn.onTouchStart(x, y)) return true;
+    const s = this.screenWidth / 750;
+    const iconSize = this.iconSize;
+    
+    this.levels.forEach(level => {
+      // 根据状态选择图标
+      let iconImg = this.iconImages[level.status] || this.iconImages.locked;
+      if (!iconImg) return;
+      
+      // 计算屏幕位置
+      const x = level.x * s;
+      const y = level.y * s;
+      
+      // 绘制图标（居中）
+      ctx.drawImage(iconImg, x - iconSize/2, y - iconSize/2, iconSize, iconSize);
+      
+      // 绘制关卡编号
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = `bold ${14 * s}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(level.id.toString(), x, y + iconSize/2 + 12 * s);
+    });
+  }
+
+  /**
+   * 检测点击了哪个关卡
+   */
+  _getClickedLevel(x, y) {
+    const s = this.screenWidth / 750;
+    const hitArea = this.iconHitArea;
+    
+    for (const level of this.levels) {
+      const lx = level.x * s;
+      const ly = level.y * s;
+      
+      // 检测点击范围
+      if (x >= lx - hitArea/2 && x <= lx + hitArea/2 &&
+          y >= ly - hitArea/2 && y <= ly + hitArea/2) {
+        return level;
+      }
     }
-    if (this.shopBtn && this.shopBtn.onTouchStart(x, y)) return true;
-    if (this.toolBtn && this.toolBtn.onTouchStart(x, y)) return true;
-    if (this.settingBtn && this.settingBtn.onTouchStart(x, y)) return true;
-    return false;
+    return null;
+  }
+
+  onTouchStart(x, y) {
+    this._pressedLevel = this._getClickedLevel(x, y);
+    return this._pressedLevel !== null;
   }
 
   onTouchEnd(x, y) {
-    if (!this.levelButtons) return false;
+    const level = this._getClickedLevel(x, y);
     
-    for (const btn of this.levelButtons) {
-      if (btn.onTouchEnd(x, y)) return true;
+    // 只有在同一个关卡上按下和松开才算点击
+    if (level && this._pressedLevel && level.id === this._pressedLevel.id) {
+      this._onLevelClick(level);
     }
+    
+    this._pressedLevel = null;
+    
+    // 检测底部按钮
     if (this.shopBtn && this.shopBtn.onTouchEnd(x, y)) return true;
     if (this.toolBtn && this.toolBtn.onTouchEnd(x, y)) return true;
     if (this.settingBtn && this.settingBtn.onTouchEnd(x, y)) return true;
-    return false;
+    
+    return level !== null;
   }
 }
 

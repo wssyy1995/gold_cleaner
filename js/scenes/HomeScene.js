@@ -310,7 +310,7 @@ class HomeScene extends Scene {
     this.levels.forEach(level => {
       // 根据状态选择图标
       let iconImg = this.iconImages[level.status] || this.iconImages.locked;
-      if (!iconImg) return;
+      if (!iconImg) return; // 跳过当前关卡
       
       // 计算屏幕位置
       const x = level.x * s;
@@ -380,16 +380,14 @@ class HomeScene extends Scene {
     
     // --- 1. 绘制卡片主体背景 ---
     ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(cardBodyX, cardBodyY, cardBodyW, cardBodyH, cardBorderRadius);
+    this._drawRoundedRect(ctx, cardBodyX, cardBodyY, cardBodyW, cardBodyH, cardBorderRadius);
     ctx.fillStyle = '#FFFFFF';
     ctx.fill();
     ctx.restore();
     
     // --- 2. 绘制卡片边框 ---
     ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(cardBodyX, cardBodyY, cardBodyW, cardBodyH, cardBorderRadius);
+    this._drawRoundedRect(ctx, cardBodyX, cardBodyY, cardBodyW, cardBodyH, cardBorderRadius);
     ctx.strokeStyle = '#FFD700'; // 金色边框
     ctx.lineWidth = cardBorderWidth;
     ctx.stroke();
@@ -418,8 +416,7 @@ class HomeScene extends Scene {
       }
       
       ctx.save();
-      ctx.beginPath();
-      ctx.roundRect(previewImgX, previewImgY, previewImgW, previewImgH, cardBorderRadius * 0.5);
+      this._drawRoundedRect(ctx, previewImgX, previewImgY, previewImgW, previewImgH, cardBorderRadius * 0.5);
       ctx.clip();
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
       ctx.restore();
@@ -427,8 +424,7 @@ class HomeScene extends Scene {
       // 图片未加载，显示占位符
       ctx.save();
       ctx.fillStyle = '#E8E8E8';
-      ctx.beginPath();
-      ctx.roundRect(previewImgX, previewImgY, previewImgW, previewImgH, cardBorderRadius * 0.5);
+      this._drawRoundedRect(ctx, previewImgX, previewImgY, previewImgW, previewImgH, cardBorderRadius * 0.5);
       ctx.fill();
       
       // 加载中文字
@@ -497,6 +493,25 @@ class HomeScene extends Scene {
       };
       img.src = `images/game/game_stage${stage}_l${levelId}_home.png`;
     }
+  }
+
+  /**
+   * 绘制圆角矩形路径（兼容小程序）
+   * @param {CanvasRenderingContext2D} ctx 
+   * @param {number} x 
+   * @param {number} y 
+   * @param {number} width 
+   * @param {number} height 
+   * @param {number} radius 
+   */
+  _drawRoundedRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + width, y, x + width, y + height, radius);
+    ctx.arcTo(x + width, y + height, x, y + height, radius);
+    ctx.arcTo(x, y + height, x, y, radius);
+    ctx.arcTo(x, y, x + width, y, radius);
+    ctx.closePath();
   }
 
   /**

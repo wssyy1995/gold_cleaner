@@ -445,6 +445,49 @@ class HomeScene extends Scene {
     ctx.textBaseline = 'middle';
     ctx.fillText(level.id.toString(), sphereCenterX, sphereCenterY);
     ctx.restore();
+    
+    // --- 7. 绘制"开始任务"按钮 ---
+    const btnWidth = cardBodyW * 0.75;
+    const btnHeight = cardBodyH * 0.12;
+    const btnX = cardBodyX + (cardBodyW - btnWidth) / 2;
+    const btnY = nameTextY + levelNameHeight * 0.6;
+    const btnRadius = btnHeight * 0.3;
+    
+    // 保存按钮位置用于点击检测
+    this._startBtnRect = {
+      x: btnX,
+      y: btnY,
+      width: btnWidth,
+      height: btnHeight,
+      level: level
+    };
+    
+    // 按钮阴影
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.shadowBlur = 8 * s;
+    ctx.shadowOffsetY = 4 * s;
+    this._drawRoundedRect(ctx, btnX, btnY, btnWidth, btnHeight, btnRadius);
+    ctx.fillStyle = '#FFD700'; // 金色背景
+    ctx.fill();
+    ctx.restore();
+    
+    // 按钮边框
+    ctx.save();
+    this._drawRoundedRect(ctx, btnX, btnY, btnWidth, btnHeight, btnRadius);
+    ctx.strokeStyle = '#FFA500'; // 橙色边框
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+    
+    // 按钮文字
+    ctx.save();
+    ctx.fillStyle = '#8B4513'; // 深棕色文字
+    ctx.font = `bold ${Math.max(14, btnHeight * 0.45)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('开始任务', btnX + btnWidth / 2, btnY + btnHeight / 2);
+    ctx.restore();
   }
 
   /**
@@ -511,13 +554,49 @@ class HomeScene extends Scene {
     }
     return null;
   }
+  
+  /**
+   * 检测是否点击了开始任务按钮
+   */
+  _checkStartBtnClick(x, y) {
+    if (!this._startBtnRect) return false;
+    
+    const rect = this._startBtnRect;
+    if (x >= rect.x && x <= rect.x + rect.width &&
+        y >= rect.y && y <= rect.y + rect.height) {
+      return rect.level;
+    }
+    return false;
+  }
 
   onTouchStart(x, y) {
+    // 优先检测开始按钮
+    const btnLevel = this._checkStartBtnClick(x, y);
+    if (btnLevel) {
+      this._pressedStartBtn = true;
+      return true;
+    }
+    
     this._pressedLevel = this._getClickedLevel(x, y);
     return this._pressedLevel !== null;
   }
 
   onTouchEnd(x, y) {
+    // 优先检测开始按钮点击
+    if (this._pressedStartBtn) {
+      const btnLevel = this._checkStartBtnClick(x, y);
+      if (btnLevel) {
+        // 点击了开始任务按钮，进入游戏
+        console.log(`[HomeScene] 点击开始任务按钮，进入关卡${btnLevel.id}`);
+        globalEvent.emit('scene:switch', 'GameplayScene', { 
+          levelId: btnLevel.id,
+          stage: this.currentStage 
+        });
+      }
+      this._pressedStartBtn = false;
+      return;
+    }
+    
     const level = this._getClickedLevel(x, y);
     
     // 只有在同一个关卡上按下和松开才算点击

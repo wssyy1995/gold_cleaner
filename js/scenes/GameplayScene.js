@@ -45,8 +45,31 @@ class GameplayScene extends Scene {
 
   onLoad(data = {}) {
     this.levelId = data.levelId || 1;
+    this.stage = data.stage || 1;
+    this.bgImage = null;
+    this.bgLoaded = false;
     this._initUI();
     this._generateDirts();
+    this._loadBackground();
+  }
+
+  /**
+   * 加载关卡背景图
+   */
+  _loadBackground() {
+    if (typeof wx !== 'undefined') {
+      const img = wx.createImage();
+      img.onload = () => {
+        console.log(`[GameplayScene] 背景图加载完成: stage${this.stage}_l${this.levelId}`);
+        this.bgImage = img;
+        this.bgLoaded = true;
+      };
+      img.onerror = () => {
+        console.warn(`[GameplayScene] 背景图加载失败: stage${this.stage}_l${this.levelId}`);
+      };
+      // 图片路径格式: images/game/game_stage1_l1_home.png
+      img.src = `images/game/game_stage${this.stage}_l${this.levelId}_home.png`;
+    }
   }
 
   _initUI() {
@@ -363,9 +386,15 @@ class GameplayScene extends Scene {
    * 渲染房间视图
    */
   _renderRoomView(ctx, s) {
-    // 房间区域
-    ctx.fillStyle = '#F5F5DC';
-    ctx.fillRect(20 * s, 140 * s, 710 * s, 950 * s);
+    // 绘制关卡背景图（如果已加载）
+    if (this.bgImage && this.bgLoaded) {
+      // 使用 Cover 模式绘制背景图填满屏幕
+      this._drawBackgroundCover(ctx, this.bgImage, this.screenWidth, this.screenHeight);
+    } else {
+      // 未加载时显示默认背景
+      ctx.fillStyle = '#F5F5DC';
+      ctx.fillRect(20 * s, 140 * s, 710 * s, 950 * s);
+    }
 
     // 顶部栏
     ctx.fillStyle = '#FFFFFF';
@@ -407,6 +436,28 @@ class GameplayScene extends Scene {
 
     // 工具栏
     this._renderToolSlot(ctx, s);
+  }
+
+  /**
+   * Cover 模式绘制背景图 - 保持比例，填满屏幕，裁剪溢出
+   */
+  _drawBackgroundCover(ctx, img, sw, sh) {
+    const scaleX = sw / img.width;
+    const scaleY = sh / img.height;
+    
+    // Cover 模式：选择较大的缩放比例，确保填满屏幕
+    const scale = Math.max(scaleX, scaleY);
+    
+    // 计算绘制尺寸（可能超出屏幕）
+    const dw = img.width * scale;
+    const dh = img.height * scale;
+    
+    // 居中显示（超出部分自动被裁剪）
+    const dx = (sw - dw) / 2;
+    const dy = (sh - dh) / 2;
+    
+    // 绘制图片
+    ctx.drawImage(img, dx, dy, dw, dh);
   }
 
   /**

@@ -6,6 +6,7 @@ import Scene from '../core/Scene';
 import Button from '../ui/components/Button';
 import Text from '../ui/components/Text';
 import Image from '../ui/components/Image';
+import LevelPreviewDialog from '../ui/dialogs/LevelPreviewDialog';
 import { globalEvent } from '../core/EventEmitter';
 
 class HomeScene extends Scene {
@@ -138,7 +139,26 @@ class HomeScene extends Scene {
       return;
     }
     console.log(`[HomeScene] 选择关卡: ${level.id}`);
-    globalEvent.emit('scene:switch', 'GameplayScene', { levelId: level.id });
+    
+    // 显示关卡预览弹窗
+    const previewDialog = new LevelPreviewDialog({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight,
+      stage: this.currentStage,
+      levelId: level.id,
+      levelName: level.name,
+      stars: level.stars,
+      onStart: () => {
+        // 点击开始按钮后进入游戏
+        globalEvent.emit('scene:switch', 'GameplayScene', { 
+          levelId: level.id,
+          stage: this.currentStage 
+        });
+      }
+    });
+    
+    // 注册并显示弹窗
+    globalEvent.emit('dialog:show', 'LevelPreviewDialog', previewDialog);
   }
   
   /**

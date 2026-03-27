@@ -81,7 +81,7 @@ class HomeScene extends Scene {
   }
 
   generateLevels() {
-    // 定义12个关卡的自定义位置（基于750x1334设计稿，从下往上）
+    // 定义10个关卡的自定义位置（基于750x1334设计稿，从下往上）
     // 可以根据地图背景自由调整每个关卡的位置
     const positions = [
       { x: 375, y: 1150 }, // 关卡1（最下方）
@@ -93,12 +93,10 @@ class HomeScene extends Scene {
       { x: 550, y: 780 },  // 关卡7
       { x: 375, y: 700 },  // 关卡8
       { x: 280, y: 600 },  // 关卡9
-      { x: 470, y: 600 },  // 关卡10
-      { x: 375, y: 500 },  // 关卡11
-      { x: 375, y: 400 },  // 关卡12（最上方）
+      { x: 470, y: 600 },  // 关卡10（最上方）
     ];
     
-    for (let i = 1; i <= 12; i++) {
+    for (let i = 1; i <= 10; i++) {
       this.levels.push({ 
         id: i, 
         stage: this.currentStage, 

@@ -1,6 +1,6 @@
 /**
  * LevelConfig 关卡配置
- * 4个阶段，每个阶段12个关卡
+ * 4个阶段，每个阶段10个关卡（共40关）
  */
 
 // 污垢类型定义
@@ -178,40 +178,8 @@ const STAGE_1_LEVELS = [
   {
     id: 10,
     stage: 1,
-    name: '极限挑战',
-    background: 'images/game/stage1_level10.png',
-    dirts: [
-      { type: 'grime', x: 200, y: 300 },
-      { type: 'grime', x: 400, y: 450 },
-      { type: 'stain', x: 600, y: 350 },
-      { type: 'stain', x: 300, y: 600 },
-      { type: 'dust', x: 500, y: 700 },
-    ],
-    timeLimit: 90,
-    targetScore: 550,
-    reward: { coins: 140, stars: 3 }
-  },
-  {
-    id: 11,
-    stage: 1,
-    name: '最终考验',
-    background: 'images/game/stage1_level11.png',
-    dirts: [
-      { type: 'grime', x: 200, y: 400 },
-      { type: 'grime', x: 400, y: 300 },
-      { type: 'grime', x: 600, y: 500 },
-      { type: 'stain', x: 300, y: 600 },
-      { type: 'stain', x: 500, y: 650 },
-    ],
-    timeLimit: 90,
-    targetScore: 600,
-    reward: { coins: 150, stars: 3 }
-  },
-  {
-    id: 12,
-    stage: 1,
     name: '阶段BOSS',
-    background: 'images/game/stage1_level12.png',
+    background: 'images/game/stage1_level10.png',
     dirts: [
       { type: 'grime', x: 250, y: 350, size: 1.5 },
       { type: 'grime', x: 550, y: 450, size: 1.5 },
@@ -243,13 +211,13 @@ const STAGE_2_LEVELS = [
     targetScore: 400,
     reward: { coins: 100, stars: 3 }
   },
-  // ... 阶段2的11-12关（类似结构）
+  // ... 阶段2的第2-9关（类似结构）
   {
-    id: 12,
+    id: 10,
     stage: 2,
     name: '公寓管理员',
-    background: 'images/game/stage2_level12.png',
-    preview: 'images/game/stage2_l12_home.png',
+    background: 'images/game/stage2_level10.png',
+    preview: 'images/game/stage2_l10_home.png',
     dirts: [
       { type: 'mold', x: 300, y: 400, size: 2 },
       { type: 'mold', x: 500, y: 500, size: 2 },
@@ -280,13 +248,13 @@ const STAGE_3_LEVELS = [
     targetScore: 600,
     reward: { coins: 150, stars: 3 }
   },
-  // ... 阶段3的11-12关
+  // ... 阶段3的第2-9关
   {
-    id: 12,
+    id: 10,
     stage: 3,
     name: '庄园主人',
-    background: 'images/game/stage3_level12.png',
-    preview: 'images/game/stage3_l12_home.png',
+    background: 'images/game/stage3_level10.png',
+    preview: 'images/game/stage3_l10_home.png',
     dirts: [
       { type: 'rust', x: 250, y: 350, size: 2 },
       { type: 'rust', x: 550, y: 450, size: 2 },
@@ -318,13 +286,13 @@ const STAGE_4_LEVELS = [
     targetScore: 800,
     reward: { coins: 200, stars: 3 }
   },
-  // ... 阶段4的11-12关
+  // ... 阶段4的第2-9关
   {
-    id: 12,
+    id: 10,
     stage: 4,
     name: '金牌保洁大师',
-    background: 'images/game/stage4_level12.png',
-    preview: 'images/game/stage4_l12_home.png',
+    background: 'images/game/stage4_level10.png',
+    preview: 'images/game/stage4_l10_home.png',
     dirts: [
       { type: 'rust', x: 150, y: 300, size: 2 },
       { type: 'rust', x: 650, y: 400, size: 2 },
@@ -356,7 +324,7 @@ export const STAGES = [
     name: '公寓大楼',
     description: '进阶挑战，应对霉斑问题',
     theme: 'apartment',
-    unlockRequirement: { stage: 1, level: 12 }, // 通关阶段1解锁
+    unlockRequirement: { stage: 1, level: 10 }, // 通关阶段1第10关解锁
     levels: STAGE_2_LEVELS
   },
   {
@@ -364,7 +332,7 @@ export const STAGES = [
     name: '别墅庄园',
     description: '专家难度，处理顽固锈迹',
     theme: 'villa',
-    unlockRequirement: { stage: 2, level: 12 },
+    unlockRequirement: { stage: 2, level: 10 }, // 通关阶段2第10关解锁
     levels: STAGE_3_LEVELS
   },
   {
@@ -372,7 +340,7 @@ export const STAGES = [
     name: '豪华酒店',
     description: '大师挑战，成为金牌保洁',
     theme: 'hotel',
-    unlockRequirement: { stage: 3, level: 12 },
+    unlockRequirement: { stage: 3, level: 10 }, // 通关阶段3第10关解锁
     levels: STAGE_4_LEVELS
   }
 ];

@@ -204,9 +204,7 @@ class GameManager {
     this._paused = false;
 
     if (this._gameLoopId) {
-      if (typeof wx !== 'undefined') {
-        wx.cancelAnimationFrame(this._gameLoopId);
-      }
+      cancelAnimationFrame(this._gameLoopId);
       this._gameLoopId = null;
     }
 
@@ -235,9 +233,8 @@ class GameManager {
    * 请求下一帧
    */
   _requestFrame() {
-    if (typeof wx !== 'undefined') {
-      this._gameLoopId = wx.requestAnimationFrame(this._gameLoop);
-    }
+    // 使用全局的 requestAnimationFrame（小游戏支持）
+    this._gameLoopId = requestAnimationFrame(this._gameLoop);
   }
 
   /**

@@ -13,6 +13,7 @@ import HomeScene from './scenes/HomeScene';
 import GameplayScene from './scenes/GameplayScene';
 import ShopScene from './scenes/ShopScene';
 import ToolScene from './scenes/ToolScene';
+import SettingScene from './scenes/SettingScene';
 
 // 导入弹窗管理器
 import DialogManager from './ui/dialogs/DialogManager';
@@ -137,6 +138,7 @@ class Main {
     this.sceneManager.register('GameplayScene', GameplayScene);
     this.sceneManager.register('ShopScene', ShopScene);
     this.sceneManager.register('ToolScene', ToolScene);
+    this.sceneManager.register('SettingScene', SettingScene);
     
     console.log('[Main] 场景注册完成，屏幕尺寸:', this.screenWidth, 'x', this.screenHeight);
   }

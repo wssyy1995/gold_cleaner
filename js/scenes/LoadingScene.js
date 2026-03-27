@@ -322,23 +322,20 @@ class LoadingScene extends Scene {
    * Contain 模式绘制背景图 - 保持比例，完整显示，可能有黑边
    */
   _drawBackgroundContain(ctx, img, sw, sh) {
-    const imgRatio = img.width / img.height;
-    const screenRatio = sw / sh;
+    // 计算两个方向的缩放比例
+    const scaleX = sw / img.width;   // 按宽度缩放的比例
+    const scaleY = sh / img.height;  // 按高度缩放的比例
     
-    let dw, dh, dx, dy;
-    if (imgRatio > screenRatio) {
-      // 图片更宽，以宽度为基准，上下留白
-      dw = sw;
-      dh = sw / imgRatio;
-      dx = 0;
-      dy = (sh - dh) / 2;
-    } else {
-      // 图片更高，以高度为基准，左右留白
-      dh = sh;
-      dw = sh * imgRatio;
-      dx = (sw - dw) / 2;
-      dy = 0;
-    }
+    // Contain 模式：选择较小的缩放比例，确保图片完整显示
+    const scale = Math.min(scaleX, scaleY);
+    
+    // 计算绘制尺寸
+    const dw = img.width * scale;
+    const dh = img.height * scale;
+    
+    // 居中显示
+    const dx = (sw - dw) / 2;
+    const dy = (sh - dh) / 2;
     
     // 绘制黑边背景
     ctx.fillStyle = '#1a1a2e';

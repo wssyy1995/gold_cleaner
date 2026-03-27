@@ -81,33 +81,41 @@ class Main {
 
   /**
    * 初始化 Canvas
+   * 使用逻辑像素 + ctx.scale(dpr) 方案
    */
   _initCanvas() {
     if (typeof wx !== 'undefined') {
       const sysInfo = wx.getSystemInfoSync();
       this.dpr = sysInfo.pixelRatio;
-      // 使用物理像素作为屏幕尺寸
-      this.screenWidth = sysInfo.windowWidth * this.dpr;
-      this.screenHeight = sysInfo.windowHeight * this.dpr;
+      // 使用逻辑像素（设计基准 750x1334 对应逻辑像素）
+      this.screenWidth = sysInfo.windowWidth;
+      this.screenHeight = sysInfo.windowHeight;
       
       this.canvas = wx.createCanvas();
       this.ctx = this.canvas.getContext('2d');
       
-      // 设置 Canvas 为物理像素尺寸
-      this.canvas.width = this.screenWidth;
-      this.canvas.height = this.screenHeight;
+      // Canvas 缓冲区 = 逻辑尺寸 * dpr (物理像素)
+      this.canvas.width = this.screenWidth * this.dpr;
+      this.canvas.height = this.screenHeight * this.dpr;
       
-      console.log(`[Main] Canvas物理像素: ${this.screenWidth}x${this.screenHeight}, DPR: ${this.dpr}`);
+      // 缩放坐标系，让 drawImage 可以用逻辑单位
+      this.ctx.scale(this.dpr, this.dpr);
+      
+      console.log(`[Main] 逻辑像素: ${this.screenWidth}x${this.screenHeight}, DPR: ${this.dpr}, 缓冲区: ${this.canvas.width}x${this.canvas.height}`);
     } else {
       // 浏览器环境
       this.canvas = document.createElement('canvas');
       this.ctx = this.canvas.getContext('2d');
-      this.dpr = 2;
-      this.screenWidth = 375 * this.dpr;
-      this.screenHeight = 667 * this.dpr;
+      this.dpr = window.devicePixelRatio || 1;
+      this.screenWidth = 375;
+      this.screenHeight = 667;
       
-      this.canvas.width = this.screenWidth;
-      this.canvas.height = this.screenHeight;
+      this.canvas.width = this.screenWidth * this.dpr;
+      this.canvas.height = this.screenHeight * this.dpr;
+      this.canvas.style.width = this.screenWidth + 'px';
+      this.canvas.style.height = this.screenHeight + 'px';
+      
+      this.ctx.scale(this.dpr, this.dpr);
       
       document.body.appendChild(this.canvas);
     }

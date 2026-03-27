@@ -319,40 +319,17 @@ class LoadingScene extends Scene {
   }
 
   /**
-   * 绘制背景图 - cover模式保持比例填满屏幕
-   */
-  _drawBackground(ctx, img, sw, sh) {
-    const imgRatio = img.width / img.height;
-    const screenRatio = sw / sh;
-    
-    let dw, dh, dx, dy;
-    if (imgRatio > screenRatio) {
-      // 图片更宽，以高度为基准
-      dh = sh;
-      dw = sh * imgRatio;
-      dx = (sw - dw) / 2;
-      dy = 0;
-    } else {
-      // 图片更高，以宽度为基准
-      dw = sw;
-      dh = sw / imgRatio;
-      dx = 0;
-      dy = (sh - dh) / 2;
-    }
-    ctx.drawImage(img, dx, dy, dw, dh);
-  }
-
-  /**
    * 渲染
    */
   onRender(ctx) {
-    // 使用物理像素
+    // 使用逻辑像素（ctx.scale(dpr) 会自动处理物理像素）
     const width = this.screenWidth;
     const height = this.screenHeight;
 
-    // 绘制背景图 - cover模式保持比例填满屏幕
+    // 绘制背景图 - 逻辑像素单位，强制填满（拉伸）
+    // 如需保持比例，请使用 mode='cover' 或 'contain'
     if (this.bgImage && this.bgLoaded) {
-      this._drawBackground(ctx, this.bgImage, width, height);
+      ctx.drawImage(this.bgImage, 0, 0, width, height);
     } else {
       // 备用背景色
       ctx.fillStyle = '#F5F5F5';
@@ -361,7 +338,7 @@ class LoadingScene extends Scene {
       // 绘制装饰圆形
       ctx.fillStyle = 'rgba(74, 144, 217, 0.05)';
       ctx.beginPath();
-      ctx.arc(width / 2, height * 0.3, 200, 0, Math.PI * 2);
+      ctx.arc(width / 2, height * 0.3, 100, 0, Math.PI * 2);
       ctx.fill();
     }
 

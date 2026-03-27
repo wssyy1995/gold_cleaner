@@ -1,171 +1,116 @@
 /**
  * HomeScene 首页场景
- * 游戏主界面，显示关卡地图
+ * 负责任务 5.4.1 ~ 5.4.12
  */
-
 import Scene from '../core/Scene';
+import Button from '../ui/components/Button';
+import Text from '../ui/components/Text';
+import Image from '../ui/components/Image';
+import { globalEvent } from '../core/EventEmitter';
 
 class HomeScene extends Scene {
   constructor() {
     super({ name: 'HomeScene' });
-
-    // 当前阶段
+    this.screenWidth = 750;
+    this.screenHeight = 1334;
     this.currentStage = 1;
-    // 总阶段数
-    this.totalStages = 3;
-    // 关卡数据
     this.levels = [];
-    // UI元素
     this.uiElements = [];
   }
 
-  /**
-   * 场景加载
-   */
   onLoad() {
-    console.log('[HomeScene] 加载场景');
     this.generateLevels();
+    this._initUI();
   }
 
-  /**
-   * 生成关卡数据
-   */
   generateLevels() {
-    // 每个阶段12个关卡
     for (let i = 1; i <= 12; i++) {
-      this.levels.push({
-        id: i,
-        stage: this.currentStage,
-        name: `关卡 ${i}`,
-        unlocked: i === 1, // 第一个关卡默认解锁
-        stars: 0,
-        x: 0,
-        y: 0
-      });
+      this.levels.push({ id: i, stage: this.currentStage, name: `关卡 ${i}`, unlocked: i === 1, stars: 0 });
     }
   }
 
-  /**
-   * 进入场景
-   */
-  onEnter() {
-    console.log('[HomeScene] 进入场景');
-  }
+  _initUI() {
+    // 顶部栏
+    this.titleText = new Text({ x: 375, y: 60, text: '金牌保洁升职记', fontSize: 36, fontWeight: 'bold', color: '#FFFFFF', align: 'center' });
+    this.coinText = new Text({ x: 20, y: 60, text: '💰 100', fontSize: 28, color: '#FFFFFF', align: 'left' });
+    
+    // 阶段标题
+    this.stageText = new Text({ x: 375, y: 160, text: `阶段 ${this.currentStage}`, fontSize: 32, fontWeight: 'bold', color: '#333333', align: 'center' });
 
-  /**
-   * 初始化
-   */
-  onInit() {
-    console.log('[HomeScene] 初始化');
-    this.setupUI();
-  }
-
-  /**
-   * 设置UI
-   */
-  setupUI() {
-    // TODO: 创建UI元素
-  }
-
-  /**
-   * 更新
-   * @param {number} deltaTime - 距离上一帧的时间间隔
-   */
-  onUpdate(deltaTime) {
-    // 更新动画等
-  }
-
-  /**
-   * 渲染
-   * @param {CanvasRenderingContext2D} ctx - Canvas 2D上下文
-   */
-  onRender(ctx) {
-    const width = 750;
-    const height = 1334;
-
-    // 绘制背景
-    ctx.fillStyle = '#F5F5F5';
-    ctx.fillRect(0, 0, width, height);
-
-    // 绘制顶部栏
-    ctx.fillStyle = '#4A90D9';
-    ctx.fillRect(0, 0, width, 100);
-
-    // 绘制标题
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 36px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('金牌保洁升职记', width / 2, 60);
-
-    // 绘制金币
-    ctx.textAlign = 'left';
-    ctx.font = '28px sans-serif';
-    ctx.fillText('💰 100', 20, 60);
-
-    // 绘制阶段标题
-    ctx.fillStyle = '#333333';
-    ctx.font = 'bold 32px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`阶段 ${this.currentStage}`, width / 2, 160);
-
-    // 绘制关卡列表
-    this.renderLevels(ctx);
-  }
-
-  /**
-   * 渲染关卡列表
-   * @param {CanvasRenderingContext2D} ctx - Canvas 2D上下文
-   */
-  renderLevels(ctx) {
-    const startY = 250;
-    const gapY = 180;
-    const width = 750;
-
+    // 关卡按钮
+    this.levelButtons = [];
+    const startY = 250, gapY = 180;
     this.levels.forEach((level, index) => {
-      const x = width / 2;
-      const y = startY + index * gapY;
-
-      // 绘制关卡图标背景
-      if (level.unlocked) {
-        ctx.fillStyle = '#4A90D9';
-      } else {
-        ctx.fillStyle = '#CCCCCC';
-      }
-      
-      ctx.beginPath();
-      ctx.arc(x, y, 50, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 绘制关卡编号
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 36px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(level.id.toString(), x, y);
-
-      // 绘制星级
-      if (level.stars > 0) {
-        ctx.fillStyle = '#FFD700';
-        ctx.font = '24px sans-serif';
-        ctx.fillText('★'.repeat(level.stars), x, y + 70);
-      }
-
-      // 绘制锁定图标
-      if (!level.unlocked) {
-        ctx.fillStyle = '#666666';
-        ctx.font = '20px sans-serif';
-        ctx.fillText('🔒', x, y);
-      }
+      const btn = new Button({
+        x: 325, y: startY + index * gapY, width: 100, height: 100,
+        text: level.id.toString(), fontSize: 36, fontWeight: 'bold',
+        bgColor: level.unlocked ? '#4A90D9' : '#CCCCCC',
+        borderRadius: 50,
+        onClick: () => this._onLevelClick(level)
+      });
+      this.levelButtons.push(btn);
     });
+
+    // 底部功能栏按钮
+    this.shopBtn = new Button({ x: 50, y: 1200, width: 120, height: 80, text: '商店', fontSize: 24, bgColor: '#FF9500', borderRadius: 8, onClick: () => globalEvent.emit('scene:switch', 'ShopScene') });
+    this.toolBtn = new Button({ x: 200, y: 1200, width: 120, height: 80, text: '工具包', fontSize: 24, bgColor: '#4CAF50', borderRadius: 8, onClick: () => globalEvent.emit('scene:switch', 'ToolScene') });
+    this.settingBtn = new Button({ x: 350, y: 1200, width: 120, height: 80, text: '设置', fontSize: 24, bgColor: '#9C27B0', borderRadius: 8, onClick: () => globalEvent.emit('scene:switch', 'SettingScene') });
   }
 
-  /**
-   * 处理点击事件
-   * @param {number} x - 点击X坐标
-   * @param {number} y - 点击Y坐标
-   */
+  _onLevelClick(level) {
+    if (!level.unlocked) return;
+    console.log(`[HomeScene] 选择关卡: ${level.id}`);
+    globalEvent.emit('scene:switch', 'GameplayScene', { levelId: level.id });
+  }
+
+  onUpdate(deltaTime) {
+    this.levelButtons.forEach(btn => btn.update(deltaTime));
+    this.shopBtn.update(deltaTime);
+    this.toolBtn.update(deltaTime);
+    this.settingBtn.update(deltaTime);
+  }
+
+  onRender(ctx) {
+    // 背景
+    ctx.fillStyle = '#F5F5F5';
+    ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
+
+    // 顶部栏背景
+    ctx.fillStyle = '#4A90D9';
+    ctx.fillRect(0, 0, this.screenWidth, 120);
+
+    // 标题
+    this.titleText.onRender(ctx);
+    this.coinText.onRender(ctx);
+    this.stageText.onRender(ctx);
+
+    // 关卡按钮
+    this.levelButtons.forEach(btn => btn.onRender(ctx));
+
+    // 底部按钮
+    this.shopBtn.onRender(ctx);
+    this.toolBtn.onRender(ctx);
+    this.settingBtn.onRender(ctx);
+  }
+
   onTouchStart(x, y) {
-    // TODO: 处理关卡点击
+    for (const btn of this.levelButtons) {
+      if (btn.onTouchStart(x, y)) return true;
+    }
+    if (this.shopBtn.onTouchStart(x, y)) return true;
+    if (this.toolBtn.onTouchStart(x, y)) return true;
+    if (this.settingBtn.onTouchStart(x, y)) return true;
+    return false;
+  }
+
+  onTouchEnd(x, y) {
+    for (const btn of this.levelButtons) {
+      if (btn.onTouchEnd(x, y)) return true;
+    }
+    if (this.shopBtn.onTouchEnd(x, y)) return true;
+    if (this.toolBtn.onTouchEnd(x, y)) return true;
+    if (this.settingBtn.onTouchEnd(x, y)) return true;
+    return false;
   }
 }
 

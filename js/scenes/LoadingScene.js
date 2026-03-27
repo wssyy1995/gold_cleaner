@@ -1,30 +1,54 @@
 /**
  * LoadingScene 加载场景
- * 负责资源预加载和初始化
+ * 负责任务 5.3.1 ~ 5.3.5
+ * - 5.3.1 设计加载页布局
+ * - 5.3.2 实现加载动画
+ * - 5.3.3 实现加载进度显示
+ * - 5.3.4 实现核心资源预加载逻辑
+ * - 5.3.5 加载完成后切换到首页
  */
 
 import Scene from '../core/Scene';
-import ResourceManager from '../managers/ResourceManager';
+import ProgressBar from '../ui/components/ProgressBar';
+import Text from '../ui/components/Text';
+import ResourceLoader from '../cloud/ResourceLoader';
 import GameConfig from '../config/GameConfig';
-import ResourceConfig from '../config/ResourceConfig';
+import { globalEvent } from '../core/EventEmitter';
 
 class LoadingScene extends Scene {
   constructor() {
     super({ name: 'LoadingScene' });
 
-    // 加载进度
+    // 屏幕尺寸
+    this.screenWidth = 750;
+    this.screenHeight = 1334;
+
+    // 加载状态
+    this.loadingState = 'initial'; // initial, loading, complete, error
     this.progress = 0;
-    // 加载提示文字
+    this.loadingText = '正在准备清洁工具...';
+
+    // 加载提示
     this.tips = [
       '正在准备清洁工具...',
       '正在打扫房间...',
       '正在整理物品...',
+      '正在检查卫生...',
       '马上就好...'
     ];
-    this.currentTip = this.tips[0];
+    this.currentTipIndex = 0;
 
-    // 资源管理器
-    this.resourceManager = new ResourceManager();
+    // 资源加载器
+    this.resourceLoader = new ResourceLoader();
+
+    // UI组件
+    this.progressBar = null;
+    this.titleText = null;
+    this.tipText = null;
+
+    // 最小加载时间（避免闪屏）
+    this.minLoadingTime = 2000;
+    this.startTime = 0;
   }
 
   /**
@@ -32,97 +56,286 @@ class LoadingScene extends Scene {
    */
   onLoad() {
     console.log('[LoadingScene] 加载场景');
-    this.resourceManager.init();
+    this._initUI();
+    this.resourceLoader.init();
+  }
+
+  /**
+   * 初始化UI
+   */
+  _initUI() {
+    const centerX = this.screenWidth / 2;
+
+    // 5.3.1 设计加载页布局 - 标题
+    this.titleText = new Text({
+      x: centerX,
+      y: 400,
+      text: GameConfig.gameName,
+      fontSize: 56,
+      fontWeight: 'bold',
+      color: '#4A90D9',
+      align: 'center',
+      shadow: { color: 'rgba(0,0,0,0.1)', blur: 4, offsetX: 2, offsetY: 2 }
+    });
+
+    // 副标题
+    this.subtitleText = new Text({
+      x: centerX,
+      y: 480,
+      text: '金牌保洁，从这里开始',
+      fontSize: 28,
+      color: '#666666',
+      align: 'center'
+    });
+
+    // 5.3.2 实现加载动画 - 旋转图标区域（在render中绘制）
+
+    // 5.3.3 实现加载进度显示 - 进度条
+    this.progressBar = new ProgressBar({
+      x: centerX - 250,
+      y: 750,
+      width: 500,
+      height: 16,
+      progress: 0,
+      bgColor: '#E8E8E8',
+      fillColor: '#4A90D9',
+      fillGradient: { start: '#4A90D9', end: '#5BA0E9' },
+      borderRadius: 8,
+      striped: true,
+      animated: true
+    });
+
+    // 进度百分比文字
+    this.percentText = new Text({
+      x: centerX,
+      y: 790,
+      text: '0%',
+      fontSize: 24,
+      color: '#4A90D9',
+      align: 'center'
+    });
+
+    // 提示文字
+    this.tipText = new Text({
+      x: centerX,
+      y: 850,
+      text: this.tips[0],
+      fontSize: 24,
+      color: '#999999',
+      align: 'center'
+    });
+
+    // 版本号
+    this.versionText = new Text({
+      x: centerX,
+      y: this.screenHeight - 60,
+      text: `v${GameConfig.version}`,
+      fontSize: 20,
+      color: '#CCCCCC',
+      align: 'center'
+    });
   }
 
   /**
    * 进入场景
    */
   onEnter() {
-    console.log('[LoadingScene] 进入场景');
-    this.startLoading();
+    console.log('[LoadingScene] 进入场景，开始加载资源');
+    this.startTime = Date.now();
+    this.loadingState = 'loading';
+    this._startLoading();
   }
 
   /**
+   * 5.3.4 实现核心资源预加载逻辑
    * 开始加载资源
    */
-  startLoading() {
-    // 收集需要预加载的图片资源
-    const imagesToLoad = [];
-    
-    // UI资源
-    for (const [key, src] of Object.entries(ResourceConfig.images.ui)) {
-      imagesToLoad.push({ key, src });
+  async _startLoading() {
+    try {
+      // 注册场景资源
+      this._registerResources();
+
+      // 开始预加载
+      const success = await this.resourceLoader.preloadScene('common', (progress) => {
+        this._onProgressUpdate(progress);
+      });
+
+      if (success) {
+        this._onLoadingComplete();
+      } else {
+        this._onLoadingError('部分资源加载失败');
+      }
+    } catch (error) {
+      console.error('[LoadingScene] 加载失败:', error);
+      this._onLoadingError(error.message);
+    }
+  }
+
+  /**
+   * 注册需要加载的资源
+   */
+  _registerResources() {
+    // 核心UI资源
+    const commonResources = [
+      { key: 'ui_btn_normal', url: 'images/ui/btn_normal.png', type: 'image', priority: 10 },
+      { key: 'ui_btn_pressed', url: 'images/ui/btn_pressed.png', type: 'image', priority: 10 },
+      { key: 'ui_panel', url: 'images/ui/panel.png', type: 'image', priority: 9 },
+      { key: 'ui_progress_bar', url: 'images/ui/progress_bar.png', type: 'image', priority: 9 },
+      { key: 'ui_coin', url: 'images/ui/coin.png', type: 'image', priority: 8 },
+      { key: 'ui_star', url: 'images/ui/star.png', type: 'image', priority: 8 },
+      // 基础工具
+      { key: 'tool_basic_cloth', url: 'images/tools/basic_cloth.png', type: 'image', priority: 7 },
+      { key: 'tool_sponge', url: 'images/tools/sponge.png', type: 'image', priority: 7 },
+      { key: 'tool_brush', url: 'images/tools/brush.png', type: 'image', priority: 7 }
+    ];
+
+    this.resourceLoader.registerSceneResources('common', commonResources);
+  }
+
+  /**
+   * 进度更新
+   */
+  _onProgressUpdate(progress) {
+    this.progress = progress.progress;
+
+    // 更新进度条
+    this.progressBar.setProgress(this.progress);
+
+    // 更新百分比
+    this.percentText.setText(`${Math.floor(this.progress * 100)}%`);
+
+    // 更新提示文字
+    const tipIndex = Math.floor(this.progress * (this.tips.length - 1));
+    if (tipIndex !== this.currentTipIndex && tipIndex < this.tips.length) {
+      this.currentTipIndex = tipIndex;
+      this.tipText.setText(this.tips[tipIndex]);
     }
 
-    // 工具资源
-    for (const [key, src] of Object.entries(ResourceConfig.images.tools)) {
-      imagesToLoad.push({ key, src });
-    }
+    globalEvent.emit('loading:progress', this.progress);
+  }
 
-    // 开始加载
-    this.resourceManager.loadImages(imagesToLoad, (progress, loaded, total) => {
-      this.progress = progress;
-      this.currentTip = this.tips[Math.floor(progress * (this.tips.length - 1))];
-    }).then(() => {
-      // 加载完成，跳转到首页
-      console.log('[LoadingScene] 资源加载完成');
-      setTimeout(() => {
-        // TODO: 切换到HomeScene
-        // this.game.switchScene('HomeScene');
-      }, 500);
-    }).catch(err => {
-      console.error('[LoadingScene] 资源加载失败:', err);
-    });
+  /**
+   * 加载完成
+   */
+  _onLoadingComplete() {
+    const elapsed = Date.now() - this.startTime;
+    const remaining = Math.max(0, this.minLoadingTime - elapsed);
+
+    console.log(`[LoadingScene] 资源加载完成，用时 ${elapsed}ms，等待 ${remaining}ms`);
+
+    // 确保最小加载时间
+    setTimeout(() => {
+      this.loadingState = 'complete';
+      this.progress = 1;
+      this.progressBar.setProgress(1);
+      this.percentText.setText('100%');
+      this.tipText.setText('准备就绪！');
+
+      // 5.3.5 加载完成后切换到首页
+      this._switchToHome();
+    }, remaining);
+  }
+
+  /**
+   * 5.3.5 加载完成后切换到首页
+   * 切换到首页
+   */
+  _switchToHome() {
+    console.log('[LoadingScene] 切换到首页');
+
+    setTimeout(() => {
+      globalEvent.emit('scene:switch', 'HomeScene');
+    }, 500);
+  }
+
+  /**
+   * 加载错误
+   */
+  _onLoadingError(message) {
+    this.loadingState = 'error';
+    this.tipText.setText(`加载失败: ${message}`);
+    this.tipText.setColor('#FF6B6B');
+
+    // 显示重试按钮（简化版，实际可以用Button组件）
+    console.error('[LoadingScene] 加载错误:', message);
   }
 
   /**
    * 更新
-   * @param {number} deltaTime - 距离上一帧的时间间隔
    */
   onUpdate(deltaTime) {
-    // 更新加载动画等
+    // 更新进度条动画
+    this.progressBar.update(deltaTime);
+
+    // 更新旋转动画角度
+    this._rotation = (this._rotation || 0) + deltaTime * 0.005;
+    if (this._rotation > Math.PI * 2) {
+      this._rotation -= Math.PI * 2;
+    }
   }
 
   /**
    * 渲染
-   * @param {CanvasRenderingContext2D} ctx - Canvas 2D上下文
    */
   onRender(ctx) {
-    const width = 750; // 设计分辨率宽度
-    const height = 1334; // 设计分辨率高度
+    const width = this.screenWidth;
+    const height = this.screenHeight;
 
     // 绘制背景
-    ctx.fillStyle = '#4A90D9';
+    ctx.fillStyle = '#F5F5F5';
     ctx.fillRect(0, 0, width, height);
 
+    // 绘制装饰圆形
+    ctx.fillStyle = 'rgba(74, 144, 217, 0.05)';
+    ctx.beginPath();
+    ctx.arc(width / 2, 350, 200, 0, Math.PI * 2);
+    ctx.fill();
+
     // 绘制标题
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 48px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(GameConfig.gameName, width / 2, height * 0.3);
+    this.titleText.onRender(ctx);
+    this.subtitleText.onRender(ctx);
 
-    // 绘制进度条背景
-    const barWidth = 500;
-    const barHeight = 20;
-    const barX = (width - barWidth) / 2;
-    const barY = height * 0.6;
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.fillRect(barX, barY, barWidth, barHeight);
+    // 5.3.2 实现加载动画 - 绘制旋转的加载图标
+    this._drawLoadingIcon(ctx, width / 2, 620);
 
     // 绘制进度条
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(barX, barY, barWidth * this.progress, barHeight);
+    this.progressBar.onRender(ctx);
+    this.percentText.onRender(ctx);
+    this.tipText.onRender(ctx);
 
-    // 绘制进度文字
-    ctx.font = '24px sans-serif';
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(`${Math.floor(this.progress * 100)}%`, width / 2, barY + 50);
+    // 绘制版本号
+    this.versionText.onRender(ctx);
+  }
 
-    // 绘制提示文字
-    ctx.font = '28px sans-serif';
-    ctx.fillText(this.currentTip, width / 2, barY + 90);
+  /**
+   * 5.3.2 实现加载动画
+   * 绘制加载图标
+   */
+  _drawLoadingIcon(ctx, x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(this._rotation || 0);
+
+    // 绘制旋转的小圆点
+    const dotCount = 8;
+    const radius = 30;
+    const dotRadius = 6;
+
+    for (let i = 0; i < dotCount; i++) {
+      const angle = (i / dotCount) * Math.PI * 2;
+      const dotX = Math.cos(angle) * radius;
+      const dotY = Math.sin(angle) * radius;
+
+      // 根据位置设置透明度，形成渐变效果
+      const alpha = 0.3 + ((i / dotCount) * 0.7);
+
+      ctx.fillStyle = `rgba(74, 144, 217, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
   }
 }
 

@@ -34,18 +34,20 @@ class LevelPreviewDialog extends Dialog {
   }
 
   _loadBackground() {
+    const imgPath = `images/game/game_stage${this.stage}_l${this.levelId}_home.png`;
+    console.log(`[LevelPreviewDialog] 加载图片: ${imgPath}`);
+    
     if (typeof wx !== 'undefined') {
       const img = wx.createImage();
       img.onload = () => {
-        console.log(`[LevelPreviewDialog] 关卡图加载完成: stage${this.stage}_l${this.levelId}`);
+        console.log(`[LevelPreviewDialog] 关卡图加载完成`);
         this.bgImage = img;
         this.bgLoaded = true;
       };
-      img.onerror = () => {
-        console.warn(`[LevelPreviewDialog] 关卡图加载失败`);
+      img.onerror = (err) => {
+        console.warn(`[LevelPreviewDialog] 关卡图加载失败: ${imgPath}`, err);
       };
-      // 图片路径格式: images/game/game_stage1_l1_home.png
-      img.src = `images/game/game_stage${this.stage}_l${this.levelId}_home.png`;
+      img.src = imgPath;
     }
   }
 
@@ -66,6 +68,7 @@ class LevelPreviewDialog extends Dialog {
       borderRadius: 30,
       onClick: () => this.hide()
     });
+    this.addChild(this.closeBtn);
 
     // 关卡标题
     this.titleText = new Text({
@@ -78,6 +81,7 @@ class LevelPreviewDialog extends Dialog {
       align: 'center',
       shadow: { color: 'rgba(0,0,0,0.5)', blur: 4, offsetX: 2, offsetY: 2 }
     });
+    this.addChild(this.titleText);
 
     // 星级显示
     this.starText = new Text({
@@ -88,6 +92,9 @@ class LevelPreviewDialog extends Dialog {
       color: '#FFD700',
       align: 'center'
     });
+    if (this.stars > 0) {
+      this.addChild(this.starText);
+    }
 
     // 开始按钮（底部）
     this.startBtn = new Button({
@@ -107,6 +114,7 @@ class LevelPreviewDialog extends Dialog {
         this.onStart();
       }
     });
+    this.addChild(this.startBtn);
   }
 
   update(deltaTime) {
@@ -158,17 +166,12 @@ class LevelPreviewDialog extends Dialog {
   }
 
   _renderContent(ctx) {
-    // 标题
-    if (this.titleText) this.titleText.onRender(ctx);
-    
-    // 星级
-    if (this.starText && this.stars > 0) {
-      this.starText.onRender(ctx);
+    // 绘制子元素（按钮、文本等）
+    for (const child of this.children) {
+      if (child && child.onRender) {
+        child.onRender(ctx);
+      }
     }
-
-    // 按钮
-    if (this.closeBtn) this.closeBtn.onRender(ctx);
-    if (this.startBtn) this.startBtn.onRender(ctx);
   }
 
   onTouchStart(x, y) {

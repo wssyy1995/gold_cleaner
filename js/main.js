@@ -190,6 +190,13 @@ class Main {
       this.dialogManager.show('settlement');
     });
     
+    // 弹窗显示事件
+    globalEvent.on('dialog:show', (dialogName, dialogInstance) => {
+      console.log(`[Main] 显示弹窗: ${dialogName}`);
+      this.dialogManager.register(dialogName, dialogInstance);
+      this.dialogManager.show(dialogName);
+    });
+    
     // 绑定触摸事件 - 只需要绑定一次
     if (typeof wx !== 'undefined') {
       wx.onTouchStart((e) => {

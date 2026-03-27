@@ -176,7 +176,12 @@ class SceneManager {
       // 创建场景实例
       const scene = new sceneInfo.class();
       
-      // 调用预加载方法
+      // 调用 onLoad 生命周期
+      if (scene.onLoad) {
+        scene.onLoad(data);
+      }
+      
+      // 调用预加载方法（如果存在）
       if (scene.preload) {
         await scene.preload(data);
       }

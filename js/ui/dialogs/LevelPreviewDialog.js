@@ -16,6 +16,9 @@ class LevelPreviewDialog extends Dialog {
       height: 1100,
       maskColor: 'rgba(0, 0, 0, 0.8)',
       showCloseButton: false,
+      screenWidth: options.screenWidth || 750,
+      screenHeight: options.screenHeight || 1334,
+      animated: false, // 关闭动画，立即显示
       ...options
     });
 
@@ -126,6 +129,9 @@ class LevelPreviewDialog extends Dialog {
   render(ctx) {
     ctx.save();
     
+    // 应用动画属性（透明度、缩放）
+    ctx.globalAlpha = this._opacity || 1;
+    
     // 绘制遮罩
     ctx.fillStyle = this.maskColor;
     ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
@@ -134,7 +140,11 @@ class LevelPreviewDialog extends Dialog {
     const x = (this.screenWidth - this.width) / 2;
     const y = (this.screenHeight - this.height) / 2;
     
-    ctx.translate(x, y);
+    // 应用缩放动画
+    const scale = this._scale || 1;
+    ctx.translate(x + this.width/2, y + this.height/2);
+    ctx.scale(scale, scale);
+    ctx.translate(-this.width/2, -this.height/2);
 
     // 绘制背景图（如果已加载）
     if (this.bgImage && this.bgLoaded) {

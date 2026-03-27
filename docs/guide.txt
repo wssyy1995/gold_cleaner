@@ -1,0 +1,154 @@
+
+```javascript
+/**
+ * 辅助函数：绘制圆角矩形路径
+ * @param {CanvasRenderingContext2D} ctx Canvas 2D 上下文
+ * @param {number} x 矩形左上角 x 坐标
+ * @param {number} y 矩形左上角 y 坐标
+ * @param {number} width 矩形宽度
+ * @param {number} height 矩形高度
+ * @param {number} radius 圆角半径
+ */
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + width, y, x + width, y + height, radius);
+    ctx.arcTo(x + width, y + height, x, y + height, radius);
+    ctx.arcTo(x, y + height, x, y, radius);
+    ctx.arcTo(x, y, x + width, y, radius);
+    ctx.closePath();
+}
+
+/**
+ * 在 Canvas 上绘制一个关卡预览卡片组件
+ * @param {CanvasRenderingContext2D} ctx Canvas 2D 上下文
+ * @param {number} x 组件左上角 x 坐标 (逻辑像素)
+ * @param {number} y 组件左上角 y 坐标 (逻辑像素)
+ * @param {number} cardWidth 组件总宽度 (逻辑像素)
+ * @param {number} cardHeight 组件总高度 (逻辑像素)
+ * @param {number|string} levelNum 关卡数字或文本
+ * @param {string} previewImgSrc 关卡预览图片的 URL
+ * @param {string} levelName 关卡名称文本
+ */
+async function drawLevelCard(ctx, x, y, cardWidth, cardHeight, levelNum, previewImgSrc, levelName) {
+    // --- 1. 计算各部分的尺寸和位置（按比例） ---
+    // 球体半径大约是卡片宽度的 18%
+    const sphereRadius = cardWidth * 0.18;
+    // 卡片圆角半径大约是卡片宽度的 8%
+    const cardBorderRadius = cardWidth * 0.08;
+    // 卡片边框宽度大约是卡片宽度的 1%
+    const cardBorderWidth = cardWidth * 0.01;
+
+    // 球体中心坐标
+    const sphereCenterX = x + cardWidth / 2;
+    const sphereCenterY = y + sphereRadius; // 球体顶部与组件顶部 'y' 对齐
+
+    // 卡片主体区域 (从球体中心下方开始)
+    const cardBodyX = x;
+    const cardBodyY = y + sphereRadius;
+    const cardBodyW = cardWidth;
+    const cardBodyH = cardHeight - sphereRadius; // 减去球体半径，因为卡片主体从球体中心开始
+
+    // 卡片内容区域的内边距
+    const contentPaddingHorizontal = cardBodyW * 0.05; // 左右内边距
+    const contentPaddingTop = cardBodyH * 0.05;    // 卡片主体内部顶部内边距
+    const contentPaddingBottom = cardBodyH * 0.05; // 卡片主体内部底部内边距
+
+    // 预览图片框的尺寸和位置
+    const previewImgX = cardBodyX + contentPaddingHorizontal;
+    const previewImgY = cardBodyY + contentPaddingTop;
+    const previewImgW = cardBodyW - 2 * contentPaddingHorizontal;
+    // 关卡名区域高度，大约卡片主体高度的 15%
+    const levelNameAreaHeight = cardBodyH * 0.15;
+    // 预览图高度 = 可用高度 - 关卡名区域高度
+    const previewImgH = cardBodyH - contentPaddingTop - contentPaddingBottom - levelNameAreaHeight;
+
+    // 关卡名文本位置
+    const nameTextX = x + cardWidth / 2;
+    const nameTextY = previewImgY + previewImgH + levelNameAreaHeight / 2; // 居中于关卡名区域
+
+    // --- 2. 绘制卡片主体背景 ---
+    ctx.save();
+    drawRoundedRect(ctx, cardBodyX, cardBodyY, cardBodyW, cardBodyH, cardBorderRadius);
+    ctx.fillStyle = '#FFFFFF'; // 卡片背景色 (白色)
+    ctx.fill();
+    ctx.restore();
+
+    // --- 3. 绘制卡片主体边框 ---
+    ctx.save();
+    drawRoundedRect(ctx, cardBodyX, cardBodyY, cardBodyW, cardBodyH, cardBorderRadius);
+    ctx.strokeStyle = '#FFD700'; // 金色边框
+    ctx.lineWidth = cardBorderWidth;
+    ctx.stroke();
+    ctx.restore();
+
+    // --- 4. 加载并绘制预览图片 ---
+    const previewImg = wx.createImage();
+    previewImg.src = previewImgSrc;
+    await new Promise(resolve => {
+        previewImg.onload = resolve;
+        previewImg.onerror = () => {
+            console.error('Error loading preview image:', previewImgSrc);
+            resolve(); // 即使加载失败也要继续，避免阻塞绘制
+        };
+    });
+
+    if (previewImg.width && previewImg.height) { // 确保图片加载成功
+        // 使用 Cover 模式逻辑：图片填满整个区域，保持比例，裁剪超出部分
+        const imgRatio = previewImg.width / previewImg.height;
+        const frameRatio = previewImgW / previewImgH;
+
+        let drawW, drawH, drawDx, drawDy; // 目标绘制的宽高及偏移量
+
+        if (imgRatio > frameRatio) {
+            // 图片比框架宽：按框架高度缩放，宽度超出则裁剪
+            drawH = previewImgH;
+            drawW = previewImgH * imgRatio;
+        } else {
+            // 图片比框架高：按框架宽度缩放，高度超出则裁剪
+            drawW = previewImgW;
+            drawH = previewImgW / imgRatio;
+        }
+        // 计算居中偏移量
+        drawDx = previewImgX + (previewImgW - drawW) / 2;
+        drawDy = previewImgY + (previewImgH - drawH) / 2;
+
+        ctx.save();
+        // 裁剪到图片框的矩形区域，确保图片不会画到外面
+        ctx.rect(previewImgX, previewImgY, previewImgW, previewImgH);
+        ctx.clip(); // 应用裁剪
+        ctx.drawImage(previewImg, drawDx, drawDy, drawW, drawH);
+        ctx.restore();
+    }
+
+    // --- 5. 绘制关卡名称文本 ---
+    ctx.save();
+    ctx.fillStyle = '#333333'; // 深灰色文本
+    ctx.font = `bold ${cardWidth * 0.07}px Arial`; // 字体大小与卡片宽度成比例
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(levelName, nameTextX, nameTextY);
+    ctx.restore();
+
+    // --- 6. 绘制关卡数字球体 ---
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(sphereCenterX, sphereCenterY, sphereRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = '#FFA500'; // 橙色填充
+    ctx.fill();
+    ctx.strokeStyle = '#FFD700'; // 金色边框
+    ctx.lineWidth = cardBorderWidth * 1.5; // 球体边框稍微粗一点
+    ctx.stroke();
+    ctx.closePath();
+    ctx.restore();
+
+    // --- 7. 绘制关卡数字文本 ---
+    ctx.save();
+    ctx.fillStyle = '#FFFFFF'; // 白色数字
+    ctx.font = `bold ${sphereRadius * 1.2}px Arial`; // 字体大小与球体半径成比例
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(levelNum, sphereCenterX, sphereCenterY);
+    ctx.restore();
+}
+```

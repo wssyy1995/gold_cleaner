@@ -18,10 +18,31 @@
 - drawImage 使用逻辑像素单位
 - **结果**: 图片显示但"放大了某个区域"
 
-### 尝试 3: Contain 模式 ❓
+### 尝试 3: Contain 模式 ❌
 - 添加 `_drawBackgroundContain` 方法
-- 保持图片比例，完整显示，可能有黑边
-- **结果**: 用户反馈"还是不对"（待排查）
+- **BUG**: 代码逻辑错误，实际是 Cover 模式
+- **结果**: 仍显示"放大了某个区域"
+
+### 尝试 4: 修正 Contain 逻辑 ❌
+- 使用 `Math.min(scaleX, scaleY)` 正确实现 Contain
+- **结果**: 仍显示"放大了左上角区域"
+
+### 尝试 5: 发现根因 ✅
+**问题**: SceneManager 重新 `new` 创建实例，导致屏幕尺寸丢失
+
+**日志证据**:
+```
+[LoadingScene] 屏幕: 750x1334, 图片: 640x960
+```
+- 屏幕显示 750x1334（设计分辨率）而非 375x812（逻辑像素）
+- 说明 main.js 赋值的 `screenWidth` 被构造函数默认值覆盖
+
+**修复**:
+- SceneManager 添加 `screenWidth/screenHeight/dpr` 属性
+- `preload()` 创建实例后自动注入屏幕尺寸
+- main.js 设置 SceneManager 的全局屏幕尺寸
+
+**结果**: 待测试
 
 ---
 

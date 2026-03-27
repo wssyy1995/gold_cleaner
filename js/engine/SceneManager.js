@@ -47,6 +47,11 @@ class SceneManager {
 
     // 事件监听
     this._eventListeners = [];
+    
+    // 屏幕尺寸（由 main.js 注入）
+    this.screenWidth = 375;
+    this.screenHeight = 812;
+    this.dpr = 2;
   }
 
   /**
@@ -175,6 +180,11 @@ class SceneManager {
     try {
       // 创建场景实例
       const scene = new sceneInfo.class();
+      
+      // 注入屏幕尺寸
+      scene.screenWidth = this.screenWidth;
+      scene.screenHeight = this.screenHeight;
+      scene.dpr = this.dpr;
       
       // 调用 onLoad 生命周期
       if (scene.onLoad) {

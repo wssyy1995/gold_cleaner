@@ -125,35 +125,18 @@ class Main {
    * 注册场景
    */
   _registerScenes() {
-    // 创建场景实例
-    const loadingScene = new LoadingScene();
-    const homeScene = new HomeScene();
-    const gameplayScene = new GameplayScene();
-    const shopScene = new ShopScene();
+    // 先设置 SceneManager 的屏幕尺寸，创建实例时会自动注入
+    this.sceneManager.screenWidth = this.screenWidth;
+    this.sceneManager.screenHeight = this.screenHeight;
+    this.sceneManager.dpr = this.dpr;
     
-    // 设置屏幕尺寸（物理像素）
-    loadingScene.screenWidth = this.screenWidth;
-    loadingScene.screenHeight = this.screenHeight;
-    homeScene.screenWidth = this.screenWidth;
-    homeScene.screenHeight = this.screenHeight;
-    gameplayScene.screenWidth = this.screenWidth;
-    gameplayScene.screenHeight = this.screenHeight;
-    shopScene.screenWidth = this.screenWidth;
-    shopScene.screenHeight = this.screenHeight;
-    
-    // 保存dpr供场景使用
-    loadingScene.dpr = this.dpr;
-    homeScene.dpr = this.dpr;
-    gameplayScene.dpr = this.dpr;
-    shopScene.dpr = this.dpr;
-    
-    // 注册到场景管理器
+    // 注册到场景管理器（SceneManager 会创建实例并注入屏幕尺寸）
     this.sceneManager.register('LoadingScene', LoadingScene);
     this.sceneManager.register('HomeScene', HomeScene);
     this.sceneManager.register('GameplayScene', GameplayScene);
     this.sceneManager.register('ShopScene', ShopScene);
     
-    console.log('[Main] 场景注册完成');
+    console.log('[Main] 场景注册完成，屏幕尺寸:', this.screenWidth, 'x', this.screenHeight);
   }
 
   /**

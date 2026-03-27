@@ -269,23 +269,49 @@ class Image extends Component {
    * 绘制占位符
    */
   _drawPlaceholder(ctx) {
-    // 背景
-    ctx.fillStyle = '#F0F0F0';
+    // 背景 - 使用渐变色区分不同类型的占位
+    const colors = {
+      'ui': '#E3F2FD',
+      'tool': '#FFF3E0',
+      'dirt': '#EFEBE9',
+      'scene': '#E8F5E9',
+      'effect': '#F3E5F5'
+    };
+    
+    // 从路径推断类型
+    let type = 'ui';
+    if (this.src && this.src.includes('tool')) type = 'tool';
+    else if (this.src && this.src.includes('dirt')) type = 'dirt';
+    else if (this.src && this.src.includes('scene')) type = 'scene';
+    else if (this.src && this.src.includes('effect')) type = 'effect';
+    
+    ctx.fillStyle = colors[type] || '#F0F0F0';
     ctx.fillRect(this.x, this.y, this.width, this.height);
 
     // 边框
-    ctx.strokeStyle = '#CCCCCC';
+    ctx.strokeStyle = '#BBBBBB';
     ctx.lineWidth = 1;
-    ctx.setLineDash([5, 5]);
+    ctx.setLineDash([4, 4]);
     ctx.strokeRect(this.x, this.y, this.width, this.height);
     ctx.setLineDash([]);
 
-    // 图标占位
-    ctx.fillStyle = '#CCCCCC';
-    ctx.font = '12px sans-serif';
+    // 显示类型标签
+    ctx.fillStyle = '#888888';
+    ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🖼️', this.x + this.width / 2, this.y + this.height / 2);
+    
+    // 截断显示文件名
+    let label = type.toUpperCase();
+    if (this.src) {
+      const parts = this.src.split('/');
+      const filename = parts[parts.length - 1].split('.')[0];
+      if (filename && this.width > 60) {
+        label = filename.length > 8 ? filename.substring(0, 8) + '...' : filename;
+      }
+    }
+    
+    ctx.fillText(label, this.x + this.width / 2, this.y + this.height / 2);
   }
 
   /**

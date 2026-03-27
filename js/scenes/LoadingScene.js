@@ -152,19 +152,20 @@ class LoadingScene extends Scene {
    */
   async _startLoading() {
     try {
-      // 注册场景资源
-      this._registerResources();
-
-      // 开始预加载
-      const success = await this.resourceLoader.preloadScene('common', (progress) => {
-        this._onProgressUpdate(progress);
-      });
-
-      if (success) {
-        this._onLoadingComplete();
-      } else {
-        this._onLoadingError('部分资源加载失败');
-      }
+      // 开发模式：模拟加载进度，不实际加载资源
+      // 实际项目中应该加载真实资源
+      
+      let progress = 0;
+      const loadInterval = setInterval(() => {
+        progress += 0.1;
+        this._onProgressUpdate({ progress: Math.min(1, progress) });
+        
+        if (progress >= 1) {
+          clearInterval(loadInterval);
+          this._onLoadingComplete();
+        }
+      }, 200);
+      
     } catch (error) {
       console.error('[LoadingScene] 加载失败:', error);
       this._onLoadingError(error.message);

@@ -1,134 +1,310 @@
-import './render'; // 初始化Canvas
-import Player from './player/index'; // 导入玩家类
-import Enemy from './npc/enemy'; // 导入敌机类
-import BackGround from './runtime/background'; // 导入背景类
-import GameInfo from './runtime/gameinfo'; // 导入游戏UI类
-import Music from './runtime/music'; // 导入音乐类
-import DataBus from './databus'; // 导入数据类，用于管理游戏状态和数据
-
-const ENEMY_GENERATE_INTERVAL = 30;
-const ctx = canvas.getContext('2d'); // 获取canvas的2D绘图上下文;
-
-GameGlobal.databus = new DataBus(); // 全局数据管理，用于管理游戏状态和数据
-GameGlobal.musicManager = new Music(); // 全局音乐管理实例
-
 /**
- * 游戏主函数
+ * 游戏主入口
+ * 初始化并启动游戏
  */
-export default class Main {
-  aniId = 0; // 用于存储动画帧的ID
-  bg = new BackGround(); // 创建背景
-  player = new Player(); // 创建玩家
-  gameInfo = new GameInfo(); // 创建游戏UI显示
 
+import GameManager from './managers/GameManager';
+import SceneManager from './engine/SceneManager';
+import ResourceLoader from './cloud/ResourceLoader';
+
+// 导入场景
+import LoadingScene from './scenes/LoadingScene';
+import HomeScene from './scenes/HomeScene';
+import GameplayScene from './scenes/GameplayScene';
+import ShopScene from './scenes/ShopScene';
+
+// 导入弹窗管理器
+import DialogManager from './ui/dialogs/DialogManager';
+import SettlementDialog from './scenes/SettlementDialog';
+
+// 导入配置
+import LevelManager from './game/LevelManager';
+import ToolManager from './game/ToolManager';
+import CurrencySystem from './game/CurrencySystem';
+
+class Main {
   constructor() {
-    // 当开始游戏被点击时，重新开始游戏
-    this.gameInfo.on('restart', this.start.bind(this));
-
-    // 开始游戏
-    this.start();
+    console.log('[Main] 游戏启动');
+    
+    this.gameManager = null;
+    this.sceneManager = null;
+    this.dialogManager = null;
+    this.resourceLoader = null;
+    
+    this.init();
   }
 
-  /**
-   * 开始或重启游戏
-   */
-  start() {
-    GameGlobal.databus.reset(); // 重置数据
-    this.player.init(); // 重置玩家状态
-    cancelAnimationFrame(this.aniId); // 清除上一局的动画
-    this.aniId = requestAnimationFrame(this.loop.bind(this)); // 开始新的动画循环
-  }
-
-  /**
-   * 随着帧数变化的敌机生成逻辑
-   * 帧数取模定义成生成的频率
-   */
-  enemyGenerate() {
-    // 每30帧生成一个敌机
-    if (GameGlobal.databus.frame % ENEMY_GENERATE_INTERVAL === 0) {
-      const enemy = GameGlobal.databus.pool.getItemByClass('enemy', Enemy); // 从对象池获取敌机实例
-      enemy.init(); // 初始化敌机
-      GameGlobal.databus.enemys.push(enemy); // 将敌机添加到敌机数组中
+  async init() {
+    try {
+      // 1. 初始化 Canvas
+      this._initCanvas();
+      
+      // 2. 初始化资源加载器
+      this.resourceLoader = new ResourceLoader();
+      await this.resourceLoader.init();
+      
+      // 3. 初始化游戏管理器
+      this.gameManager = new GameManager();
+      this.gameManager.canvas = this.canvas;
+      this.gameManager.ctx = this.ctx;
+      this.gameManager.init();
+      
+      // 4. 初始化场景管理器
+      this.sceneManager = new SceneManager();
+      this.sceneManager.init();
+      
+      // 5. 注册场景
+      this._registerScenes();
+      
+      // 6. 初始化弹窗管理器
+      this.dialogManager = new DialogManager();
+      this.dialogManager.setScreenSize(this.screenWidth, this.screenHeight);
+      this.dialogManager.init();
+      
+      // 7. 初始化游戏系统
+      this._initGameSystems();
+      
+      // 8. 监听场景切换事件
+      this._bindEvents();
+      
+      // 9. 启动游戏 - 先进入加载场景
+      console.log('[Main] 切换到LoadingScene');
+      this.sceneManager.switchScene('LoadingScene');
+      
+      // 10. 开始游戏循环
+      this._startGameLoop();
+      
+    } catch (error) {
+      console.error('[Main] 初始化失败:', error);
     }
   }
 
   /**
-   * 全局碰撞检测
+   * 初始化 Canvas
    */
-  collisionDetection() {
-    // 检测子弹与敌机的碰撞
-    GameGlobal.databus.bullets.forEach((bullet) => {
-      for (let i = 0, il = GameGlobal.databus.enemys.length; i < il; i++) {
-        const enemy = GameGlobal.databus.enemys[i];
+  _initCanvas() {
+    if (typeof wx !== 'undefined') {
+      const sysInfo = wx.getSystemInfoSync();
+      this.dpr = sysInfo.pixelRatio;
+      this.screenWidth = sysInfo.windowWidth;
+      this.screenHeight = sysInfo.windowHeight;
+      
+      this.canvas = wx.createCanvas();
+      this.ctx = this.canvas.getContext('2d');
+      
+      this.canvas.width = this.screenWidth * this.dpr;
+      this.canvas.height = this.screenHeight * this.dpr;
+      this.canvas.style.width = this.screenWidth + 'px';
+      this.canvas.style.height = this.screenHeight + 'px';
+      
+      this.ctx.scale(this.dpr, this.dpr);
+      
+      console.log(`[Main] Canvas: ${this.screenWidth}x${this.screenHeight}, DPR: ${this.dpr}`);
+    } else {
+      // 浏览器环境
+      this.canvas = document.createElement('canvas');
+      this.ctx = this.canvas.getContext('2d');
+      this.screenWidth = 375;
+      this.screenHeight = 667;
+      this.dpr = 2;
+      
+      this.canvas.width = this.screenWidth * this.dpr;
+      this.canvas.height = this.screenHeight * this.dpr;
+      
+      document.body.appendChild(this.canvas);
+    }
+  }
 
-        // 如果敌机存活并且发生了发生碰撞
-        if (enemy.isCollideWith(bullet)) {
-          enemy.destroy(); // 销毁敌机
-          bullet.destroy(); // 销毁子弹
-          GameGlobal.databus.score += 1; // 增加分数
-          break; // 退出循环
-        }
-      }
+  /**
+   * 注册场景
+   */
+  _registerScenes() {
+    // 创建场景实例
+    const loadingScene = new LoadingScene();
+    const homeScene = new HomeScene();
+    const gameplayScene = new GameplayScene();
+    const shopScene = new ShopScene();
+    
+    // 设置屏幕尺寸
+    loadingScene.screenWidth = this.screenWidth;
+    loadingScene.screenHeight = this.screenHeight;
+    homeScene.screenWidth = this.screenWidth;
+    homeScene.screenHeight = this.screenHeight;
+    gameplayScene.screenWidth = this.screenWidth;
+    gameplayScene.screenHeight = this.screenHeight;
+    shopScene.screenWidth = this.screenWidth;
+    shopScene.screenHeight = this.screenHeight;
+    
+    // 注册到场景管理器
+    this.sceneManager.register('LoadingScene', LoadingScene);
+    this.sceneManager.register('HomeScene', HomeScene);
+    this.sceneManager.register('GameplayScene', GameplayScene);
+    this.sceneManager.register('ShopScene', ShopScene);
+    
+    console.log('[Main] 场景注册完成');
+  }
+
+  /**
+   * 初始化游戏系统
+   */
+  _initGameSystems() {
+    // 关卡管理器
+    this.levelManager = new LevelManager();
+    this.levelManager.init();
+    
+    // 工具管理器
+    this.toolManager = new ToolManager();
+    this.toolManager.init();
+    
+    // 金币系统
+    this.currencySystem = new CurrencySystem();
+    this.currencySystem.init();
+    
+    // 添加初始金币
+    this.currencySystem.addCoins(100, 'init');
+  }
+
+  /**
+   * 绑定全局事件
+   */
+  _bindEvents() {
+    const { globalEvent } = require('./core/EventEmitter');
+    
+    // 场景切换事件
+    globalEvent.on('scene:switch', (sceneName, data) => {
+      console.log(`[Main] 切换场景: ${sceneName}`);
+      this.sceneManager.switchScene(sceneName, data);
     });
-
-    // 检测玩家与敌机的碰撞
-    for (let i = 0, il = GameGlobal.databus.enemys.length; i < il; i++) {
-      const enemy = GameGlobal.databus.enemys[i];
-
-      // 如果玩家与敌机发生碰撞
-      if (this.player.isCollideWith(enemy)) {
-        this.player.destroy(); // 销毁玩家飞机
-        GameGlobal.databus.gameOver(); // 游戏结束
-
-        break; // 退出循环
-      }
+    
+    // 游戏事件
+    globalEvent.on('game:levelComplete', (result) => {
+      console.log('[Main] 关卡完成:', result);
+      // 显示结算弹窗
+      const dialog = new SettlementDialog({
+        screenWidth: this.screenWidth,
+        screenHeight: this.screenHeight,
+        levelId: result.levelId,
+        stars: result.stars,
+        coins: 50
+      });
+      this.dialogManager.register('settlement', dialog);
+      this.dialogManager.show('settlement');
+    });
+    
+    // 绑定触摸事件
+    if (typeof wx !== 'undefined') {
+      wx.onTouchStart((e) => {
+        const touch = e.touches[0];
+        const x = touch.clientX;
+        const y = touch.clientY;
+        
+        // 先检查弹窗
+        if (this.dialogManager.hasVisibleDialog()) {
+          this.dialogManager.onTouchStart(x, y);
+          return;
+        }
+        
+        // 再检查当前场景
+        const currentScene = this.sceneManager.currentScene;
+        if (currentScene && currentScene.onTouchStart) {
+          currentScene.onTouchStart(x, y);
+        }
+      });
+      
+      wx.onTouchMove((e) => {
+        const touch = e.touches[0];
+        const x = touch.clientX;
+        const y = touch.clientY;
+        
+        if (this.dialogManager.hasVisibleDialog()) {
+          this.dialogManager.onTouchMove(x, y);
+          return;
+        }
+        
+        const currentScene = this.sceneManager.currentScene;
+        if (currentScene && currentScene.onTouchMove) {
+          currentScene.onTouchMove(x, y);
+        }
+      });
+      
+      wx.onTouchEnd((e) => {
+        const touch = e.changedTouches[0];
+        const x = touch.clientX;
+        const y = touch.clientY;
+        
+        if (this.dialogManager.hasVisibleDialog()) {
+          this.dialogManager.onTouchEnd(x, y);
+          return;
+        }
+        
+        const currentScene = this.sceneManager.currentScene;
+        if (currentScene && currentScene.onTouchEnd) {
+          currentScene.onTouchEnd(x, y);
+        }
+      });
     }
   }
 
   /**
-   * canvas重绘函数
-   * 每一帧重新绘制所有的需要展示的元素
+   * 游戏主循环
    */
-  render() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height); // 清空画布
-
-    this.bg.render(ctx); // 绘制背景
-    this.player.render(ctx); // 绘制玩家飞机
-    GameGlobal.databus.bullets.forEach((item) => item.render(ctx)); // 绘制所有子弹
-    GameGlobal.databus.enemys.forEach((item) => item.render(ctx)); // 绘制所有敌机
-    this.gameInfo.render(ctx); // 绘制游戏UI
-    GameGlobal.databus.animations.forEach((ani) => {
-      if (ani.isPlaying) {
-        ani.aniRender(ctx); // 渲染动画
+  _startGameLoop() {
+    let lastTime = Date.now();
+    
+    const loop = () => {
+      const currentTime = Date.now();
+      const deltaTime = currentTime - lastTime;
+      lastTime = currentTime;
+      
+      // 更新
+      this._update(deltaTime);
+      
+      // 渲染
+      this._render();
+      
+      // 下一帧
+      if (typeof wx !== 'undefined') {
+        requestAnimationFrame(loop);
+      } else {
+        requestAnimationFrame(loop);
       }
-    }); // 绘制所有动画
+    };
+    
+    loop();
   }
 
-  // 游戏逻辑更新主函数
-  update() {
-    GameGlobal.databus.frame++; // 增加帧数
-
-    if (GameGlobal.databus.isGameOver) {
-      return;
+  /**
+   * 更新
+   */
+  _update(deltaTime) {
+    // 更新场景
+    if (this.sceneManager.currentScene) {
+      this.sceneManager.update(deltaTime);
     }
-
-    this.bg.update(); // 更新背景
-    this.player.update(); // 更新玩家
-    // 更新所有子弹
-    GameGlobal.databus.bullets.forEach((item) => item.update());
-    // 更新所有敌机
-    GameGlobal.databus.enemys.forEach((item) => item.update());
-
-    this.enemyGenerate(); // 生成敌机
-    this.collisionDetection(); // 检测碰撞
+    
+    // 更新弹窗
+    if (this.dialogManager) {
+      this.dialogManager.update(deltaTime);
+    }
   }
 
-  // 实现游戏帧循环
-  loop() {
-    this.update(); // 更新游戏逻辑
-    this.render(); // 渲染游戏画面
-
-    // 请求下一帧动画
-    this.aniId = requestAnimationFrame(this.loop.bind(this));
+  /**
+   * 渲染
+   */
+  _render() {
+    // 清空画布
+    this.ctx.clearRect(0, 0, this.screenWidth, this.screenHeight);
+    
+    // 渲染当前场景
+    if (this.sceneManager.currentScene) {
+      this.sceneManager.render(this.ctx);
+    }
+    
+    // 渲染弹窗
+    if (this.dialogManager) {
+      this.dialogManager.render(this.ctx);
+    }
   }
 }
+
+export default Main;

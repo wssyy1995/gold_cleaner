@@ -247,6 +247,31 @@ class ShopScene extends Scene {
     // 背景
     ctx.fillStyle = '#F5F5F5';
     ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
+  }
+
+  /**
+   * 绘制圆角矩形（兼容小程序）
+   */
+  _drawRoundedRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.arc(x + width - radius, y + radius, radius, -Math.PI / 2, 0);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.arc(x + width - radius, y + height - radius, radius, 0, Math.PI / 2);
+    ctx.lineTo(x + radius, y + height);
+    ctx.arc(x + radius, y + height - radius, radius, Math.PI / 2, Math.PI);
+    ctx.lineTo(x, y + radius);
+    ctx.arc(x + radius, y + radius, radius, Math.PI, Math.PI * 1.5);
+    ctx.closePath();
+  }
+
+  onRender(ctx) {
+    const s = this.screenWidth / 750;
+    
+    // 背景
+    ctx.fillStyle = '#F5F5F5';
+    ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
 
     // 顶部栏
     ctx.fillStyle = '#FFFFFF';
@@ -275,8 +300,7 @@ class ShopScene extends Scene {
     this.products.forEach(product => {
       // 商品卡片背景
       ctx.fillStyle = product.owned ? '#E8F5E9' : '#FFFFFF';
-      ctx.beginPath();
-      ctx.roundRect(product.x, product.y, product.width, product.height, 12 * s);
+      this._drawRoundedRect(ctx, product.x, product.y, product.width, product.height, 12 * s);
       ctx.fill();
       
       // 边框
@@ -315,8 +339,7 @@ class ShopScene extends Scene {
         // 购买按钮
         const canAfford = this.coins >= product.price;
         ctx.fillStyle = canAfford ? '#4CAF50' : '#BDBDBD';
-        ctx.beginPath();
-        ctx.roundRect(product.x + product.width - 110 * s, product.y + product.height - 60 * s, 90 * s, 40 * s, 8 * s);
+        this._drawRoundedRect(ctx, product.x + product.width - 110 * s, product.y + product.height - 60 * s, 90 * s, 40 * s, 8 * s);
         ctx.fill();
         
         ctx.fillStyle = '#FFFFFF';
@@ -343,8 +366,7 @@ class ShopScene extends Scene {
     
     // 背景
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.beginPath();
-    ctx.roundRect(x, y, boxWidth, boxHeight, 25 * s);
+    this._drawRoundedRect(ctx, x, y, boxWidth, boxHeight, 25 * s);
     ctx.fill();
     
     // 文字

@@ -37,7 +37,7 @@ const ResourceConfig = {
 
     // 场景背景
     scenes: {
-      'bg_home': 'images/backgrounds/bg-002-home.png',
+      'bg_home': 'images/backgrounds/bg-stage1-home.png',
       'bg_loading': 'images/backgrounds/bg-001-loading.png',
       'bg_room_1': 'images/scenes/room_1.png',
       'bg_map': 'images/scenes/map.png'

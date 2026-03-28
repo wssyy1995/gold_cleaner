@@ -61,6 +61,9 @@ class GameApp {
    */
   launch(options = {}) {
     console.log('[GameApp] launch', options);
+    
+    // 设置启动背景色，避免初始化黑屏
+    this._setLaunchBackground();
 
     // 获取系统信息
     this.getSystemInfo();
@@ -117,6 +120,24 @@ class GameApp {
     // 保存游戏数据
     if (this.dataManager) {
       this.dataManager.save();
+    }
+  }
+
+  /**
+   * 设置启动背景色，避免初始化黑屏
+   */
+  _setLaunchBackground() {
+    if (typeof wx !== 'undefined') {
+      try {
+        // 设置窗口背景色为浅灰色（与游戏加载页背景一致）
+        wx.setBackgroundColor({
+          backgroundColor: '#F5F5F5',
+          backgroundColorBottom: '#F5F5F5'
+        });
+        console.log('[GameApp] 设置启动背景色');
+      } catch (e) {
+        console.warn('[GameApp] 设置背景色失败:', e);
+      }
     }
   }
 

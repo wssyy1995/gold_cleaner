@@ -51,30 +51,39 @@ class Main {
       this.gameManager.ctx = this.ctx;
       this.gameManager.init();
       
-      // 4. 初始化场景管理器
+      // 5. 初始化场景管理器
       this.sceneManager = new SceneManager();
       this.sceneManager.init();
       
-      // 5. 注册场景
+      // 设置默认过渡动画配置
+      this.sceneManager.setTransitionConfig({
+        enabled: false,  // 临时禁用，测试是否是过渡导致的问题
+        duration: 300,
+        type: 'fade'  // fade, slide, scale, wipe, curtain
+      });
+      
+      // 6. 注册场景
       this._registerScenes();
       
-      // 6. 初始化弹窗管理器
+      // 7. 初始化弹窗管理器
       this.dialogManager = new DialogManager();
       this.dialogManager.setScreenSize(this.screenWidth, this.screenHeight);
       this.dialogManager.init();
       
-      // 7. 初始化游戏系统
-      this._initGameSystems();
-      
       // 8. 监听场景切换事件
       this._bindEvents();
       
-      // 9. 启动游戏 - 先进入加载场景
+      // 9. 立即启动游戏 - 先进入加载场景（避免黑屏等待）
       console.log('[Main] 切换到LoadingScene');
       this.sceneManager.switchScene('LoadingScene');
       
       // 10. 开始游戏循环
       this._startGameLoop();
+      
+      // 11. 在加载页显示后，初始化游戏系统（延迟执行，避免阻塞渲染）
+      setTimeout(() => {
+        this._initGameSystemsDeferred();
+      }, 100)
       
     } catch (error) {
       console.error('[Main] 初始化失败:', error);
@@ -146,21 +155,40 @@ class Main {
   /**
    * 初始化游戏系统
    */
+  /**
+   * 初始化游戏系统
+   * 在加载页显示后执行，避免启动黑屏
+   */
   _initGameSystems() {
-    // 关卡管理器
-    this.levelManager = new LevelManager();
-    this.levelManager.init();
+    // 游戏系统初始化延迟到 _initGameSystemsDeferred 执行
+    // 这样加载页可以先显示，避免用户看到黑屏等待
+    console.log('[Main] 游戏系统初始化将延迟执行');
+  }
+  
+  /**
+   * 延迟初始化游戏系统（在加载页显示后执行）
+   */
+  _initGameSystemsDeferred() {
+    console.log('[Main] 开始初始化游戏系统...');
     
-    // 工具管理器
-    this.toolManager = new ToolManager();
-    this.toolManager.init();
-    
-    // 金币系统
-    this.currencySystem = new CurrencySystem();
-    this.currencySystem.init();
-    
-    // 添加初始金币
-    this.currencySystem.addCoins(100, 'init');
+    try {
+      // 关卡管理器
+      this.levelManager = new LevelManager();
+      this.levelManager.init();
+      
+      // 工具管理器
+      this.toolManager = new ToolManager();
+      this.toolManager.init();
+      
+      // 金币系统
+      this.currencySystem = new CurrencySystem();
+      this.currencySystem.init();
+      this.currencySystem.addCoins(100, 'init');
+      
+      console.log('[Main] 游戏系统初始化完成');
+    } catch (e) {
+      console.error('[Main] 游戏系统初始化失败:', e);
+    }
   }
 
   /**
@@ -171,20 +199,74 @@ class Main {
     
     // 场景切换事件
     globalEvent.on('scene:switch', (sceneName, data) => {
-      console.log(`[Main] 切换场景: ${sceneName}`);
-      this.sceneManager.switchScene(sceneName, data);
+      console.log(`[Main] 切换场景: ${sceneName}`, data);
+      
+      // 构建切换选项
+      const options = {};
+      if (data) {
+        // 支持自定义过渡类型
+        if (data.transition) {
+          options.transition = data.transition;
+        }
+        if (data.direction) {
+          options.direction = data.direction;
+        }
+      }
+      
+      this.sceneManager.switchScene(sceneName, data, options);
     });
     
     // 游戏事件
     globalEvent.on('game:levelComplete', (result) => {
       console.log('[Main] 关卡完成:', result);
+      
+      // 保存关卡进度到 DataManager
+      const dataManager = this.gameManager ? this.gameManager.dataManager : null;
+      if (dataManager) {
+        // 1. 记录关卡完成和星级
+        dataManager.completeLevel(result.levelId, result.stars);
+        
+        // 2. 解锁下一关（如果不是当前 stage 的最后一关）
+        const isLastLevelOfStage = result.levelId % 10 === 0;
+        if (!isLastLevelOfStage) {
+          dataManager.unlockLevel(result.levelId + 1);
+        } else {
+          // 是当前 stage 的最后一关，解锁下一个 stage
+          const currentStage = Math.ceil(result.levelId / 10);
+          dataManager.setCurrentStage(currentStage + 1);
+          // 解锁下一 stage 的第一关
+          dataManager.unlockLevel(result.levelId + 1);
+        }
+      }
+      
       // 显示结算弹窗
       const dialog = new SettlementDialog({
         screenWidth: this.screenWidth,
         screenHeight: this.screenHeight,
         levelId: result.levelId,
         stars: result.stars,
-        coins: 50
+        coins: result.rewards ? result.rewards.coins : 50,
+        onNext: () => {
+          // 进入下一关
+          const isLastLevelOfStage = result.levelId % 10 === 0;
+          const nextLevelId = result.levelId + 1;
+          const nextStage = Math.ceil(nextLevelId / 10);
+          globalEvent.emit('scene:switch', 'GameplayScene', { 
+            levelId: isLastLevelOfStage ? 1 : nextLevelId,
+            stage: nextStage
+          });
+        },
+        onReplay: () => {
+          // 重玩当前关
+          globalEvent.emit('scene:switch', 'GameplayScene', { 
+            levelId: result.levelId,
+            stage: Math.ceil(result.levelId / 10)
+          });
+        },
+        onHome: () => {
+          // 返回首页
+          globalEvent.emit('scene:switch', 'HomeScene');
+        }
       });
       this.dialogManager.register('settlement', dialog);
       this.dialogManager.show('settlement');
@@ -323,18 +405,24 @@ class Main {
    * 渲染
    */
   _render() {
-    // 清空画布
-    this.ctx.clearRect(0, 0, this.screenWidth, this.screenHeight);
+    // 检查是否有可渲染的场景（包括过渡期间的上一场景）
+    const hasRenderableScene = this.sceneManager.currentScene || 
+      (this.sceneManager._previousScene);
     
-    // 渲染当前场景
-    if (this.sceneManager.currentScene) {
+    // 只在有场景可渲染时才清空和渲染，避免场景切换时的白色闪烁
+    if (hasRenderableScene) {
+      // 清空画布
+      this.ctx.clearRect(0, 0, this.screenWidth, this.screenHeight);
+      
+      // 渲染当前场景（SceneManager 会处理过渡期间的场景选择）
       this.sceneManager.render(this.ctx);
+      
+      // 渲染弹窗
+      if (this.dialogManager) {
+        this.dialogManager.render(this.ctx);
+      }
     }
-    
-    // 渲染弹窗
-    if (this.dialogManager) {
-      this.dialogManager.render(this.ctx);
-    }
+    // 如果没有可渲染的场景，保持上一帧画面，不填充白色
   }
 }
 

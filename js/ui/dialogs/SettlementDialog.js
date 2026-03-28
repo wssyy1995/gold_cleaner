@@ -189,6 +189,38 @@ class SettlementDialog extends Dialog {
     this.coinScale = 1 + Math.sin(this.coinAnimation) * 0.1;
   }
 
+  /**
+   * 绘制圆角矩形（兼容小程序）
+   */
+  _drawRoundedRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.arc(x + width - radius, y + radius, radius, -Math.PI / 2, 0);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.arc(x + width - radius, y + height - radius, radius, 0, Math.PI / 2);
+    ctx.lineTo(x + radius, y + height);
+    ctx.arc(x + radius, y + height - radius, radius, Math.PI / 2, Math.PI);
+    ctx.lineTo(x, y + radius);
+    ctx.arc(x + radius, y + radius, radius, Math.PI, Math.PI * 1.5);
+    ctx.closePath();
+  }
+
+  /**
+   * 绘制只有顶部圆角的矩形
+   */
+  _drawRoundedRectTop(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.arc(x + width - radius, y + radius, radius, -Math.PI / 2, 0);
+    ctx.lineTo(x + width, y + height);
+    ctx.lineTo(x, y + height);
+    ctx.lineTo(x, y + radius);
+    ctx.arc(x + radius, y + radius, radius, Math.PI, Math.PI * 1.5);
+    ctx.closePath();
+  }
+
   render(ctx) {
     // 绘制弹窗背景
     ctx.save();
@@ -216,14 +248,12 @@ class SettlementDialog extends Dialog {
 
     // 弹窗背景
     ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.roundRect(0, 0, this.width, this.height, 24);
+    this._drawRoundedRect(ctx, 0, 0, this.width, this.height, 24);
     ctx.fill();
 
-    // 装饰顶部条
+    // 装饰顶部条（只有顶部圆角）
     ctx.fillStyle = '#4CAF50';
-    ctx.beginPath();
-    ctx.roundRect(0, 0, this.width, 8, { topLeft: 24, topRight: 24 });
+    this._drawRoundedRectTop(ctx, 0, 0, this.width, 8, 24);
     ctx.fill();
 
     // 绘制内容

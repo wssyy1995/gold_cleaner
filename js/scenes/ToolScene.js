@@ -288,6 +288,23 @@ class ToolScene extends Scene {
     }
   }
 
+  /**
+   * 绘制圆角矩形（兼容小程序）
+   */
+  _drawRoundedRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.arc(x + width - radius, y + radius, radius, -Math.PI / 2, 0);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.arc(x + width - radius, y + height - radius, radius, 0, Math.PI / 2);
+    ctx.lineTo(x + radius, y + height);
+    ctx.arc(x + radius, y + height - radius, radius, Math.PI / 2, Math.PI);
+    ctx.lineTo(x, y + radius);
+    ctx.arc(x + radius, y + radius, radius, Math.PI, Math.PI * 1.5);
+    ctx.closePath();
+  }
+
   onRender(ctx) {
     const s = this.screenWidth / 750;
     
@@ -306,8 +323,7 @@ class ToolScene extends Scene {
 
     // 绘制背包区域背景
     ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.roundRect(30 * s, 210 * s, 690 * s, 380 * s, 16 * s);
+    this._drawRoundedRect(ctx, 30 * s, 210 * s, 690 * s, 380 * s, 16 * s);
     ctx.fill();
     ctx.strokeStyle = '#E0E0E0';
     ctx.lineWidth = 2 * s;
@@ -315,8 +331,7 @@ class ToolScene extends Scene {
 
     // 绘制工具槽区域背景
     ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.roundRect(30 * s, 850 * s, 690 * s, 260 * s, 16 * s);
+    this._drawRoundedRect(ctx, 30 * s, 850 * s, 690 * s, 260 * s, 16 * s);
     ctx.fill();
     ctx.strokeStyle = '#E0E0E0';
     ctx.stroke();
@@ -344,8 +359,7 @@ class ToolScene extends Scene {
       
       // 格子背景
       ctx.fillStyle = '#F5F5F5';
-      ctx.beginPath();
-      ctx.roundRect(pos.x, pos.y, pos.size, pos.size, 8 * s);
+      this._drawRoundedRect(ctx, pos.x, pos.y, pos.size, pos.size, 8 * s);
       ctx.fill();
       
       // 边框
@@ -356,8 +370,7 @@ class ToolScene extends Scene {
       if (tool) {
         // 工具背景色
         ctx.fillStyle = tool.color + '20'; // 20% 透明度
-        ctx.beginPath();
-        ctx.roundRect(pos.x + 4 * s, pos.y + 4 * s, pos.size - 8 * s, pos.size - 8 * s, 6 * s);
+        this._drawRoundedRect(ctx, pos.x + 4 * s, pos.y + 4 * s, pos.size - 8 * s, pos.size - 8 * s, 6 * s);
         ctx.fill();
         
         // 工具图标
@@ -380,8 +393,7 @@ class ToolScene extends Scene {
       
       // 空槽背景
       ctx.fillStyle = '#E8E8E8';
-      ctx.beginPath();
-      ctx.roundRect(pos.x, pos.y, pos.size, pos.size, 12 * s);
+      this._drawRoundedRect(ctx, pos.x, pos.y, pos.size, pos.size, 12 * s);
       ctx.fill();
       
       // 边框（已装备显示绿色边框）
@@ -406,8 +418,7 @@ class ToolScene extends Scene {
       if (tool) {
         // 工具背景
         ctx.fillStyle = tool.color + '30';
-        ctx.beginPath();
-        ctx.roundRect(pos.x + 4 * s, pos.y + 4 * s, pos.size - 8 * s, pos.size - 8 * s, 8 * s);
+        this._drawRoundedRect(ctx, pos.x + 4 * s, pos.y + 4 * s, pos.size - 8 * s, pos.size - 8 * s, 8 * s);
         ctx.fill();
         
         // 工具图标
@@ -429,14 +440,12 @@ class ToolScene extends Scene {
     
     // 阴影
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.beginPath();
-    ctx.roundRect(x + 4 * s, y + 4 * s, size, size, 12 * s);
+    this._drawRoundedRect(ctx, x + 4 * s, y + 4 * s, size, size, 12 * s);
     ctx.fill();
     
     // 工具背景
     ctx.fillStyle = tool.color;
-    ctx.beginPath();
-    ctx.roundRect(x, y, size, size, 12 * s);
+    this._drawRoundedRect(ctx, x, y, size, size, 12 * s);
     ctx.fill();
     
     // 图标
@@ -460,8 +469,7 @@ class ToolScene extends Scene {
     const y = this.screenHeight - 150 * s;
     
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.beginPath();
-    ctx.roundRect(x, y, boxWidth, boxHeight, 25 * s);
+    this._drawRoundedRect(ctx, x, y, boxWidth, boxHeight, 25 * s);
     ctx.fill();
     
     ctx.fillStyle = '#FFFFFF';

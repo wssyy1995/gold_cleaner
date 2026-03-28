@@ -67,16 +67,23 @@ class GameManager {
 
     this._initialized = true;
 
-    // 启动游戏循环
-    this.start();
+    // 注意：游戏循环由 Main.js 统一管理，这里不启动
+    // this.start();
 
     console.log('[GameManager] 游戏管理器初始化完成');
   }
 
   /**
    * 初始化画布
+   * 注意：如果外部已设置 canvas，则不重新创建
    */
   _initCanvas() {
+    // 如果外部已设置画布，跳过初始化
+    if (this.canvas && this.ctx) {
+      console.log('[GameManager] 使用外部设置的画布');
+      return;
+    }
+    
     if (typeof wx !== 'undefined') {
       // 获取系统信息
       const sysInfo = wx.getSystemInfoSync();

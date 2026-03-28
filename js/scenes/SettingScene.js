@@ -6,6 +6,7 @@ import Scene from '../core/Scene';
 import Button from '../ui/components/Button';
 import Text from '../ui/components/Text';
 import { globalEvent } from '../core/EventEmitter';
+import UploadTool from '../cloud/UploadTool';
 
 class SettingScene extends Scene {
   constructor() {
@@ -19,6 +20,12 @@ class SettingScene extends Scene {
       soundVolume: 1.0,
       vibration: true
     };
+    
+    // 上传工具
+    this.uploadTool = null;
+    this.isUploading = false;
+    this.uploadStatus = ''; // 上传状态提示
+    this.uploadProgress = ''; // 上传进度
   }
 
   onLoad() {
@@ -27,6 +34,8 @@ class SettingScene extends Scene {
   }
 
   _loadSettings() {
+    if (typeof wx === 'undefined') return;
+    
     try {
       const saved = wx.getStorageSync('gameSettings');
       if (saved) {
@@ -38,6 +47,8 @@ class SettingScene extends Scene {
   }
 
   _saveSettings() {
+    if (typeof wx === 'undefined') return;
+    
     try {
       wx.setStorageSync('gameSettings', JSON.stringify(this.settings));
     } catch (e) {
@@ -62,10 +73,101 @@ class SettingScene extends Scene {
       fontSize: 32 * s, fontWeight: 'bold', 
       color: '#333333', align: 'center' 
     });
+    
+    // 调试区域 - 上传图片按钮
+    this.uploadBtnY = 1000 * s;
+    this.uploadBtn = new Button({
+      x: 200 * s,
+      y: this.uploadBtnY,
+      width: 350 * s,
+      height: 70 * s,
+      text: '☁️ 上传图片到云',
+      fontSize: 22 * s,
+      bgColor: '#FF6B6B',
+      textColor: '#FFFFFF',
+      borderRadius: 35 * s,
+      onClick: () => this._onUploadClick()
+    });
+    
+    // 上传状态文本
+    this.uploadStatusText = new Text({
+      x: 375 * s,
+      y: this.uploadBtnY + 90 * s,
+      text: '',
+      fontSize: 18 * s,
+      color: '#666666',
+      align: 'center'
+    });
   }
 
   update(deltaTime) {
     if (this.backBtn) this.backBtn.update(deltaTime);
+    if (this.uploadBtn) this.uploadBtn.update(deltaTime);
+  }
+  
+  /**
+   * 点击上传按钮
+   */
+  async _onUploadClick() {
+    // 检查微信环境
+    if (typeof wx === 'undefined') {
+      this.uploadStatus = '提示: 请在微信开发者工具中使用此功能';
+      this.uploadStatusText.setText(this.uploadStatus);
+      console.warn('[SettingScene] 非微信环境，无法上传');
+      return;
+    }
+    
+    if (this.isUploading) {
+      console.log('[SettingScene] 正在上传中...');
+      return;
+    }
+    
+    this.isUploading = true;
+    this.uploadStatus = '正在初始化...';
+    this.uploadStatusText.setText(this.uploadStatus);
+    
+    try {
+      // 初始化上传工具
+      if (!this.uploadTool) {
+        this.uploadTool = new UploadTool();
+        await this.uploadTool.init();
+      }
+      
+      // 开始上传
+      const result = await this.uploadTool.startUpload(
+        // 进度回调
+        (current, total, fileName) => {
+          this.uploadStatus = `正在上传: ${current}/${total}`;
+          this.uploadProgress = fileName.split('/').pop(); // 只显示文件名
+          this.uploadStatusText.setText(`${this.uploadStatus}\n${this.uploadProgress}`);
+          console.log(`[SettingScene] 上传进度: ${current}/${total} - ${fileName}`);
+        },
+        // 完成回调
+        (uploaded, failed) => {
+          this.isUploading = false;
+          if (failed.length === 0) {
+            this.uploadStatus = `上传完成! 共 ${uploaded.length} 个文件`;
+          } else {
+            this.uploadStatus = `上传完成: ${uploaded.length} 成功, ${failed.length} 失败`;
+          }
+          this.uploadStatusText.setText(this.uploadStatus);
+          console.log('[SettingScene] 上传完成:', result);
+        }
+      );
+      
+      // 如果上传过程中出错
+      if (!result.success) {
+        this.isUploading = false;
+        this.uploadStatus = `上传失败: ${result.error || '未知错误'}`;
+        this.uploadStatusText.setText(this.uploadStatus);
+      }
+      
+    } catch (error) {
+      this.isUploading = false;
+      this.uploadStatus = `上传出错: ${error.message}`;
+      this.uploadStatusText.setText(this.uploadStatus);
+      console.error('[SettingScene] 上传出错:', error);
+    }
   }
 
   onRender(ctx) {
@@ -106,6 +208,51 @@ class SettingScene extends Scene {
     
     // 关于游戏
     this._renderAbout(ctx, s, startY + itemHeight * 4);
+    
+    // 调试区域 - 上传按钮
+    this._renderDebugSection(ctx, s);
+  }
+  
+  /**
+   * 渲染调试区域
+   */
+  _renderDebugSection(ctx, s) {
+    const y = 900 * s;
+    
+    // 分隔线
+    ctx.strokeStyle = '#E0E0E0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(40 * s, y);
+    ctx.lineTo(710 * s, y);
+    ctx.stroke();
+    
+    // 调试标签
+    ctx.fillStyle = '#999999';
+    ctx.font = `${16 * s}px sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('开发者调试', 40 * s, y + 30 * s);
+    
+    // 上传按钮
+    if (this.uploadBtn) this.uploadBtn.onRender(ctx);
+    if (this.uploadStatusText) this.uploadStatusText.onRender(ctx);
+  }
+
+  /**
+   * 绘制圆角矩形（兼容小程序）
+   */
+  _drawRoundedRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.arc(x + width - radius, y + radius, radius, -Math.PI / 2, 0);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.arc(x + width - radius, y + height - radius, radius, 0, Math.PI / 2);
+    ctx.lineTo(x + radius, y + height);
+    ctx.arc(x + radius, y + height - radius, radius, Math.PI / 2, Math.PI);
+    ctx.lineTo(x, y + radius);
+    ctx.arc(x + radius, y + radius, radius, Math.PI, Math.PI * 1.5);
+    ctx.closePath();
   }
 
   _renderSlider(ctx, s, x, y, width, label, value, onChange) {
@@ -113,8 +260,7 @@ class SettingScene extends Scene {
     
     // 背景卡片
     ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.roundRect(x, y, width, height, 12 * s);
+    this._drawRoundedRect(ctx, x, y, width, height, 12 * s);
     ctx.fill();
     
     // 标签
@@ -131,14 +277,12 @@ class SettingScene extends Scene {
     const trackHeight = 8 * s;
     
     ctx.fillStyle = '#E0E0E0';
-    ctx.beginPath();
-    ctx.roundRect(trackStartX, trackY - trackHeight/2, trackWidth, trackHeight, trackHeight/2);
+    this._drawRoundedRect(ctx, trackStartX, trackY - trackHeight/2, trackWidth, trackHeight, trackHeight/2);
     ctx.fill();
     
     // 滑块进度
     ctx.fillStyle = '#4A90D9';
-    ctx.beginPath();
-    ctx.roundRect(trackStartX, trackY - trackHeight/2, trackWidth * value, trackHeight, trackHeight/2);
+    this._drawRoundedRect(ctx, trackStartX, trackY - trackHeight/2, trackWidth * value, trackHeight, trackHeight/2);
     ctx.fill();
     
     // 滑块按钮
@@ -163,8 +307,7 @@ class SettingScene extends Scene {
     
     // 背景卡片
     ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.roundRect(x, y, width, height, 12 * s);
+    this._drawRoundedRect(ctx, x, y, width, height, 12 * s);
     ctx.fill();
     
     // 标签
@@ -182,8 +325,7 @@ class SettingScene extends Scene {
     
     // 开关背景
     ctx.fillStyle = value ? '#4CAF50' : '#CCCCCC';
-    ctx.beginPath();
-    ctx.roundRect(switchX, switchY, switchWidth, switchHeight, switchHeight / 2);
+    this._drawRoundedRect(ctx, switchX, switchY, switchWidth, switchHeight, switchHeight / 2);
     ctx.fill();
     
     // 开关按钮
@@ -200,8 +342,7 @@ class SettingScene extends Scene {
     
     // 背景
     ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.roundRect(x, y, width, 200 * s, 12 * s);
+    this._drawRoundedRect(ctx, x, y, width, 200 * s, 12 * s);
     ctx.fill();
     
     // 标题
@@ -255,6 +396,9 @@ class SettingScene extends Scene {
       return true;
     }
     
+    // 上传按钮
+    if (this.uploadBtn && this.uploadBtn.onTouchStart(x, y)) return true;
+    
     return false;
   }
 
@@ -281,6 +425,7 @@ class SettingScene extends Scene {
 
   onTouchEnd(x, y) {
     if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
+    if (this.uploadBtn && this.uploadBtn.onTouchEnd(x, y)) return true;
     return false;
   }
 }

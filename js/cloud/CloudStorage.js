@@ -305,9 +305,14 @@ class CloudStorage {
       await this.init();
     }
 
-    if (!this.cloud) return null;
+    if (!this.cloud) {
+      console.warn('[CloudStorage] 云存储未初始化');
+      return null;
+    }
 
     try {
+      console.log(`[CloudStorage] 获取临时URL: ${fileID}`);
+      
       const result = await this.cloud.getTempFileURL({
         fileList: [{
           fileID: fileID,
@@ -315,15 +320,21 @@ class CloudStorage {
         }]
       });
 
+      console.log('[CloudStorage] getTempFileURL 结果:', result);
+
       if (result.fileList && result.fileList.length > 0) {
         const file = result.fileList[0];
         if (file.status === 0) {
+          console.log(`[CloudStorage] 获取成功: ${file.tempFileURL}`);
           return file.tempFileURL;
+        } else {
+          console.error(`[CloudStorage] 获取失败: status=${file.status}, errMsg=${file.errMsg}`);
+          return null;
         }
       }
       return null;
     } catch (error) {
-      console.error('[CloudStorage] 获取临时链接失败:', error);
+      console.error('[CloudStorage] 获取临时链接异常:', error);
       return null;
     }
   }

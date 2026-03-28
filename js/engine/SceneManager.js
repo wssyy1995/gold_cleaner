@@ -9,6 +9,7 @@
  */
 
 import { globalEvent } from '../core/EventEmitter';
+import TransitionManager from './TransitionManager';
 
 class SceneManager {
   constructor() {
@@ -20,6 +21,9 @@ class SceneManager {
     this.currentScene = null;
     // 当前场景名称
     this.currentSceneName = null;
+    
+    // 切换过程中的上一场景（用于避免闪烁）
+    this._previousScene = null;
     
     // 2.2.5 实现场景栈管理
     // 场景栈（用于实现场景导航）
@@ -52,6 +56,9 @@ class SceneManager {
     this.screenWidth = 375;
     this.screenHeight = 812;
     this.dpr = 2;
+    
+    // 过渡动画管理器
+    this._transitionManager = new TransitionManager();
   }
 
   /**
@@ -227,8 +234,14 @@ class SceneManager {
     const {
       transition = this.transition.type,
       duration = this.transition.duration,
+      direction = 'left',
       pushToStack = false
     } = options;
+    
+    // 临时设置方向
+    if (direction) {
+      this._transitionDirection = direction;
+    }
 
     // 检查状态
     if (this._state === 'transitioning') {
@@ -263,21 +276,47 @@ class SceneManager {
       await this._playTransitionOut(transition, duration);
     }
 
-    // 退出当前场景
-    await this._exitCurrentScene();
+    // 保存旧场景引用用于切换过程中的渲染
+    const previousScene = this.currentScene;
+    // 标记是否需要延迟销毁
+    const useTransition = this.transition.enabled && transition !== 'none';
+    
+    // 退出当前场景（过渡期间延迟销毁，避免闪烁）
+    const sceneToDestroy = await this._exitCurrentScene(useTransition);
+    
+    // 设置上一场景引用（用于过渡期间渲染）
+    this._previousScene = previousScene;
 
     // 加载新场景
     const newScene = await this._enterNewScene(name, data);
 
     // 执行过渡动画 - 入场
-    if (this.transition.enabled && transition !== 'none') {
+    if (useTransition) {
       await this._playTransitionIn(transition, duration);
+    } else {
+      // 如果没有过渡动画，直接启动场景
+      if (newScene.start) {
+        newScene.start();
+      }
     }
 
     // 更新当前场景
     this.currentScene = newScene;
     this.currentSceneName = name;
     this._state = 'running';
+    
+    // 清除旧场景引用
+    this._previousScene = null;
+    
+    // 过渡完成后，销毁旧场景
+    if (sceneToDestroy && sceneToDestroy.destroy) {
+      sceneToDestroy.destroy();
+      // 清理场景注册表中的实例
+      const prevSceneInfo = this._scenes.get(previousScene?.sceneName);
+      if (prevSceneInfo) {
+        prevSceneInfo.instance = null;
+      }
+    }
 
     globalEvent.emit('scene:switched', name, data);
 
@@ -316,13 +355,19 @@ class SceneManager {
 
     this._state = 'transitioning';
 
+    // 保存当前场景引用（用于过渡期间渲染）
+    const previousScene = this.currentScene;
+
     // 过渡动画出场
     if (this.transition.enabled) {
       await this._playTransitionOut(this.transition.type, this.transition.duration);
     }
 
-    // 退出当前场景
-    await this._exitCurrentScene();
+    // 退出当前场景（过渡期间延迟销毁）
+    const sceneToDestroy = await this._exitCurrentScene(this.transition.enabled);
+    
+    // 设置上一场景引用（用于过渡期间渲染）
+    this._previousScene = previousScene;
 
     // 恢复上一个场景
     this.currentScene = scene;
@@ -340,6 +385,13 @@ class SceneManager {
     }
 
     this._state = 'running';
+    
+    // 清除旧场景引用并销毁
+    this._previousScene = null;
+    if (sceneToDestroy && sceneToDestroy.destroy) {
+      sceneToDestroy.destroy();
+    }
+    
     globalEvent.emit('scene:popped', name, data);
 
     return scene;
@@ -377,9 +429,14 @@ class SceneManager {
 
   /**
    * 退出当前场景
+   * @param {boolean} deferDestroy - 是否延迟销毁（用于过渡动画期间）
+   * @returns {Scene|null} 返回场景实例（如果延迟销毁）
    */
-  async _exitCurrentScene() {
-    if (!this.currentScene) return;
+  async _exitCurrentScene(deferDestroy = false) {
+    if (!this.currentScene) return null;
+    
+    const exitingScene = this.currentScene;
+    const exitingSceneName = this.currentSceneName;
 
     // 暂停场景
     this.currentScene.pause();
@@ -393,13 +450,19 @@ class SceneManager {
     // 如果不需要保留实例，销毁它
     const sceneInfo = this._scenes.get(this.currentSceneName);
     if (sceneInfo && sceneInfo.instance && !this._isSceneInStack(this.currentSceneName)) {
+      if (deferDestroy) {
+        // 延迟销毁：返回场景实例，由调用者后续销毁
+        globalEvent.emit('scene:exit', exitingSceneName, exitingScene);
+        return exitingScene;
+      }
       if (this.currentScene.destroy) {
         this.currentScene.destroy();
       }
       sceneInfo.instance = null;
     }
 
-    globalEvent.emit('scene:exit', this.currentSceneName, this.currentScene);
+    globalEvent.emit('scene:exit', exitingSceneName, exitingScene);
+    return null;
   }
 
   /**
@@ -459,12 +522,14 @@ class SceneManager {
    */
   async _playTransitionOut(type, duration) {
     return new Promise(resolve => {
+      this._transitionManager.start(type, 'out', {
+        duration,
+        screenWidth: this.screenWidth,
+        screenHeight: this.screenHeight,
+        direction: this._transitionDirection || 'left',
+        onComplete: resolve
+      });
       globalEvent.emit('scene:transition:out', type, duration);
-
-      // 这里可以添加实际的动画效果
-      // 例如淡出、滑动等
-
-      setTimeout(resolve, duration / 2);
     });
   }
 
@@ -473,23 +538,41 @@ class SceneManager {
    */
   async _playTransitionIn(type, duration) {
     return new Promise(resolve => {
+      this._transitionManager.start(type, 'in', {
+        duration,
+        screenWidth: this.screenWidth,
+        screenHeight: this.screenHeight,
+        direction: this._transitionDirection || 'left',
+        onComplete: () => {
+          // 入场动画完成后再启动场景
+          if (this.currentScene && this.currentScene.start) {
+            this.currentScene.start();
+          }
+          resolve();
+        }
+      });
       globalEvent.emit('scene:transition:in', type, duration);
-
-      // 这里可以添加实际的动画效果
-
-      setTimeout(resolve, duration / 2);
     });
   }
 
   /**
-   * 更新当前场景
+   * 更新当前场景和过渡动画
    * @param {number} deltaTime - 距离上一帧的时间间隔
    */
   update(deltaTime) {
-    if (this.currentScene && this._state === 'running') {
-      if (this.currentScene.update) {
-        this.currentScene.update(deltaTime);
-      }
+    // 更新过渡动画
+    if (this._transitionManager.isTransitioning) {
+      this._transitionManager.update(deltaTime);
+    }
+    
+    // 在过渡期间更新上一场景，否则更新当前场景
+    // 这样可以保证过渡期间旧场景的动画继续播放
+    const sceneToUpdate = (this._state === 'transitioning' && this._previousScene)
+      ? this._previousScene
+      : this.currentScene;
+      
+    if (sceneToUpdate && sceneToUpdate.update) {
+      sceneToUpdate.update(deltaTime);
     }
   }
 
@@ -498,10 +581,20 @@ class SceneManager {
    * @param {CanvasRenderingContext2D} ctx - Canvas 2D上下文
    */
   render(ctx) {
-    if (this.currentScene && this._state !== 'transitioning') {
-      if (this.currentScene.render) {
-        this.currentScene.render(ctx);
-      }
+    // 获取要渲染的场景
+    // 在过渡期间，优先使用上一场景（避免新场景未准备好或旧场景被销毁导致的闪烁）
+    const sceneToRender = (this._state === 'transitioning' && this._previousScene) 
+      ? this._previousScene 
+      : (this.currentScene || this._previousScene);
+    
+    // 渲染场景
+    if (sceneToRender && sceneToRender.render) {
+      sceneToRender.render(ctx);
+    }
+    
+    // 渲染过渡效果（在场景之上）
+    if (this._transitionManager.isTransitioning) {
+      this._transitionManager.render(ctx);
     }
   }
 

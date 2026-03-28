@@ -25,6 +25,8 @@ class DataManager {
       level: 1,
       // 经验值
       exp: 0,
+      // 当前阶段（stage）
+      currentStage: 1,
       // 解锁的关卡
       unlockedLevels: [1],
       // 完成的关卡
@@ -188,6 +190,26 @@ class DataManager {
     globalEvent.emit('data:coinsChanged', this.userData.coins, -amount);
     this.save();
     return true;
+  }
+
+  /**
+   * 获取当前阶段
+   * @returns {number}
+   */
+  getCurrentStage() {
+    return this.userData.currentStage || 1;
+  }
+
+  /**
+   * 设置当前阶段
+   * @param {number} stage - 阶段
+   */
+  setCurrentStage(stage) {
+    if (stage > this.userData.currentStage) {
+      this.userData.currentStage = stage;
+      this.save();
+      globalEvent.emit('data:stageChanged', stage);
+    }
   }
 
   /**

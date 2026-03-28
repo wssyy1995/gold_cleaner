@@ -1,34 +1,27 @@
 /**
  * LoadingScene 加载场景
- * 负责任务 5.3.1 ~ 5.3.5
- * - 5.3.1 设计加载页布局
- * - 5.3.2 实现加载动画
- * - 5.3.3 实现加载进度显示
- * - 5.3.4 实现核心资源预加载逻辑
- * - 5.3.5 加载完成后切换到首页
+ * 从云存储下载所有图片资源并缓存
  */
 
 import Scene from '../core/Scene';
 import ProgressBar from '../ui/components/ProgressBar';
 import Text from '../ui/components/Text';
-import ResourceLoader from '../cloud/ResourceLoader';
-import GameConfig from '../config/GameConfig';
+import CloudStorage from '../cloud/CloudStorage';
+import { getAllPreloadImages, getLevelImageKey } from '../cloud/CloudResourceConfig';
 import { globalEvent } from '../core/EventEmitter';
+import { getGame } from '../../app';
 
 class LoadingScene extends Scene {
   constructor() {
     super({ name: 'LoadingScene' });
 
-    // 屏幕尺寸
     this.screenWidth = 750;
     this.screenHeight = 1334;
 
-    // 加载状态
-    this.loadingState = 'initial'; // initial, loading, complete, error
+    this.loadingState = 'initial';
     this.progress = 0;
     this.loadingText = '正在准备清洁工具...';
 
-    // 加载提示
     this.tips = [
       '正在准备清洁工具...',
       '正在打扫房间...',
@@ -38,71 +31,72 @@ class LoadingScene extends Scene {
     ];
     this.currentTipIndex = 0;
 
-    // 资源加载器
-    this.resourceLoader = new ResourceLoader();
-
-    // 背景图
-    this.bgImage = null;
-    this.bgLoaded = false;
+    // 云存储
+    this.cloudStorage = new CloudStorage();
+    
+    // 缓存的图片资源
+    this.cachedImages = {};
+    
+    // 预加载的主页背景图（避免切换时白屏）
+    this.homeBgImage = null;
+    this.homeBgLoaded = false;
+    
+    // 需要加载的资源列表
+    this.resourcesToLoad = [];
+    this.loadedCount = 0;
 
     // UI组件
     this.progressBar = null;
     this.titleText = null;
     this.tipText = null;
 
-    // 最小加载时间（避免闪屏）
     this.minLoadingTime = 2000;
     this.startTime = 0;
   }
 
-  /**
-   * 场景加载
-   */
-  onLoad() {
-    console.log('[LoadingScene] 加载场景');
-    this._loadBackground();
+  async onLoad() {
+    console.log('[LoadingScene] 开始加载');
+    
+    // 初始化云存储
+    await this.cloudStorage.init();
+    
+    // 初始化UI
     this._initUI();
-    this.resourceLoader.init();
+    
+    // 准备资源列表
+    this._prepareResources();
   }
 
   /**
-   * 加载背景图
+   * 准备需要加载的资源列表
    */
-  _loadBackground() {
-    if (typeof wx !== 'undefined') {
-      const img = wx.createImage();
-      img.onload = () => {
-        console.log('[LoadingScene] 背景图加载完成');
-        this.bgImage = img;
-        this.bgLoaded = true;
-      };
-      img.onerror = () => {
-        console.warn('[LoadingScene] 背景图加载失败');
-      };
-      img.src = 'images/backgrounds/bg-001-loading.png';
-    }
+  _prepareResources() {
+    // 获取所有需要预加载的图片
+    this.resourcesToLoad = getAllPreloadImages();
+    
+    // 根据用户当前 stage，只保留对应的主页背景图
+    const game = getGame();
+    const currentStage = game && game.dataManager ? game.dataManager.getCurrentStage() : 1;
+    
+    // 过滤掉其他 stage 的背景图，只保留当前 stage 的
+    this.resourcesToLoad = this.resourcesToLoad.filter(resource => {
+      // 保留非背景图资源
+      if (!resource.key.startsWith('bg_home_stage')) return true;
+      // 只保留当前 stage 的背景图
+      return resource.key === `bg_home_stage${currentStage}`;
+    });
+    
+    console.log(`[LoadingScene] 需要加载 ${this.resourcesToLoad.length} 个资源，当前 stage: ${currentStage}`);
   }
 
-  /**
-   * 设计分辨率转物理像素
-   */
-  _px(value) {
-    // 设计分辨率 750x1334 转物理像素
-    return value * (this.screenWidth / 750);
-  }
-
-  /**
-   * 初始化UI
-   */
   _initUI() {
     const centerX = this.screenWidth / 2;
-    const s = this.screenWidth / 750; // 缩放比例
+    const s = this.screenWidth / 750;
 
-    // 5.3.1 设计加载页布局 - 标题（所有坐标和尺寸乘以 s）
     this.titleText = new Text({
       x: centerX,
       y: 400 * s,
-      text: GameConfig.gameName,
+      text: '金牌保洁升职记',
       fontSize: 56 * s,
       fontWeight: 'bold',
       color: '#4A90D9',
@@ -110,7 +104,6 @@ class LoadingScene extends Scene {
       shadow: { color: 'rgba(0,0,0,0.1)', blur: 4 * s, offsetX: 2 * s, offsetY: 2 * s }
     });
 
-    // 副标题
     this.subtitleText = new Text({
       x: centerX,
       y: 480 * s,
@@ -120,9 +113,6 @@ class LoadingScene extends Scene {
       align: 'center'
     });
 
-    // 5.3.2 实现加载动画 - 旋转图标区域（在render中绘制）
-
-    // 5.3.3 实现加载进度显示 - 进度条
     this.progressBar = new ProgressBar({
       x: centerX - 250 * s,
       y: 750 * s,
@@ -137,7 +127,6 @@ class LoadingScene extends Scene {
       animated: true
     });
 
-    // 进度百分比文字
     this.percentText = new Text({
       x: centerX,
       y: 790 * s,
@@ -147,7 +136,6 @@ class LoadingScene extends Scene {
       align: 'center'
     });
 
-    // 提示文字
     this.tipText = new Text({
       x: centerX,
       y: 850 * s,
@@ -157,11 +145,10 @@ class LoadingScene extends Scene {
       align: 'center'
     });
 
-    // 版本号
     this.versionText = new Text({
       x: centerX,
       y: this.screenHeight - 60 * s,
-      text: `v${GameConfig.version}`,
+      text: 'v1.0.0',
       fontSize: 20 * s,
       color: '#CCCCCC',
       align: 'center'
@@ -169,87 +156,292 @@ class LoadingScene extends Scene {
   }
 
   /**
-   * 进入场景
+   * 进入场景，开始加载
    */
-  onEnter() {
+  async onEnter() {
     console.log('[LoadingScene] 进入场景，开始加载资源');
     this.startTime = Date.now();
     this.loadingState = 'loading';
-    this._startLoading();
+    
+    // 加载本地背景图
+    this._loadLocalBackground();
+    
+    // 加载云存储资源
+    await this._startLoading();
+  }
+  
+  /**
+   * 从本地加载背景图
+   */
+  async _loadLocalBackground() {
+    if (typeof wx === 'undefined') return;
+    
+    try {
+      // 动态构建路径
+      const pathParts = ['images', 'backgrounds', 'bg-001-loading.png'];
+      const localPath = pathParts.join('/');
+      
+      const img = await this._downloadLocalImage(localPath);
+      this.bgImage = img;
+      this.bgLoaded = true;
+      console.log('[LoadingScene] 本地背景加载完成');
+    } catch (e) {
+      console.log('[LoadingScene] 本地背景加载失败，使用默认背景:', e.message);
+    }
+  }
+  
+  /**
+   * 从本地下载图片
+   */
+  _downloadLocalImage(localPath) {
+    return new Promise((resolve, reject) => {
+      // 延迟加载，避免编译时静态分析
+      setTimeout(() => {
+        const img = wx.createImage();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('本地图片不存在'));
+        img.src = localPath;
+      }, 0);
+    });
   }
 
   /**
-   * 5.3.4 实现核心资源预加载逻辑
-   * 开始加载资源
+   * 从云存储批量下载图片
    */
   async _startLoading() {
+    const total = this.resourcesToLoad.length;
+    this.loadedCount = 0;
+    let successCount = 0;
+    let failCount = 0;
+    
+    // 逐个下载图片（部分失败不影响整体）
+    for (const resource of this.resourcesToLoad) {
+      try {
+        await this._loadImageFromCloud(resource);
+        successCount++;
+      } catch (error) {
+        // 单个失败不影响其他资源
+        console.warn(`[LoadingScene] 跳过失败资源: ${resource.key}`);
+        failCount++;
+      }
+      
+      this.loadedCount++;
+      this.progress = this.loadedCount / total;
+      this._updateProgressUI();
+      
+      console.log(`[LoadingScene] 加载进度: ${this.loadedCount}/${total} (成功:${successCount} 失败:${failCount})`);
+    }
+    
+    // 云存储资源加载完成后，预加载主页背景图（避免切换白屏）
+    this.loadingText = '准备主页...';
+    await this._preloadHomeBackground();
+    
+    // 只要有部分资源加载成功就继续
+    if (successCount > 0 || this.homeBgLoaded) {
+      console.log(`[LoadingScene] 资源加载完成，成功:${successCount} 失败:${failCount} 主页背景:${this.homeBgLoaded}`);
+      this._onLoadingComplete();
+    } else {
+      // 全部失败才报错
+      console.error('[LoadingScene] 所有资源加载失败');
+      this.loadingText = '加载失败，请检查网络';
+    }
+  }
+  
+  /**
+   * 预加载主页背景图（避免切换时白屏）
+   * 从云存储获取已下载的背景图
+   */
+  async _preloadHomeBackground() {
+    if (typeof wx === 'undefined') return;
+    
     try {
-      // 开发模式：模拟加载进度，不实际加载资源
-      // 实际项目中应该加载真实资源
+      // 获取用户当前 stage
+      const game = getGame();
+      const currentStage = game && game.dataManager ? game.dataManager.getCurrentStage() : 1;
       
-      let progress = 0;
-      const loadInterval = setInterval(() => {
-        progress += 0.1;
-        this._onProgressUpdate({ progress: Math.min(1, progress) });
-        
-        if (progress >= 1) {
-          clearInterval(loadInterval);
-          this._onLoadingComplete();
+      // 从缓存记录中获取云存储 fileID
+      const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
+      const cacheKey = `bg_home_stage${currentStage}`;
+      const cacheInfo = cacheRecord[cacheKey];
+      
+      if (cacheInfo && cacheInfo.fileID) {
+        // 从云存储获取临时 URL
+        const tempURL = await this.cloudStorage.getTempFileURL(cacheInfo.fileID);
+        if (tempURL) {
+          // 下载图片
+          this.homeBgImage = await this._downloadImage(tempURL);
+          this.homeBgLoaded = true;
+          console.log(`[LoadingScene] 主页背景从云存储预加载完成: ${cacheKey}`);
         }
-      }, 200);
+      } else {
+        console.warn(`[LoadingScene] 云存储背景图未找到: ${cacheKey}`);
+        this.homeBgLoaded = false;
+      }
       
-    } catch (error) {
-      console.error('[LoadingScene] 加载失败:', error);
-      this._onLoadingError(error.message);
+      // 同时预加载当前关卡的预览图
+      await this._preloadCurrentLevelPreview();
+      
+    } catch (e) {
+      console.log('[LoadingScene] 主页背景预加载失败:', e.message);
+      this.homeBgLoaded = false;
+    }
+  }
+  
+  /**
+   * 预加载当前关卡的预览图
+   * 根据用户的 currentStage 和当前解锁的关卡加载
+   */
+  async _preloadCurrentLevelPreview() {
+    if (typeof wx === 'undefined') return;
+    
+    try {
+      // 获取用户当前 stage 和解锁的关卡
+      const game = getGame();
+      if (!game || !game.dataManager) return;
+      
+      const currentStage = game.dataManager.getCurrentStage();
+      // 找到当前 stage 第一个未完成的关卡，或最后一个已完成的关卡+1
+      const unlockedLevels = game.dataManager.userData.unlockedLevels || [1];
+      
+      // 计算当前 stage 的关卡范围（1-10, 11-20, ...）
+      const stageStartLevel = (currentStage - 1) * 10 + 1;
+      const stageEndLevel = currentStage * 10;
+      
+      // 找到当前 stage 中已解锁的第一个关卡
+      let currentLevelId = stageStartLevel;
+      for (const levelId of unlockedLevels) {
+        if (levelId >= stageStartLevel && levelId <= stageEndLevel) {
+          currentLevelId = levelId;
+          break;
+        }
+      }
+      
+      // 计算关卡在 stage 内的序号（1-10）
+      const levelInStage = currentLevelId - (currentStage - 1) * 10;
+      
+      console.log(`[LoadingScene] 预加载当前关卡预览图: stage${currentStage}_l${levelInStage}`);
+      
+      // 使用 require 获取配置（避免动态 import 在微信小程序中的问题）
+      const CloudResourceConfig = require('../cloud/CloudResourceConfig.js');
+      const config = CloudResourceConfig.getLevelImageConfig(currentStage, levelInStage);
+      
+      if (config.type === 'cloud') {
+        // 从云存储加载
+        const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
+        const cacheInfo = cacheRecord[config.cacheKey];
+        
+        if (cacheInfo && cacheInfo.fileID) {
+          const tempURL = await this.cloudStorage.getTempFileURL(cacheInfo.fileID);
+          if (tempURL) {
+            const img = await this._downloadImage(tempURL);
+            this.cachedImages[config.cacheKey] = img;
+            console.log(`[LoadingScene] 关卡预览图预加载完成: ${config.cacheKey}`);
+          }
+        }
+      } else {
+        // 从本地加载
+        try {
+          const img = await this._downloadLocalImage(config.localPath);
+          this.cachedImages[`game_stage${currentStage}_l${levelInStage}`] = img;
+          console.log(`[LoadingScene] 关卡预览图从本地加载: ${config.localPath}`);
+        } catch (e) {
+          console.log('[LoadingScene] 关卡预览图本地加载失败:', e.message);
+        }
+      }
+    } catch (e) {
+      console.log('[LoadingScene] 预加载关卡预览图失败:', e.message);
     }
   }
 
   /**
-   * 注册需要加载的资源
+   * 从云存储加载单个图片
    */
-  _registerResources() {
-    // 核心UI资源
-    const commonResources = [
-      { key: 'ui_btn_normal', url: 'images/ui/btn_normal.png', type: 'image', priority: 10 },
-      { key: 'ui_btn_pressed', url: 'images/ui/btn_pressed.png', type: 'image', priority: 10 },
-      { key: 'ui_panel', url: 'images/ui/panel.png', type: 'image', priority: 9 },
-      { key: 'ui_progress_bar', url: 'images/ui/progress_bar.png', type: 'image', priority: 9 },
-      { key: 'ui_coin', url: 'images/ui/coin.png', type: 'image', priority: 8 },
-      { key: 'ui_star', url: 'images/ui/star.png', type: 'image', priority: 8 },
-      // 基础工具
-      { key: 'tool_basic_cloth', url: 'images/tools/basic_cloth.png', type: 'image', priority: 7 },
-      { key: 'tool_sponge', url: 'images/tools/sponge.png', type: 'image', priority: 7 },
-      { key: 'tool_brush', url: 'images/tools/brush.png', type: 'image', priority: 7 }
-    ];
-
-    this.resourceLoader.registerSceneResources('common', commonResources);
-  }
-
-  /**
-   * 进度更新
-   */
-  _onProgressUpdate(progress) {
-    this.progress = progress.progress;
-
-    // 检查UI是否已初始化
-    if (!this.progressBar || !this.percentText || !this.tipText) {
+  async _loadImageFromCloud(resource) {
+    const { key, fileID } = resource;
+    
+    if (!fileID) {
+      console.warn(`[LoadingScene] 未找到 fileID: ${key}`);
       return;
     }
+    
+    try {
+      // 1. 获取临时访问链接
+      const tempURL = await this.cloudStorage.getTempFileURL(fileID);
+      
+      if (!tempURL) {
+        throw new Error('获取临时URL失败');
+      }
+      
+      // 2. 下载图片
+      const img = await this._downloadImage(tempURL);
+      
+      // 3. 缓存图片
+      this.cachedImages[key] = img;
+      
+      // 4. 保存到本地存储（用于 ResourceLoader 后续使用）
+      this._saveImageToCache(key, fileID);
+      
+      console.log(`[LoadingScene] 加载成功: ${key}`);
+      
+    } catch (error) {
+      console.error(`[LoadingScene] 加载失败 ${key}:`, error);
+      // 失败不阻断，继续加载其他资源
+    }
+  }
 
-    // 更新进度条
-    this.progressBar.setProgress(this.progress);
+  /**
+   * 下载图片
+   */
+  _downloadImage(url) {
+    return new Promise((resolve, reject) => {
+      if (typeof wx === 'undefined') {
+        reject(new Error('非微信环境'));
+        return;
+      }
+      
+      const img = wx.createImage();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('图片下载失败'));
+      img.src = url;
+    });
+  }
 
-    // 更新百分比
-    this.percentText.setText(`${Math.floor(this.progress * 100)}%`);
+  /**
+   * 保存图片缓存记录
+   */
+  _saveImageToCache(key, fileID) {
+    try {
+      // 保存到本地存储，记录已缓存的图片
+      const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
+      cacheRecord[key] = {
+        fileID,
+        timestamp: Date.now()
+      };
+      wx.setStorageSync('cloud_image_cache', cacheRecord);
+    } catch (e) {
+      console.warn('[LoadingScene] 保存缓存记录失败:', e);
+    }
+  }
 
+  /**
+   * 更新进度UI
+   */
+  _updateProgressUI() {
+    if (this.progressBar) {
+      this.progressBar.setProgress(this.progress);
+    }
+    if (this.percentText) {
+      this.percentText.setText(`${Math.floor(this.progress * 100)}%`);
+    }
+    
     // 更新提示文字
     const tipIndex = Math.floor(this.progress * (this.tips.length - 1));
     if (tipIndex !== this.currentTipIndex && tipIndex < this.tips.length) {
       this.currentTipIndex = tipIndex;
-      this.tipText.setText(this.tips[tipIndex]);
+      if (this.tipText) {
+        this.tipText.setText(this.tips[tipIndex]);
+      }
     }
-
-    globalEvent.emit('loading:progress', this.progress);
   }
 
   /**
@@ -259,147 +451,105 @@ class LoadingScene extends Scene {
     const elapsed = Date.now() - this.startTime;
     const remaining = Math.max(0, this.minLoadingTime - elapsed);
 
-    console.log(`[LoadingScene] 资源加载完成，用时 ${elapsed}ms，等待 ${remaining}ms`);
+    console.log(`[LoadingScene] 资源加载完成，用时 ${elapsed}ms`);
 
-    // 确保最小加载时间
     setTimeout(() => {
       this.loadingState = 'complete';
       this.progress = 1;
       
-      // 检查UI是否还存在（可能场景已切换）
       if (this.progressBar) this.progressBar.setProgress(1);
       if (this.percentText) this.percentText.setText('100%');
       if (this.tipText) this.tipText.setText('准备就绪！');
 
-      // 5.3.5 加载完成后切换到首页
+      // 切换到首页
       this._switchToHome();
     }, remaining);
   }
 
   /**
-   * 5.3.5 加载完成后切换到首页
    * 切换到首页
    */
   _switchToHome() {
     console.log('[LoadingScene] 切换到首页');
 
     setTimeout(() => {
-      globalEvent.emit('scene:switch', 'HomeScene');
+      // 传递预加载的主页背景图，避免白屏
+      globalEvent.emit('scene:switch', 'HomeScene', {
+        preloadedBgImage: this.homeBgImage,
+        preloadedBgLoaded: this.homeBgLoaded
+      });
     }, 500);
   }
 
   /**
-   * 加载错误
+   * 获取已缓存的图片
    */
-  _onLoadingError(message) {
-    this.loadingState = 'error';
-    if (this.tipText) {
-      this.tipText.setText(`加载失败: ${message}`);
-      this.tipText.setColor('#FF6B6B');
-    }
-
-    // 显示重试按钮（简化版，实际可以用Button组件）
-    console.error('[LoadingScene] 加载错误:', message);
+  getCachedImage(key) {
+    return this.cachedImages[key] || null;
   }
 
   /**
-   * 更新
+   * Cover 模式绘制背景图
    */
+  _drawBackgroundCover(ctx, img, sw, sh) {
+    const scaleX = sw / img.width;
+    const scaleY = sh / img.height;
+    const scale = Math.max(scaleX, scaleY);
+    const dw = img.width * scale;
+    const dh = img.height * scale;
+    const dx = (sw - dw) / 2;
+    const dy = (sh - dh) / 2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+  }
+
   onUpdate(deltaTime) {
-    // 更新进度条动画
     if (this.progressBar) {
       this.progressBar.update(deltaTime);
     }
-
-    // 更新旋转动画角度
     this._rotation = (this._rotation || 0) + deltaTime * 0.005;
     if (this._rotation > Math.PI * 2) {
       this._rotation -= Math.PI * 2;
     }
   }
 
-  /**
-   * Cover 模式绘制背景图 - 保持比例，填满屏幕，裁剪溢出
-   */
-  _drawBackgroundCover(ctx, img, sw, sh) {
-    // 计算两个方向的缩放比例
-    const scaleX = sw / img.width;
-    const scaleY = sh / img.height;
-    
-    // Cover 模式：选择较大的缩放比例，确保填满屏幕
-    const scale = Math.max(scaleX, scaleY);
-    
-    // 计算绘制尺寸（可能超出屏幕）
-    const dw = img.width * scale;
-    const dh = img.height * scale;
-    
-    // 居中显示（超出部分自动被裁剪）
-    const dx = (sw - dw) / 2;
-    const dy = (sh - dh) / 2;
-    
-    // 绘制图片
-    ctx.drawImage(img, dx, dy, dw, dh);
-  }
-
-  /**
-   * 渲染
-   */
   onRender(ctx) {
-    // 使用逻辑像素（ctx.scale(dpr) 会自动处理物理像素）
     const width = this.screenWidth;
     const height = this.screenHeight;
 
-    // 调试日志
-    if (this.bgImage && !this._logged) {
-      console.log(`[LoadingScene] 屏幕: ${width}x${height}, 图片: ${this.bgImage.width}x${this.bgImage.height}`);
-      this._logged = true;
-    }
-
-    // 绘制背景图 - Cover 模式填满屏幕（保持比例，裁剪溢出）
+    // 绘制背景图（如果已加载）
     if (this.bgImage && this.bgLoaded) {
       this._drawBackgroundCover(ctx, this.bgImage, width, height);
     } else {
-      // 备用背景色
+      // 默认背景色
       ctx.fillStyle = '#F5F5F5';
       ctx.fillRect(0, 0, width, height);
-      
-      // 绘制装饰圆形
-      ctx.fillStyle = 'rgba(74, 144, 217, 0.05)';
-      ctx.beginPath();
-      ctx.arc(width / 2, height * 0.3, 100, 0, Math.PI * 2);
-      ctx.fill();
     }
+    
+    // 装饰圆形
+    ctx.fillStyle = 'rgba(74, 144, 217, 0.05)';
+    ctx.beginPath();
+    ctx.arc(width / 2, height * 0.3, 100, 0, Math.PI * 2);
+    ctx.fill();
 
-    // 检查UI是否已初始化
     if (!this.titleText) return;
 
-    // 绘制标题
     this.titleText.onRender(ctx);
     if (this.subtitleText) this.subtitleText.onRender(ctx);
 
-    // 5.3.2 实现加载动画 - 绘制旋转的加载图标
     const s = this.screenWidth / 750;
     this._drawLoadingIcon(ctx, width / 2, 620 * s, s);
 
-    // 绘制进度条
     if (this.progressBar) this.progressBar.onRender(ctx);
     if (this.percentText) this.percentText.onRender(ctx);
     if (this.tipText) this.tipText.onRender(ctx);
-
-    // 绘制版本号
     if (this.versionText) this.versionText.onRender(ctx);
   }
 
-  /**
-   * 5.3.2 实现加载动画
-   * 绘制加载图标
-   */
   _drawLoadingIcon(ctx, x, y, s = 1) {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(this._rotation || 0);
 
-    // 绘制旋转的小圆点（尺寸乘以缩放比例）
     const dotCount = 8;
     const radius = 30 * s;
     const dotRadius = 6 * s;
@@ -408,8 +558,6 @@ class LoadingScene extends Scene {
       const angle = (i / dotCount) * Math.PI * 2;
       const dotX = Math.cos(angle) * radius;
       const dotY = Math.sin(angle) * radius;
-
-      // 根据位置设置透明度，形成渐变效果
       const alpha = 0.3 + ((i / dotCount) * 0.7);
 
       ctx.fillStyle = `rgba(74, 144, 217, ${alpha})`;

@@ -113,7 +113,7 @@ export const AUDIO_ASSETS = {
 export const UI_ASSETS = {
   backgrounds: {
     loading: 'images/backgrounds/bg-001-loading.png',
-    home: 'images/backgrounds/bg-002-home.png',
+    home: 'images/backgrounds/bg-stage1-home.png',
     shop: 'images/backgrounds/bg-003-shop.png'
   },
   icons: {

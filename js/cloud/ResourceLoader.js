@@ -78,6 +78,13 @@ class ResourceLoader {
 
     // 加载进度回调
     this._progressCallback = null;
+    
+    // 云存储资源映射表（本地路径 -> fileID）
+    this._cloudFileMap = {};
+    // 是否启用云存储加载
+    this._enableCloud = true;
+    // 是否优先使用云存储
+    this._cloudFirst = true;
   }
 
   /**
@@ -88,6 +95,9 @@ class ResourceLoader {
 
     // 初始化云存储
     await this._cloudStorage.init();
+    
+    // 加载云存储文件映射
+    await this._loadCloudFileMap();
 
     // 4.2.4 实现缓存检查与复用逻辑
     // 加载缓存信息
@@ -97,6 +107,44 @@ class ResourceLoader {
     await this._validateCache();
 
     console.log('[ResourceLoader] 初始化完成');
+  }
+  
+  /**
+   * 加载云存储文件映射表
+   */
+  async _loadCloudFileMap() {
+    if (typeof wx === 'undefined') return;
+    
+    try {
+      const record = wx.getStorageSync('cloud_upload_record');
+      if (record && record.files) {
+        this._cloudFileMap = {};
+        for (const file of record.files) {
+          this._cloudFileMap[file.localPath] = file.fileID;
+        }
+        console.log(`[ResourceLoader] 加载云存储映射: ${Object.keys(this._cloudFileMap).length} 个文件`);
+      }
+    } catch (e) {
+      console.warn('[ResourceLoader] 加载云存储映射失败:', e);
+    }
+  }
+  
+  /**
+   * 设置云存储文件映射
+   * @param {Object} fileMap - { 本地路径: fileID }
+   */
+  setCloudFileMap(fileMap) {
+    this._cloudFileMap = fileMap || {};
+    console.log(`[ResourceLoader] 设置云存储映射: ${Object.keys(this._cloudFileMap).length} 个文件`);
+  }
+  
+  /**
+   * 启用/禁用云存储加载
+   * @param {boolean} enabled 
+   */
+  setCloudEnabled(enabled) {
+    this._enableCloud = enabled;
+    console.log('[ResourceLoader] 云存储加载:', enabled ? '启用' : '禁用');
   }
 
   /**
@@ -316,21 +364,57 @@ class ResourceLoader {
 
   /**
    * 4.2.2 实现网络图片下载功能
-   * 加载图片
+   * 加载图片（优先云存储）
    */
   async _loadImage(key, url) {
+    // 如果是本地路径，优先尝试云存储
+    if (url.startsWith('images/') || url.startsWith('audio/')) {
+      // 1. 首先检查云存储映射
+      const fileID = this._cloudFileMap[url];
+      if (fileID && this._enableCloud) {
+        try {
+          // 从云存储获取临时URL
+          const tempURL = await this._cloudStorage.getTempFileURL(fileID);
+          if (tempURL) {
+            console.log(`[ResourceLoader] 从云存储加载: ${url}`);
+            return this._loadImageFromURL(key, tempURL);
+          }
+        } catch (e) {
+          console.warn(`[ResourceLoader] 云存储加载失败: ${url}`, e);
+        }
+      }
+      
+      // 2. 云存储不可用，尝试本地加载（但不强制检查文件存在性）
+      console.log(`[ResourceLoader] 尝试本地加载: ${url}`);
+      return this._loadImageFromURL(key, url);
+    }
+    
+    // 非本地路径（已是URL），直接加载
+    return this._loadImageFromURL(key, url);
+  }
+  
+  /**
+   * 从URL加载图片
+   */
+  _loadImageFromURL(key, url) {
     return new Promise((resolve, reject) => {
-      // 检查是否是本地路径且文件不存在
+      // 检查是否是本地路径
       if (url.startsWith('images/') || url.startsWith('audio/')) {
-        // 开发模式：图片不存在时返回占位对象
-        console.log(`[ResourceLoader] 图片不存在，使用占位: ${url}`);
-        resolve({
-          width: 100,
-          height: 100,
-          _isPlaceholder: true,
-          src: url
-        });
-        return;
+        // 尝试检查文件是否存在
+        try {
+          const fs = wx.getFileSystemManager();
+          fs.accessSync(url);
+        } catch (e) {
+          // 文件不存在，返回占位对象
+          console.log(`[ResourceLoader] 本地图片不存在，使用占位: ${url}`);
+          resolve({
+            width: 100,
+            height: 100,
+            _isPlaceholder: true,
+            src: url
+          });
+          return;
+        }
       }
       
       const image = wx.createImage ? wx.createImage() : new Image();

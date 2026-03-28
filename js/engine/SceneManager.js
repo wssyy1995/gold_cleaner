@@ -278,11 +278,10 @@ class SceneManager {
 
     // 保存旧场景引用用于切换过程中的渲染
     const previousScene = this.currentScene;
-    // 标记是否需要延迟销毁
-    const useTransition = this.transition.enabled && transition !== 'none';
     
-    // 退出当前场景（过渡期间延迟销毁，避免闪烁）
-    const sceneToDestroy = await this._exitCurrentScene(useTransition);
+    // 退出当前场景（始终延迟销毁，避免切换期间黑屏）
+    // 无论是否有 transition，都保留旧场景直到新场景渲染就绪
+    const sceneToDestroy = await this._exitCurrentScene(true);
     
     // 设置上一场景引用（用于过渡期间渲染）
     this._previousScene = previousScene;
@@ -290,8 +289,8 @@ class SceneManager {
     // 加载新场景
     const newScene = await this._enterNewScene(name, data);
 
-    // 执行过渡动画 - 入场
-    if (useTransition) {
+    // 执行过渡动画 - 入场（根据配置决定是否启用）
+    if (this.transition.enabled && transition !== 'none') {
       await this._playTransitionIn(transition, duration);
     } else {
       // 如果没有过渡动画，直接启动场景
@@ -308,13 +307,24 @@ class SceneManager {
     // 清除旧场景引用
     this._previousScene = null;
     
-    // 过渡完成后，销毁旧场景
+    // 过渡完成后，延迟一帧再销毁旧场景
+    // 确保新场景至少完成一帧渲染，避免黑屏
     if (sceneToDestroy && sceneToDestroy.destroy) {
-      sceneToDestroy.destroy();
-      // 清理场景注册表中的实例
-      const prevSceneInfo = this._scenes.get(previousScene?.sceneName);
-      if (prevSceneInfo) {
-        prevSceneInfo.instance = null;
+      // 使用 requestAnimationFrame 或 setTimeout(0) 延迟到下一帧
+      const doDestroy = () => {
+        sceneToDestroy.destroy();
+        // 清理场景注册表中的实例
+        const prevSceneInfo = this._scenes.get(previousScene?.sceneName);
+        if (prevSceneInfo) {
+          prevSceneInfo.instance = null;
+        }
+        console.log(`[SceneManager] 旧场景已销毁: ${previousScene?.sceneName}`);
+      };
+      
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(doDestroy);
+      } else {
+        setTimeout(doDestroy, 0);
       }
     }
 

@@ -3,39 +3,9 @@
  * 4个阶段，每个阶段10个关卡（共40关）
  */
 
-// 污垢类型定义
-export const DIRT_TYPES = {
-  dust: { 
-    name: '灰尘', 
-    color: '#8B4513', 
-    difficulty: 1,
-    recipes: [['cloth'], ['sponge'], ['vacuum']]
-  },
-  stain: { 
-    name: '污渍', 
-    color: '#654321', 
-    difficulty: 2,
-    recipes: [['spray', 'cloth'], ['sponge', 'sponge']]
-  },
-  grime: { 
-    name: '油垢', 
-    color: '#3E2723', 
-    difficulty: 3,
-    recipes: [['spray', 'brush'], ['sponge', 'sponge', 'sponge']]
-  },
-  mold: {
-    name: '霉斑',
-    color: '#2E7D32',
-    difficulty: 4,
-    recipes: [['spray', 'spray', 'brush'], ['magic_sponge']]
-  },
-  rust: {
-    name: '锈迹',
-    color: '#C62828',
-    difficulty: 5,
-    recipes: [['rust_remover', 'brush'], ['spray', 'spray', 'sponge']]
-  }
-};
+import { DIRT_TYPES } from './dirtyConfig';
+
+export { DIRT_TYPES } from './dirtyConfig';
 
 // 阶段1：新手村 - 温馨小屋（简单，主要是灰尘和少量污渍）
 const STAGE_1_LEVELS = [
@@ -46,8 +16,14 @@ const STAGE_1_LEVELS = [
     background: 'images/game/stage1_level1.png',
     preview: 'images/game/stage1_l1_home.png',
     dirts: [
-      { type: 'dust', x: 300, y: 400 },
-      { type: 'dust', x: 500, y: 600 },
+      { type: 'paper', x: 300, y: 400 },
+      { type: 'socks', x: 500, y: 600 },
+      { type: 'stain', x: 500, y: 1100 },
+      { type: 'stain', x: 200, y: 1100 },{ type: 'stain', x: 100, y: 1100 }
+    ],
+    dirts_deep: [
+      { image:'images/game/stage1_level1_bookshelf.png',type: 'stain', x: 300, y: 400 },
+      { image:'images/game/stage1_level1_bed.png',type: 'grime', x: 500, y: 600 },
     ],
     timeLimit: 120,
     targetScore: 100,
@@ -57,13 +33,13 @@ const STAGE_1_LEVELS = [
   {
     id: 2,
     stage: 1,
-    name: '客厅清洁',
+    name: '卫生间',
     background: 'images/game/stage1_level2.png',
     preview: 'images/game/stage1_l2_home.png',
     dirts: [
-      { type: 'dust', x: 200, y: 350 },
-      { type: 'dust', x: 400, y: 500 },
-      { type: 'dust', x: 600, y: 400 },
+      { type: 'paper', x: 200, y: 350 },
+      { type: 'socks', x: 400, y: 500 },
+      { type: 'paper', x: 600, y: 400 },
     ],
     timeLimit: 100,
     targetScore: 150,

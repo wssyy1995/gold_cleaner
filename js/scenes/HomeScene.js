@@ -9,6 +9,7 @@ import { globalEvent } from '../core/EventEmitter';
 import { getLevelImageKey, getLevelImageConfig } from '../cloud/CloudResourceConfig';
 import CloudStorage from '../cloud/CloudStorage';
 import { getGame } from '../../app';
+import { getLevel } from '../config/LevelConfig';
 
 // 全局背景图缓存 - 避免场景切换时重新加载
 const GlobalBgCache = {
@@ -66,6 +67,27 @@ export const GlobalPreviewCache = {
   }
 };
 
+// 全局标题图片缓存 - 避免场景切换时重新加载
+const GlobalTitleCache = {
+  _cache: {},
+  
+  save(key, img) {
+    this._cache[key] = { img, loaded: true };
+  },
+  
+  get(key) {
+    return this._cache[key] || null;
+  },
+  
+  has(key) {
+    return !!this._cache[key];
+  },
+  
+  clear() {
+    this._cache = {};
+  }
+};
+
 class HomeScene extends Scene {
   constructor() {
     super({ name: 'HomeScene' });
@@ -80,6 +102,12 @@ class HomeScene extends Scene {
     this.bgImage = null;
     this.bgLoaded = false;
     this._previewImages = {};
+    
+    // 标题图片（初始化为未加载状态）
+    this._bg_game_titleImage = null;
+    this._bg_game_titleLoaded = false;
+    this._bg_stage1_tagImage = null;
+    this._bg_stage1_tagLoaded = false;
     
     // 云存储
     this.cloudStorage = new CloudStorage();
@@ -308,11 +336,15 @@ class HomeScene extends Scene {
         status = stars > 0 ? 'completed' : 'unlocked';
       }
       
+      // 从 LevelConfig 获取关卡名称
+      const levelConfig = getLevel(this.currentStage, i);
+      const levelName = levelConfig ? levelConfig.name : `关卡 ${i}`;
+      
       this.levels.push({ 
         id: i, 
         globalId: globalLevelId,
         stage: this.currentStage, 
-        name: `关卡 ${i}`, 
+        name: levelName, 
         status: status,
         stars: stars,
         x: positions[i-1].x,
@@ -460,18 +492,28 @@ class HomeScene extends Scene {
    * 加载主页面标题和阶段标签图
    */
   async _loadTitleImages() {
-    // 加载游戏标题图
-    await this._loadCloudImage('bg_game_title', 'bg_game_title');
-    // 加载阶段标签图
-    await this._loadCloudImage('bg_stage1_tag', 'bg_stage1_tag');
+    // 加载游戏标题图（带缓存）
+    await this._loadTitleImage('bg_game_title', 'bg_game_title');
+    // 加载阶段标签图（带缓存）
+    await this._loadTitleImage('bg_stage1_tag', 'bg_stage1_tag');
   }
 
   /**
-   * 从云存储加载图片
+   * 加载标题图片（优先从全局缓存获取）
    * @param {string} cacheKey - 缓存key
    * @param {string} configKey - 配置key
    */
-  async _loadCloudImage(cacheKey, configKey) {
+  async _loadTitleImage(cacheKey, configKey) {
+    // 1. 优先从全局缓存获取
+    const cached = GlobalTitleCache.get(cacheKey);
+    if (cached && cached.loaded) {
+      this[`_${cacheKey}Image`] = cached.img;
+      this[`_${cacheKey}Loaded`] = true;
+      console.log(`[HomeScene] ${cacheKey} 从全局缓存恢复`);
+      return;
+    }
+    
+    // 2. 从云存储加载
     try {
       const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
       const cacheInfo = cacheRecord[configKey];
@@ -482,6 +524,9 @@ class HomeScene extends Scene {
           const img = await this._downloadImage(tempURL);
           this[`_${cacheKey}Image`] = img;
           this[`_${cacheKey}Loaded`] = true;
+          
+          // 保存到全局缓存
+          GlobalTitleCache.save(cacheKey, img);
           console.log(`[HomeScene] ${cacheKey} 从云存储加载完成`);
           return;
         }

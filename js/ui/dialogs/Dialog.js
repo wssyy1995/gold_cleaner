@@ -74,10 +74,12 @@ class Dialog extends Panel {
    * 更新居中位置
    */
   _updateCenterPosition() {
+    console.log(`[Dialog._updateCenterPosition] screenWidth=${this.screenWidth}, screenHeight=${this.screenHeight}, width=${this.width}, height=${this.height}`);
     this.x = (this.screenWidth - this.width) / 2;
     this.y = (this.screenHeight - this.height) / 2;
     this.contentX = this.x + this.padding.left;
     this.contentY = this.y + this.padding.top;
+    console.log(`[Dialog._updateCenterPosition] 计算位置: x=${this.x}, y=${this.y}`);
   }
 
   /**
@@ -96,6 +98,7 @@ class Dialog extends Panel {
 
     // 重新计算居中位置
     if (this.centered) {
+      console.log(`[Dialog.show] 显示前重新计算位置: screenWidth=${this.screenWidth}, screenHeight=${this.screenHeight}`);
       this._updateCenterPosition();
     }
 
@@ -239,6 +242,14 @@ class Dialog extends Panel {
     if (this.modal) {
       ctx.fillStyle = this.maskColor;
       ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
+    }
+
+    // 调试：直接绘制边框，确认坐标
+    if (this.name === 'SettlementDialog') {
+      ctx.strokeStyle = 'red';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(this.x, this.y, this.width, this.height);
+      console.log(`[Dialog.onRender] ${this.name}: x=${this.x}, y=${this.y}, width=${this.width}, height=${this.height}, scale=${this._scale}`);
     }
 
     // 应用缩放动画

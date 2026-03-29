@@ -10,6 +10,7 @@ import CloudStorage from '../cloud/CloudStorage';
 import { getAllPreloadImages, getLevelImageKey } from '../cloud/CloudResourceConfig';
 import { globalEvent } from '../core/EventEmitter';
 import { getGame } from '../../app';
+import { getAllDirtTypes, GlobalDirtImageCache } from '../config/dirtyConfig';
 
 class LoadingScene extends Scene {
   constructor() {
@@ -87,6 +88,132 @@ class LoadingScene extends Scene {
     });
     
     console.log(`[LoadingScene] 需要加载 ${this.resourcesToLoad.length} 个资源，当前 stage: ${currentStage}`);
+  }
+
+  /**
+   * 加载污垢图片资源
+   * 直接从 dirtyConfig.js 中的 imgPath 加载
+   */
+  async _loadDirtImages() {
+    const dirtTypes = getAllDirtTypes();
+    
+    // 收集所有配置了 imgPath 的污垢类型
+    const dirtImagesToLoad = [];
+    Object.keys(dirtTypes).forEach(typeKey => {
+      const dirtType = dirtTypes[typeKey];
+      if (dirtType.imgPath) {
+        dirtImagesToLoad.push({
+          type: typeKey,
+          imgPath: dirtType.imgPath
+        });
+      }
+    });
+    
+    if (dirtImagesToLoad.length === 0) {
+      console.log('[LoadingScene] 没有需要加载的污垢图片');
+      return;
+    }
+    
+    console.log(`[LoadingScene] 开始加载 ${dirtImagesToLoad.length} 个污垢图片`);
+    
+    // 加载每个污垢图片
+    for (const dirt of dirtImagesToLoad) {
+      try {
+        await this._loadDirtImage(dirt.type, dirt.imgPath);
+      } catch (e) {
+        console.error(`[LoadingScene] 污垢图片加载失败: ${dirt.type}`, e.message);
+      }
+    }
+  }
+
+  /**
+   * 加载单个污垢图片
+   * @param {string} type - 污垢类型
+   * @param {string} imgPath - 云存储路径或本地路径
+   */
+  async _loadDirtImage(type, imgPath) {
+    // 判断是否是云存储路径
+    if (imgPath.startsWith('cloud://')) {
+      // 云存储路径：提取 fileID 加载
+      await this._loadDirtImageFromCloudByPath(type, imgPath);
+    } else {
+      // 本地路径：直接加载
+      await this._loadDirtImageFromLocal(type, imgPath);
+    }
+  }
+
+  /**
+   * 通过云存储路径加载污垢图片
+   * @param {string} type - 污垢类型
+   * @param {string} fileID - 完整的云存储 fileID
+   */
+  async _loadDirtImageFromCloudByPath(type, fileID) {
+    try {
+      const tempURL = await this.cloudStorage.getTempFileURL(fileID);
+      
+      if (!tempURL) {
+        throw new Error('获取临时URL失败');
+      }
+      
+      const img = await this._downloadImage(tempURL);
+      GlobalDirtImageCache.set(type, img);
+      
+      // 保存缓存记录
+      const cacheKey = `dirt_${type}`;
+      this._saveImageToCache(cacheKey, fileID);
+      
+      console.log(`[LoadingScene] 污垢图片从云存储加载: ${type}`);
+    } catch (error) {
+      console.error(`[LoadingScene] 污垢图片加载失败 ${type}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 从本地加载污垢图片
+   * @param {string} type - 污垢类型
+   * @param {string} imagePath - 本地图片路径
+   */
+  async _loadDirtImageFromLocal(type, imagePath) {
+    try {
+      const img = await this._downloadLocalImage(imagePath);
+      // 保存到共享缓存
+      GlobalDirtImageCache.set(type, img);
+      console.log(`[LoadingScene] 污垢图片从本地加载: ${type}`);
+    } catch (e) {
+      throw new Error(`本地加载失败: ${e.message}`);
+    }
+  }
+
+  /**
+   * 从云存储加载污垢图片
+   * @param {string} key - 缓存 key (如 'dirt_paper')
+   * @param {string} fileID - 云存储 fileID
+   */
+  async _loadDirtImageFromCloud(key, fileID) {
+    if (!fileID) {
+      console.warn(`[LoadingScene] 未找到 fileID: ${key}`);
+      return;
+    }
+    
+    try {
+      const tempURL = await this.cloudStorage.getTempFileURL(fileID);
+      
+      if (!tempURL) {
+        throw new Error('获取临时URL失败');
+      }
+      
+      const img = await this._downloadImage(tempURL);
+      // 提取类型（dirt_paper -> paper）
+      const type = key.replace('dirt_', '');
+      // 保存到共享缓存
+      GlobalDirtImageCache.set(type, img);
+      this._saveImageToCache(key, fileID);
+      
+      console.log(`[LoadingScene] 污垢图片从云存储加载: ${key}`);
+    } catch (error) {
+      console.error(`[LoadingScene] 污垢图片云存储加载失败 ${key}:`, error);
+    }
   }
 
   _initUI() {
@@ -231,6 +358,10 @@ class LoadingScene extends Scene {
       
       console.log(`[LoadingScene] 加载进度: ${this.loadedCount}/${total} (成功:${successCount} 失败:${failCount})`);
     }
+    
+    // 加载污垢图片
+    this.loadingText = '准备污垢资源...';
+    await this._loadDirtImages();
     
     // 云存储资源加载完成后，预加载主页背景图（避免切换白屏）
     this.loadingText = '准备主页...';

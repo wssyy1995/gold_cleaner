@@ -25,6 +25,16 @@ export const BASE_TOOLS = [
     unlockLevel: 1
   },
   {
+    id: 'rubbish_bin',
+    name: '垃圾桶',
+    icon: '🗑️',
+    color: '#66BB6A',
+    description: '纸团，包装纸类的垃圾扔进去',
+    efficiency: 1.2,
+    type: 'base',
+    unlockLevel: 1
+  },
+  {
     id: 'brush',
     name: '刷子',
     icon: '🪥',

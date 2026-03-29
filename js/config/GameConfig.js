@@ -6,7 +6,8 @@
  */
 
 import { BASE_TOOLS } from './ToolConfig';
-import { DIRT_TYPES, getLevel } from './LevelConfig';
+import { DIRT_TYPES } from './dirtyConfig';
+import { getLevel } from './LevelConfig';
 
 const GameConfig = {
   // ==================== 游戏参数 ====================

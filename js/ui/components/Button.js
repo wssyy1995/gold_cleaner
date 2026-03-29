@@ -5,6 +5,7 @@
 
 import Component from '../../core/Component';
 import { globalEvent } from '../../core/EventEmitter';
+import haptic from '../../utils/HapticFeedback';
 
 class Button extends Component {
   constructor(options = {}) {
@@ -94,6 +95,8 @@ class Button extends Component {
     }
 
     if (wasInside && this.onClick) {
+      // 按钮点击振动反馈
+      haptic.medium();
       this.onClick();
       globalEvent.emit('ui:button:click', this);
     }

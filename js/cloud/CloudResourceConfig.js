@@ -26,7 +26,8 @@ export const PRELOAD_CLOUD_FILE_IDS = {
   'game_stage1_l1_home': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l1_home.png',
   // 游戏标题和阶段标签（主页面中间显示）
   'bg_game_title': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_game_title.png',
-  'bg_stage1_tag': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_stage1_tag.png'
+  'bg_stage1_tag': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_stage1_tag.png',
+  // 污垢图片配置已迁移到 dirtyConfig.js，不再在此处维护
 };
 
 // 云环境 ID（从 PRELOAD_CLOUD_FILE_IDS 中提取）
@@ -60,6 +61,11 @@ export function getCloudFileID(key) {
   // 关卡图片
   else if (key.startsWith('game_stage') && key.endsWith('_home')) {
     cloudPath = `images/game/${key}.png`;
+  }
+  // 污垢图片
+  else if (key.startsWith('dirt_')) {
+    const dirtType = key.replace('dirt_', '');
+    cloudPath = `images/ui/dirty/${dirtType}.png`;
   }
   
   if (!cloudPath) return null;
@@ -150,6 +156,13 @@ function getLocalImagePath(key) {
   // 关卡图片 (game_stage1_l1_home → images/game/game_stage1_l1_home.png)
   if (key.startsWith('game_stage') && key.endsWith('_home')) {
     parts.push('game', `${key}.png`);
+    return parts.join('/');
+  }
+  
+  // 污垢图片 (dirt_paper → images/ui/dirty/ui_dirty_paper.png)
+  if (key.startsWith('dirt_')) {
+    const dirtType = key.replace('dirt_', '');
+    parts.push('ui', 'dirty', `ui_dirty_${dirtType}.png`);
     return parts.join('/');
   }
   

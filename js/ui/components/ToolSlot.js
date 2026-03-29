@@ -9,6 +9,8 @@
  * - 可自定义图标
  */
 
+import haptic from '../../utils/HapticFeedback';
+
 class ToolSlot {
   constructor(options = {}) {
     this.screenWidth = options.screenWidth || 750;
@@ -17,9 +19,10 @@ class ToolSlot {
     // 工具数据
     this.tools = options.tools || [];
     
-    // 状态
-    this.selectedIndex = options.selectedIndex || 0;
+    // 状态（默认不选中任何工具）
+    this.selectedIndex = options.selectedIndex !== undefined ? options.selectedIndex : -1;
     this.disabledSlots = new Set(options.disabledSlots || []);
+    this.emptySlots = new Set(); // 记录被取出工具的槽位
     
     // 回调
     this.onSelect = options.onSelect || (() => {});
@@ -86,10 +89,22 @@ class ToolSlot {
     if (data.tools !== undefined) {
       this.tools = data.tools;
       this._calculateDimensions();
+      // 工具变化时清空空槽位记录
+      this.emptySlots.clear();
     }
     if (data.disabledSlots !== undefined) {
       this.disabledSlots = new Set(data.disabledSlots);
     }
+  }
+  
+  /**
+   * 设置槽位为空（工具被取出），同时恢复之前空槽位的图标
+   */
+  setEmptySlot(index) {
+    // 清空之前的空槽位记录（让之前的工具回到槽位）
+    this.emptySlots.clear();
+    // 设置当前槽位为空
+    this.emptySlots.add(index);
   }
   
   /**
@@ -162,26 +177,31 @@ class ToolSlot {
       const pos = this.slotPositions[i];
       const isSelected = i === this.selectedIndex;
       const isDisabled = this.disabledSlots.has(i);
-      // 判断是否有工具
-      const hasTool = i < this.tools.length;
+      // 判断槽位状态
+      const isEmpty = this.emptySlots.has(i); // 工具被取出
+      const hasTool = i < this.tools.length && !isEmpty; // 有工具且未被取出
+      const isLocked = i >= this.tools.length; // 未解锁槽位
       
-      this._drawSlot(ctx, pos.x, pos.y, pos.size, i, isSelected, isDisabled, hasTool);
+      this._drawSlot(ctx, pos.x, pos.y, pos.size, i, isSelected, isDisabled, hasTool, isEmpty, isLocked);
     }
   }
   
   /**
    * 3) 绘制单个槽位
    * @param {boolean} hasTool - 是否有工具
+   * @param {boolean} isEmpty - 工具是否被取出
+   * @param {boolean} isLocked - 是否未解锁
    */
-  _drawSlot(ctx, x, y, size, index, isSelected, isDisabled, hasTool) {
-    // 槽位背景渐变
+  _drawSlot(ctx, x, y, size, index, isSelected, isDisabled, hasTool, isEmpty, isLocked) {
+    // 槽位背景渐变（空槽位也保持正常米色）
     const slotGrad = ctx.createLinearGradient(x, y, x, y + size);
-    if (isDisabled || !hasTool) {
-      // 禁用或空槽位：灰色系
+    if (isLocked) {
+      // 未解锁槽位：深灰色系
       slotGrad.addColorStop(0, '#8a8a8a');
       slotGrad.addColorStop(0.5, '#6a6a6a');
       slotGrad.addColorStop(1, '#4a4a4a');
     } else {
+      // 有工具或空槽位：都使用正常米色
       slotGrad.addColorStop(0, '#e8d4b8');
       slotGrad.addColorStop(0.5, '#d9c399');
       slotGrad.addColorStop(1, '#b8956b');
@@ -189,8 +209,8 @@ class ToolSlot {
     
     ctx.save();
     
-    // 选中状态：添加发光边框（仅对有工具的槽位）
-    if (isSelected && hasTool) {
+    // 选中状态：添加发光边框
+    if (isSelected) {
       ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
       ctx.shadowBlur = 15;
       ctx.shadowOffsetX = 0;
@@ -203,7 +223,16 @@ class ToolSlot {
     ctx.fill();
     
     // 槽位边框
-    const borderColor = (isSelected && hasTool) ? '#ffd700' : (isDisabled || !hasTool) ? '#555' : '#8b7355';
+    let borderColor;
+    if (isSelected) {
+      borderColor = '#ffd700'; // 选中金色
+    } else if (isDisabled) {
+      borderColor = '#666'; // 禁用灰色
+    } else if (isLocked) {
+      borderColor = '#555'; // 未解锁深灰
+    } else {
+      borderColor = '#8b7355'; // 正常边框
+    }
     ctx.strokeStyle = borderColor;
     ctx.lineWidth = size * 0.03;
     ctx.stroke();
@@ -228,10 +257,11 @@ class ToolSlot {
       // 有工具：绘制工具图标
       const tool = this.tools[index];
       this._drawToolIcon(ctx, x, y, size, tool, isDisabled);
-    } else {
-      // 无工具：显示"待解锁"
+    } else if (isLocked) {
+      // 未解锁：显示"待解锁"
       this._drawLockedSlot(ctx, x, y, size);
     }
+    // isEmpty（空槽位）不显示任何内容，保持空白，但背景色不变
   }
   
   /**
@@ -465,6 +495,8 @@ class ToolSlot {
       if (this.selectedIndex !== slotIndex) {
         this.selectedIndex = slotIndex;
         this.onSelect(slotIndex, this.tools[slotIndex]);
+        // 工具切换振动反馈
+        haptic.selection();
       }
       return true;
     }

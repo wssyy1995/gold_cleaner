@@ -10,7 +10,8 @@ import TopBar from '../ui/components/TopBar';
 import ToolSlot from '../ui/components/ToolSlot';
 import GameConfig from '../config/GameConfig';
 import { BASE_TOOLS, PREMIUM_TOOLS, getTool } from '../config/ToolConfig';
-import { getLevel, DIRT_TYPES } from '../config/LevelConfig';
+import { getLevel } from '../config/LevelConfig';
+import { DIRT_TYPES, GlobalDirtImageCache } from '../config/dirtyConfig';
 import { GlobalPreviewCache } from './HomeScene';
 import { globalEvent } from '../core/EventEmitter';
 import { getGame } from '../../app';
@@ -19,6 +20,7 @@ import CloudStorage from '../cloud/CloudStorage';
 
 import PauseMenu from '../ui/dialogs/PauseMenu';
 import LevelCompleteDialog from '../ui/dialogs/LevelCompleteDialog';
+import SettlementDialog from '../ui/dialogs/SettlementDialog';
 
 class GameplayScene extends Scene {
   constructor() {
@@ -40,14 +42,34 @@ class GameplayScene extends Scene {
     // ToolSlot 组件
     this.toolSlot = null;
     
-    // 工具拖动清洁
-    this.isDraggingTool = false;
-    this.dragStartPos = { x: 0, y: 0 };
-    this.dragCurrentPos = { x: 0, y: 0 };
+    // 新的清洁玩法状态
+    this.selectedDirt = null;           // 当前选中的污垢圆圈
+    this.activeTool = null;             // 当前在页面上的工具
+    this.toolPosition = { x: 0, y: 0 }; // 工具在页面上的位置
+    this.isDraggingTool = false;        // 是否正在拖动工具
+    this.clothInDirt = false;           // cloth 工具是否在污垢区域内（用于计数）
+    this.wipeStartAngle = null;         // 涂抹起始角度
+    this.totalWipeAngle = 0;            // 总涂抹角度
+    this.clockwiseWipes = 0;            // 顺时针涂抹圈数
+    
+    // 工具弹出动画状态
+    this.toolAnim = {
+      active: false,        // 是否正在动画
+      progress: 0,          // 动画进度 0-1
+      startY: 0,            // 起始Y位置（工具槽内）
+      targetY: 0,           // 目标Y位置（工具槽上方）
+      slotX: 0,             // 槽位X位置
+      scale: 0,             // 当前缩放
+      alpha: 0              // 当前透明度
+    };
     
     // 动画效果
     this.sparkles = [];
     this.toolShake = 0;
+    this.pulseTime = 0;                 // 闪烁动画时间
+    
+    // 结算弹窗（新方式：独立弹窗，不依赖 DialogManager）
+    this.settlementDialog = null;
     
     // 云存储
     this.cloudStorage = new CloudStorage();
@@ -157,8 +179,8 @@ class GameplayScene extends Scene {
     this.timeLimit = this.levelConfig.timeLimit || 60;
     this.remainingTime = this.timeLimit;
     
-    // 从 LevelConfig 的污垢配方中确定需要的工具
-    this.tools = this._getRequiredTools();
+    // 工具槽显示已解锁的基础工具（根据 unlockLevel 过滤）
+    this.tools = BASE_TOOLS.filter(t => t.unlockLevel <= this.levelId);
     this.currentToolIndex = 0;
     
     // 新的 TopBar 组件（替换原有顶部 UI）
@@ -180,7 +202,6 @@ class GameplayScene extends Scene {
       borderRadius: 12 * s,
       shadow: { color: 'rgba(0,0,0,0.3)', blur: 8, offsetX: 0, offsetY: 4 },
       onClick: () => {
-        console.log('[GameplayScene] 通关按钮 onClick 回调触发');
         this._onWinClick();
       }
     });
@@ -200,12 +221,12 @@ class GameplayScene extends Scene {
       }
     });
 
-    // 创建 ToolSlot 组件
+    // 创建 ToolSlot 组件（默认不选中任何工具）
     this.toolSlot = new ToolSlot({
       screenWidth: this.screenWidth,
       screenHeight: this.screenHeight,
       tools: this.tools,
-      selectedIndex: this.currentToolIndex,
+      selectedIndex: -1, // 默认不选中
       onSelect: (index, tool) => {
         this._selectTool(index);
       }
@@ -283,10 +304,6 @@ class GameplayScene extends Scene {
       return;
     }
     
-    // 游戏区域是屏幕下方 90%
-    const gameAreaHeight = this.screenHeight * 0.9;
-    const topOffset = this.screenHeight * 0.08; // 顶部 8% 偏移
-    
     configDirts.forEach((dirtConfig, i) => {
       // 获取污垢类型定义
       const dirtType = DIRT_TYPES[dirtConfig.type];
@@ -299,30 +316,32 @@ class GameplayScene extends Scene {
       const x = (dirtConfig.x || 300) * s;
       const y = (dirtConfig.y || 400) * s;
       
-      // 尺寸可以配置，默认 100
-      const size = (dirtConfig.size || 1) * 100 * s;
+      // 圆圈直径固定 60px，适配屏幕
+      const circleSize = 60 * s;
       
       this.dirtObjects.push({
         id: i,
         type: dirtConfig.type,
         name: dirtType.name,
         x: x,
-        y: y, // 直接使用配置的 y 坐标
-        width: size,
-        height: size,
-        state: 'dirty',
-        cleanProgress: 0,
-        maxProgress: dirtType.recipes[0].length * 100,
+        y: y,
+        width: circleSize,          // 宽度
+        height: circleSize,         // 高度
+        size: circleSize,           // 圆圈直径（兼容旧代码）
+        state: 'dirty',             // dirty, selected, cleaning, clean
+        selected: false,            // 是否被选中（闪烁）
+        cleaning: false,            // 是否正在清洁中
+        wipeCount: 0,               // 涂抹次数
+        lastAngle: null,            // 上一次拖动的角度（用于检测顺时针）
         currentRecipe: dirtType.recipes[0],
         currentStep: 0,
-        color: dirtType.color,
         recipes: dirtType.recipes,
-        score: 10 * dirtType.difficulty,
-        coinReward: 5 * dirtType.difficulty
+        score: 10,
+        coinReward: 5
       });
     });
     
-    console.log(`[GameplayScene] 生成了 ${this.dirtObjects.length} 个污垢`);
+    console.log(`[GameplayScene] 生成了 ${this.dirtObjects.length} 个污垢圆圈`);
   }
 
   /**
@@ -356,22 +375,6 @@ class GameplayScene extends Scene {
         coinReward: dirtConfig.coinReward
       });
     }
-  }
-
-  _selectTool(index) {
-    this.currentToolIndex = index;
-    
-    // 同步更新 ToolSlot 组件
-    if (this.toolSlot && this.toolSlot.selectedIndex !== index) {
-      this.toolSlot.selectedIndex = index;
-    }
-    
-    this.showToolTip = true;
-    // 重置提示框定时器
-    if (this._toolTipTimer) clearTimeout(this._toolTipTimer);
-    this._toolTipTimer = setTimeout(() => {
-      this.showToolTip = false;
-    }, 2000);
   }
 
   /**
@@ -461,7 +464,7 @@ class GameplayScene extends Scene {
   }
 
   /**
-   * 显示结算弹窗
+   * 显示结算弹窗（新方式：直接实例化独立弹窗）
    */
   _showSettlement() {
     // 从 LevelConfig 获取奖励配置
@@ -478,27 +481,65 @@ class GameplayScene extends Scene {
     const starBonus = (stars - 1) * 25;
     const coins = baseCoins + starBonus;
     
-    // 导入 SettlementDialog
+    // 动态导入并创建独立弹窗（不依赖 DialogManager）
     const SettlementDialog = require('../ui/dialogs/SettlementDialog').default;
     
-    const dialog = new SettlementDialog({
+    // 获取 dataManager 用于保存进度
+    const game = getGame();
+    const dataManager = game ? game.dataManager : null;
+    
+    this.settlementDialog = new SettlementDialog({
       screenWidth: this.screenWidth,
       screenHeight: this.screenHeight,
       levelId: this.levelId,
       stars: stars,
       coins: coins,
       onNext: () => {
+        // 保存进度：标记当前关卡完成，解锁下一关
+        if (dataManager) {
+          dataManager.completeLevel(this.levelId, stars);
+          dataManager.unlockLevel(this.levelId + 1);
+          dataManager.addCoins(coins);
+          dataManager.save();
+        }
         globalEvent.emit('scene:switch', 'GameplayScene', { levelId: this.levelId + 1 });
       },
       onReplay: () => {
+        // 重玩不保存进度，只是重新开始
         globalEvent.emit('scene:switch', 'GameplayScene', { levelId: this.levelId });
       },
       onHome: () => {
+        // 保存进度：标记当前关卡完成，解锁下一关
+        if (dataManager) {
+          dataManager.completeLevel(this.levelId, stars);
+          dataManager.unlockLevel(this.levelId + 1);
+          dataManager.addCoins(coins);
+          dataManager.save();
+        }
         globalEvent.emit('scene:switch', 'HomeScene');
       }
     });
     
-    globalEvent.emit('dialog:show', dialog);
+    // 显示弹窗（设置 visible=true，触发动画）
+    this.settlementDialog.show();
+  }
+  
+  /**
+   * 更新结算弹窗
+   */
+  _updateSettlementDialog(dt) {
+    if (this.settlementDialog && this.settlementDialog.update) {
+      this.settlementDialog.update(dt);
+    }
+  }
+  
+  /**
+   * 渲染结算弹窗
+   */
+  _renderSettlementDialog(ctx) {
+    if (this.settlementDialog && this.settlementDialog.render) {
+      this.settlementDialog.render(ctx);
+    }
   }
 
   /**
@@ -558,13 +599,12 @@ class GameplayScene extends Scene {
   }
   
   /**
-   * 通关按钮点击 - 显示通关弹窗
+   * 通关按钮点击 - 走正常结算逻辑
    */
   _onWinClick() {
-    console.log(`[GameplayScene] === 通关按钮被点击: level ${this.levelId} ===`);
-    
-    // 显示简易通关弹窗
-    this._showLevelCompleteDialog();
+    // 标记为已完成，走正常结算流程
+    this._completed = true;
+    this._showSettlement();
   }
   
   /**
@@ -718,6 +758,24 @@ class GameplayScene extends Scene {
       if (this.toolShake < 0) this.toolShake = 0;
     }
     
+    // 更新工具弹出动画
+    if (this.toolAnim.active) {
+      this.toolAnim.progress += deltaTime * 0.003; // 动画速度
+      if (this.toolAnim.progress >= 1) {
+        this.toolAnim.progress = 1;
+        this.toolAnim.active = false;
+      }
+      
+      const t = this.toolAnim.progress;
+      const easeT = this._easeOutElastic(t);
+      
+      // 计算当前位置和大小
+      this.toolPosition.x = this.toolAnim.startX + (this.toolAnim.targetX - this.toolAnim.startX) * t;
+      this.toolPosition.y = this.toolAnim.startY + (this.toolAnim.targetY - this.toolAnim.startY) * easeT;
+      this.toolAnim.scale = 0.3 + 0.7 * easeT; // 从0.3缩放到1
+      this.toolAnim.alpha = Math.min(1, t * 2); // 快速淡入
+    }
+    
     // 检查是否全部完成
     if (this.dirtObjects && this.dirtObjects.length > 0 && 
         this.dirtObjects.every(d => d.state === 'clean') && 
@@ -725,6 +783,9 @@ class GameplayScene extends Scene {
       this._completed = true;
       setTimeout(() => this._showSettlement(), 500);
     }
+    
+    // 更新结算弹窗
+    this._updateSettlementDialog(deltaTime);
   }
 
   onRender(ctx) {
@@ -742,6 +803,9 @@ class GameplayScene extends Scene {
     
     // 绘制闪光粒子
     this._renderSparkles(ctx);
+    
+    // 渲染结算弹窗（在最上层）
+    this._renderSettlementDialog(ctx);
   }
 
   /**
@@ -783,29 +847,8 @@ class GameplayScene extends Scene {
     // 检查UI是否已初始化
     if (!this.dirtObjects) return;
     
-    // 3. 绘制污垢（y 坐标相对于游戏区域）
-    this.dirtObjects.forEach(dirt => {
-      if (dirt.state !== 'clean') {
-        const dy = dirt.y + gameAreaY; // 加上游戏区域偏移
-        const alpha = 1 - (dirt.cleanProgress / dirt.maxProgress) * 0.5;
-        ctx.fillStyle = this._hexToRgba(dirt.color, alpha);
-        ctx.fillRect(dirt.x, dy, dirt.width, dirt.height);
-        ctx.strokeStyle = this._hexToRgba(dirt.color, 0.8);
-        ctx.lineWidth = 2 * s;
-        ctx.strokeRect(dirt.x, dy, dirt.width, dirt.height);
-        
-        // 绘制进度
-        if (dirt.cleanProgress > 0) {
-          ctx.fillStyle = '#4CAF50';
-          ctx.fillRect(dirt.x, dy - 10 * s, dirt.width * (dirt.cleanProgress / dirt.maxProgress), 6 * s);
-        }
-        
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = `${14 * s}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText('双击', dirt.x + dirt.width / 2, dy + dirt.height / 2 + 5 * s);
-      }
-    });
+    // 3. 绘制污垢圆圈（y 坐标相对于游戏区域）
+    this._renderDirts(ctx, gameAreaY, s);
 
     // 4. 绘制底部 10% 浅棕黄色背景（工具槽区域）
     ctx.fillStyle = lightBrown;
@@ -850,6 +893,284 @@ class GameplayScene extends Scene {
     
     // 绘制图片
     ctx.drawImage(img, dx, dy, dw, dh);
+  }
+
+  /**
+   * 绘制污垢（优先使用图片，否则使用圆圈）
+   */
+  _renderDirts(ctx, gameAreaY, s) {
+    const now = Date.now();
+    
+    this.dirtObjects.forEach(dirt => {
+      if (dirt.state === 'clean') return;
+      
+      const cx = dirt.x;
+      const cy = dirt.y + gameAreaY;
+      
+      // 计算高亮缩放（cloth 工具拖动时）
+      const highlightScale = dirt.highlightScale || 1;
+      const radius = (dirt.width / 2) * highlightScale;
+      
+      // 绘制高亮背景（淡白光）
+      if (dirt.isHighlighted) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; // 更淡的白光
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius + 15 * s, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      
+      // 计算闪烁效果（选中状态）
+      let pulseAlpha = 1;
+      if (dirt.selected) {
+        const pulse = Math.sin(now / 100) * 0.3 + 0.7;
+        pulseAlpha = pulse;
+      }
+      
+      // 如果从缓存能获取到图片，使用图片渲染
+      const dirtImg = GlobalDirtImageCache.get(dirt.type);
+      if (dirtImg) {
+        this._renderDirtWithImage(ctx, dirt, cx, cy, radius, pulseAlpha, s, dirtImg);
+      } else {
+        // 否则使用默认圆圈渲染
+        this._renderDirtWithCircle(ctx, dirt, cx, cy, radius, pulseAlpha, s);
+      }
+    });
+    
+    // 绘制活动工具（如果在页面上，包括拖动状态）
+    if (this.activeTool) {
+      this._renderActiveTool(ctx, s);
+    }
+  }
+
+  /**
+   * 使用图片渲染污垢
+   */
+  _renderDirtWithImage(ctx, dirt, cx, cy, radius, pulseAlpha, s, img) {
+      // 获取污垢类型的缩放配置
+      const dirtType = DIRT_TYPES[dirt.type];
+      const scale = dirtType?.scale || 1; // 默认1倍
+      
+      // 使用图片渲染
+      ctx.save();
+      ctx.globalAlpha = pulseAlpha;
+      
+      // 计算图片绘制尺寸（保持原始比例，类似 CSS object-fit: contain）
+      // 应用 scale 配置，默认基础放大1.5倍
+      const maxSize = radius * 2 * 1.5 * scale;
+      const imgRatio = img.width / img.height;
+      
+      let drawWidth, drawHeight;
+      if (imgRatio > 1) {
+        // 宽图：以宽度为基准
+        drawWidth = maxSize;
+        drawHeight = maxSize / imgRatio;
+      } else {
+        // 高图或正方形：以高度为基准
+        drawHeight = maxSize;
+        drawWidth = maxSize * imgRatio;
+      }
+      
+      const x = cx - drawWidth / 2;
+      const y = cy - drawHeight / 2;
+      
+      // 根据擦拭进度裁切显示图片（从下往上消失）
+      const wipeProgress = dirt.wipeProgress || 0;
+      const remainingRatio = 1 - wipeProgress; // 剩余显示比例
+      
+      if (remainingRatio > 0) {
+        // 计算裁切区域（从下往上消失）
+        const clipHeight = drawHeight * remainingRatio;
+        const clipY = y + (drawHeight - clipHeight); // 从下往上裁切
+        
+        // 设置裁切区域
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, clipY, drawWidth, clipHeight);
+        ctx.clip();
+        
+        // 绘制图片（只显示裁切部分）
+        // 计算图片源区域（对应裁切部分）
+        const srcY = img.height * (1 - remainingRatio);
+        const srcHeight = img.height * remainingRatio;
+        
+        ctx.drawImage(
+          img,
+          0, srcY, img.width, srcHeight,  // 源区域（从下往上取）
+          x, clipY, drawWidth, clipHeight  // 目标区域
+        );
+        
+        ctx.restore();
+      }
+      
+      ctx.restore();
+      
+      // 显示擦拭进度提示
+      if (wipeProgress > 0 && wipeProgress < 1) {
+        ctx.save();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `bold ${14 * s}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 4;
+        ctx.fillText(`${Math.floor(wipeProgress * 5)}/5`, cx, cy);
+        ctx.restore();
+      }
+  }
+
+  /**
+   * 从云存储缓存加载污垢图片
+   */
+  _loadDirtImageFromCache(type) {
+    if (typeof wx === 'undefined') return null;
+    
+    try {
+      const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
+      const cacheKey = `dirt_${type}`;
+      const cacheInfo = cacheRecord[cacheKey];
+      
+      if (cacheInfo && cacheInfo.fileID) {
+        // 异步加载图片并缓存
+        this.cloudStorage.getTempFileURL(cacheInfo.fileID).then(tempURL => {
+          if (tempURL) {
+            const img = wx.createImage();
+            img.onload = () => {
+              GlobalDirtImageCache.set(type, img);
+              console.log(`[GameplayScene] 污垢图片加载完成: ${type}`);
+            };
+            img.src = tempURL;
+          }
+        });
+      }
+    } catch (e) {
+      console.warn(`[GameplayScene] 加载污垢图片失败: ${type}`, e.message);
+    }
+    
+    return null;
+  }
+
+  /**
+   * 使用圆圈渲染污垢（默认样式）
+   * 支持擦拭进度显示
+   */
+  _renderDirtWithCircle(ctx, dirt, cx, cy, radius, pulseAlpha, s) {
+    // 获取污垢类型的缩放配置
+    const dirtType = DIRT_TYPES[dirt.type];
+    const scale = dirtType?.scale || 1; // 默认1倍
+    
+    // 应用 scale 配置
+    const scaledRadius = radius * scale;
+    
+    // 根据擦拭进度计算显示比例（从下往上消失）
+    const wipeProgress = dirt.wipeProgress || 0;
+    const remainingRatio = 1 - wipeProgress;
+    
+    if (remainingRatio <= 0) return; // 完全擦除后不显示
+    
+    // 裁切区域（从下往上）
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cx - scaledRadius, cy + scaledRadius - (scaledRadius * 2 * remainingRatio), scaledRadius * 2, scaledRadius * 2 * remainingRatio);
+    ctx.clip();
+    
+    // 绘制金黄色圆圈外圈
+    ctx.beginPath();
+    ctx.arc(cx, cy, scaledRadius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 215, 0, ${0.3 * pulseAlpha})`;
+    ctx.fill();
+    
+    // 绘制金黄色边框
+    ctx.beginPath();
+    ctx.arc(cx, cy, scaledRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255, 193, 7, ${pulseAlpha})`;
+    ctx.lineWidth = 3 * s;
+    ctx.stroke();
+    
+    // 绘制内部小圆点
+    ctx.beginPath();
+    ctx.arc(cx, cy, scaledRadius * 0.3, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 160, 0, ${0.6 * pulseAlpha})`;
+    ctx.fill();
+    
+    ctx.restore();
+    
+    // 显示擦拭进度
+    if (wipeProgress > 0 && wipeProgress < 1) {
+      ctx.save();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = `bold ${14 * s}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 4;
+      ctx.fillText(`${Math.floor(wipeProgress * 5)}/5`, cx, cy);
+      ctx.restore();
+    }
+  }
+
+  /**
+   * 绘制活动工具（带淡发光效果，无背景圆圈）
+   */
+  _renderActiveTool(ctx, s) {
+    const tool = this.activeTool;
+    const x = this.toolPosition.x;
+    const y = this.toolPosition.y;
+    const baseSize = 120 * s; // 基础大小
+    // 拖动时保持正常大小，只有弹出动画时才有缩放
+    const animScale = (this.toolAnim.active || this.toolAnim.scale === undefined) ? (this.toolAnim.scale || 1) : 1;
+    const size = baseSize * animScale;
+    const alpha = this.toolAnim.alpha !== undefined ? this.toolAnim.alpha : 1;
+    
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    
+    // 拖动时光效消失，静止时显示光效
+    if (!this.isDraggingTool) {
+      // 绘制淡发光效果（纯白色柔和光晕，更淡）
+      const glowRadius = size * 1.6;
+      const glowGradient = ctx.createRadialGradient(x, y, size * 0.3, x, y, glowRadius);
+      glowGradient.addColorStop(0, 'rgba(255, 255, 255, 0.5)');   // 中心稍亮
+      glowGradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.2)'); // 中间更淡
+      glowGradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.08)');// 外围很淡
+      glowGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');     // 完全透明
+      
+      ctx.beginPath();
+      ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+      ctx.fillStyle = glowGradient;
+      ctx.fill();
+      
+      // 添加第二层柔和白光（更淡）
+      const softGlow = ctx.createRadialGradient(x, y, 0, x, y, size * 1.8);
+      softGlow.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+      softGlow.addColorStop(0.5, 'rgba(255, 255, 255, 0.05)');
+      softGlow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      
+      ctx.beginPath();
+      ctx.arc(x, y, size * 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = softGlow;
+      ctx.fill();
+    }
+    
+    // 绘制工具图标阴影（增加立体感）
+    ctx.font = `bold ${Math.floor(size)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // 阴影
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+    ctx.fillText(tool.icon, x + 2, y + 2);
+    
+    // 主图标
+    ctx.fillStyle = tool.color;
+    ctx.fillText(tool.icon, x, y);
+    
+    // 高光
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.fillText(tool.icon, x - 1, y - 1);
+    
+    ctx.restore();
   }
 
   /**
@@ -1024,43 +1345,20 @@ class GameplayScene extends Scene {
   }
 
   onTouchStart(x, y) {
+    // 优先检查结算弹窗（最上层）
+    if (this.settlementDialog && this.settlementDialog.visible) {
+      if (this.settlementDialog.onTouchStart && this.settlementDialog.onTouchStart(x, y)) {
+        return true;
+      }
+      // 弹窗显示时阻挡下方所有触摸
+      return true;
+    }
+    
     this._touchStartTime = Date.now();
     this._touchStartPos = { x, y };
     
     const s = this.screenWidth / 750;
-    
-    // 放大视图模式
-    if (this.viewMode === 'zoom') {
-      // 检查退出按钮
-      if (this.exitZoomBtn && this.exitZoomBtn.onTouchStart(x, y)) return true;
-      
-      // 检查 ToolSlot 区域（底部 10%）
-      if (this.toolSlot) {
-        const result = this.toolSlot.onTouchStart(x, y);
-        if (result) {
-          // 点击了工具槽，稍后 onTouchEnd 会处理选中
-          return true;
-        }
-      }
-      
-      // 检查是否点击污垢区域（开始拖动工具）
-      const s = this.screenWidth / 750;
-      const centerX = 375 * s;
-      const centerY = 600 * s;
-      const size = 300 * s;
-      
-      if (x >= centerX - size/2 && x <= centerX + size/2 &&
-          y >= centerY - size/2 && y <= centerY + size/2) {
-        // 在污垢区域点击，开始拖动工具
-        this.isDraggingTool = true;
-        this.dragStartPos = { x, y };
-        this.dragCurrentPos = { x, y };
-        this.showToolTip = false;
-        return true;
-      }
-      
-      return true;
-    }
+    const gameAreaY = this.screenHeight * 0.08;
     
     // 房间视图模式
     // 先检查 TopBar（暂停按钮）
@@ -1069,30 +1367,41 @@ class GameplayScene extends Scene {
     }
     
     if (this.backBtn && this.backBtn.onTouchStart(x, y)) return true;
-    if (this.winBtn && this.winBtn.onTouchStart(x, y)) {
-      console.log('[GameplayScene] 通关按钮 onTouchStart 触发');
-      return true;
+    if (this.winBtn && this.winBtn.onTouchStart(x, y)) return true;
+    
+    // 检查是否正在拖动活动工具
+    if (this.activeTool && !this.isDraggingTool) {
+      const dx = x - this.toolPosition.x;
+      const dy = y - this.toolPosition.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      // 工具大小为 120 * s，检测范围稍微大一点
+      if (distance < 80 * s) {
+        // 验证工具使用条件
+        if (!this._validateToolUsage(this.activeTool)) {
+          // 验证失败，显示错误提示但不开始拖动
+          this._showToolError();
+          return true; // 拦截事件，防止后续处理
+        }
+        // 开始拖动工具
+        this.isDraggingTool = true;
+        this.dragStartPos = { x, y };
+        return true;
+      }
     }
     
-    // 检查 ToolSlot 区域（底部 10%）
+    // 检查 ToolSlot 区域（底部 12%）
     if (this.toolSlot) {
       const result = this.toolSlot.onTouchStart(x, y);
       if (result) {
-        // 点击了工具槽内的工具
         return true;
       }
     }
 
-    // 检查污垢点击（双击检测）
+    // 检查污垢圆圈点击
     const clickedDirt = this._findDirtAt(x, y);
     if (clickedDirt) {
-      const now = Date.now();
-      if (this._lastClickDirt === clickedDirt && now - this._lastClickTime < 300) {
-        // 双击 - 进入放大视图
-        this._enterZoomView(clickedDirt);
-      }
-      this._lastClickTime = now;
-      this._lastClickDirt = clickedDirt;
+      // 选中/取消选中圆圈
+      this._selectDirt(clickedDirt);
       return true;
     }
 
@@ -1100,9 +1409,38 @@ class GameplayScene extends Scene {
   }
 
   onTouchMove(x, y) {
-    if (this.viewMode === 'zoom' && this.isDraggingTool) {
-      // 放大视图中的工具拖动
-      this.dragCurrentPos = { x, y };
+    // 结算弹窗显示时阻止下方触摸
+    if (this.settlementDialog && this.settlementDialog.visible) {
+      return false;
+    }
+    
+    // 处理工具拖动
+    if (this.isDraggingTool && this.activeTool) {
+      // 限制工具不能拖动到工具槽下方
+      const toolSlotTopY = this.screenHeight * 0.88; // 工具槽顶部Y坐标
+      const clampedY = Math.min(y, toolSlotTopY); // 限制y不超过工具槽顶部
+      
+      // 更新工具位置（跟随手指，但有边界限制）
+      this.toolPosition = { x, y: clampedY };
+      
+      // cloth 工具特殊处理：拖动时检测附近 wipe 类型污垢并高亮
+      if (this.activeTool.id === 'cloth') {
+        this._updateClothDrag(x, clampedY);
+      } else {
+        // 其他工具原有逻辑
+        const nearbyDirt = this._findNearbyDirt(x, y);
+        if (nearbyDirt) {
+          if (!this.selectedDirt || this.selectedDirt !== nearbyDirt) {
+            this.selectedDirt = nearbyDirt;
+            this.wipeStartAngle = null;
+            this.totalWipeAngle = 0;
+            this.clockwiseWipes = 0;
+          }
+          this._updateToolDrag(x, y);
+        } else {
+          this.selectedDirt = null;
+        }
+      }
       return true;
     }
     
@@ -1110,35 +1448,11 @@ class GameplayScene extends Scene {
   }
 
   onTouchEnd(x, y) {
-    const s = this.screenWidth / 750;
-    
-    // 放大视图模式
-    if (this.viewMode === 'zoom') {
-      if (this.exitZoomBtn && this.exitZoomBtn.onTouchEnd(x, y)) return true;
-      
-      // 先处理 ToolSlot 的触摸结束（用于选中工具）
-      if (this.toolSlot && this.toolSlot.onTouchEnd(x, y)) {
+    // 优先检查结算弹窗（最上层）
+    if (this.settlementDialog && this.settlementDialog.visible) {
+      if (this.settlementDialog.onTouchEnd && this.settlementDialog.onTouchEnd(x, y)) {
         return true;
       }
-      
-      // 检查工具拖动结束
-      if (this.isDraggingTool && this.zoomedDirt) {
-        // 检查是否在污垢区域内
-        const dirt = this.zoomedDirt;
-        const centerX = 375 * s;
-        const centerY = 600 * s;
-        const size = 300 * s;
-        
-        if (x >= centerX - size/2 && x <= centerX + size/2 &&
-            y >= centerY - size/2 && y <= centerY + size/2) {
-          // 在污垢区域内使用工具
-          this._useToolOnDirt(dirt);
-        }
-        
-        this.isDraggingTool = false;
-        return true;
-      }
-      
       return true;
     }
     
@@ -1149,13 +1463,29 @@ class GameplayScene extends Scene {
     }
     
     if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
-    if (this.winBtn && this.winBtn.onTouchEnd(x, y)) {
-      console.log('[GameplayScene] 通关按钮 onTouchEnd 触发');
-      return true;
-    }
+    if (this.winBtn && this.winBtn.onTouchEnd(x, y)) return true;
     
     // 处理 ToolSlot 的触摸结束（用于选中工具）
     if (this.toolSlot && this.toolSlot.onTouchEnd(x, y)) {
+      // 工具选择后直接弹出活动工具（由 _selectTool 内部处理）
+      return true;
+    }
+    
+    // 结束工具拖动
+    if (this.isDraggingTool) {
+      this.isDraggingTool = false;
+      this.clothInDirt = false; // 重置 cloth 进入污垢状态
+      
+      // 重置所有污垢的高亮状态
+      this.dirtObjects.forEach(dirt => {
+        dirt.isHighlighted = false;
+        dirt.highlightScale = 1;
+      });
+      
+      // 如果没有完成清洁，工具回到弹出位置
+      if (this.activeTool) {
+        this._spawnTool();
+      }
       return true;
     }
     
@@ -1169,13 +1499,498 @@ class GameplayScene extends Scene {
     
     for (let i = this.dirtObjects.length - 1; i >= 0; i--) {
       const dirt = this.dirtObjects[i];
-      // 使用游戏区域坐标进行比较
-      if (dirt.state !== 'clean' && x >= dirt.x && x <= dirt.x + dirt.width && 
-          gameY >= dirt.y && gameY <= dirt.y + dirt.height) {
+      if (dirt.state === 'clean') continue;
+      
+      // 圆圈碰撞检测
+      const dx = x - dirt.x;
+      const dy = gameY - dirt.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance <= dirt.size / 2 + 10) { // +10px 容差
         return dirt;
       }
     }
     return null;
+  }
+  
+  /**
+   * 查找靠近的污垢圆圈（用于拖动工具时检测）
+   * 检测范围比点击范围更大
+   */
+  _findNearbyDirt(x, y) {
+    const gameAreaY = this.screenHeight * 0.08;
+    const gameY = y - gameAreaY;
+    
+    for (let i = this.dirtObjects.length - 1; i >= 0; i--) {
+      const dirt = this.dirtObjects[i];
+      if (dirt.state === 'clean') continue;
+      
+      const dx = x - dirt.x;
+      const dy = gameY - dirt.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // 检测范围更大（圆圈半径 + 50px），方便拖动时涂抹
+      if (distance <= dirt.size / 2 + 50) {
+        return dirt;
+      }
+    }
+    return null;
+  }
+  
+  /**
+   * cloth 工具拖动时的特殊处理
+   * 检测附近的 wipe 类型污垢，添加放大高光效果，并处理擦拭进度
+   */
+  _updateClothDrag(x, y) {
+    const gameAreaY = this.screenHeight * 0.08;
+    const gameY = y - gameAreaY;
+    
+    // 先重置所有污垢的高亮状态（但保留擦拭进度）
+    this.dirtObjects.forEach(dirt => {
+      if (dirt.state !== 'clean') {
+        dirt.isHighlighted = false;
+        dirt.highlightScale = 1;
+      }
+    });
+    
+    // 查找附近的 wipe 类型污垢（40px 范围，擦拭范围比高亮范围大）
+    let nearbyDirt = null;
+    for (let i = this.dirtObjects.length - 1; i >= 0; i--) {
+      const dirt = this.dirtObjects[i];
+      if (dirt.state === 'clean') continue;
+      
+      // 检查是否是 wipe 类型
+      const dirtType = DIRT_TYPES[dirt.type];
+      if (!dirtType || dirtType.operate_type !== 'wipe') continue;
+      
+      const dx = x - dirt.x;
+      const dy = gameY - dirt.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // 40px 范围内可擦拭
+      if (distance <= dirt.size / 2 + 40) {
+        nearbyDirt = dirt;
+        break;
+      }
+    }
+    
+    if (nearbyDirt) {
+      // 高亮效果（20px 范围内显示白光，40px 范围内可擦拭）
+      const dx = x - nearbyDirt.x;
+      const dy = gameY - nearbyDirt.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance <= nearbyDirt.size / 2 + 20) {
+        nearbyDirt.isHighlighted = true;
+        nearbyDirt.highlightScale = 1; // 不再放大，只显示白光
+      }
+      
+      // 处理擦拭进度
+      this._updateWipeProgress(nearbyDirt);
+      this.selectedDirt = nearbyDirt;
+    } else {
+      // 离开所有污垢，重置擦拭状态
+      this.clothInDirt = false;
+      this.selectedDirt = null;
+    }
+  }
+
+  /**
+   * 更新擦拭进度
+   * 工具经过污垢5次后完成清洁，每次经过裁切1/5
+   */
+  _updateWipeProgress(dirt) {
+    // 初始化擦拭进度
+    if (dirt.wipeProgress === undefined) {
+      dirt.wipeProgress = 0; // 0-5，5次完成
+      dirt.wipeCount = 0;    // 经过次数
+    }
+    
+    // 检测工具是否刚进入或离开污垢区域
+    if (!this.clothInDirt) {
+      // 工具刚进入污垢区域
+      this.clothInDirt = true;
+      dirt.wipeCount++;
+      dirt.wipeProgress = Math.min(dirt.wipeCount / 5, 1); // 5次完成
+      
+      console.log(`[GameplayScene] 擦拭进度: ${dirt.wipeCount}/5, ${dirt.name}`);
+      
+      // 播放擦拭音效（如果有）
+      // this._playWipeSound();
+      
+      // 5次后完成清洁
+      if (dirt.wipeCount >= 5) {
+        this._completeWipeClean(dirt);
+      }
+    }
+  }
+
+  /**
+   * 完成擦拭清洁
+   */
+  _completeWipeClean(dirt) {
+    dirt.state = 'clean';
+    dirt.isHighlighted = false;
+    
+    // 增加清洁度
+    this.cleanProgress = Math.min(this.cleanProgress + 10, 100);
+    
+    // 更新顶部进度条
+    if (this.topBar) {
+      this.topBar.updateData({ progress: this.cleanProgress });
+    }
+    
+    console.log(`[GameplayScene] ${dirt.name} 擦拭完成，清洁度 +10`);
+    
+    // 检查是否全部完成
+    this._checkAllCleaned();
+  }
+
+  /**
+   * 检查是否全部清洁完成
+   */
+  _checkAllCleaned() {
+    const allCleaned = this.dirtObjects.every(d => d.state === 'clean');
+    if (allCleaned && !this._completed) {
+      this._completed = true;
+      setTimeout(() => this._showSettlement(), 500);
+    }
+  }
+
+  /**
+   * 选中/取消选中污垢圆圈
+   */
+  _selectDirt(dirt) {
+    // 获取污垢类型配置
+    const dirtType = DIRT_TYPES[dirt.type];
+    if (!dirtType) return;
+    
+    // 判断是否是 throw 类型的污垢
+    if (dirtType.operate_type === 'throw') {
+      // throw 类型：检查当前弹出的工具是否是 rubbish_bin
+      if (this.activeTool && this.activeTool.id === 'rubbish_bin') {
+        // 是当前工具，执行飞行动画
+        this._throwDirtToBin(dirt);
+      }
+      // 如果不是 rubbish_bin，无反应（不选中）
+      return;
+    }
+    
+    // wipe 类型（如 stain）：不执行选中效果，通过 cloth 工具拖动交互
+    if (dirtType.operate_type === 'wipe') {
+      // 不选中，无反应
+      return;
+    }
+    
+    // 其他类型（wipe 等）：原有的选中逻辑
+    // 取消之前的选中
+    this.dirtObjects.forEach(d => {
+      d.selected = false;
+      d.cleaning = false;
+    });
+    
+    // 取消当前活动工具
+    this.activeTool = null;
+    
+    if (this.selectedDirt === dirt && dirt.selected) {
+      // 再次点击已选中的，取消选中
+      dirt.selected = false;
+      this.selectedDirt = null;
+    } else {
+      // 选中新圆圈（只选中，不生成工具，工具在点击工具槽后才生成）
+      dirt.selected = true;
+      this.selectedDirt = dirt;
+    }
+  }
+
+  /**
+   * 验证工具使用条件
+   * @param {Object} tool - 当前弹出的工具
+   * @returns {boolean} - 是否允许使用
+   */
+  _validateToolUsage(tool) {
+    // cloth 工具：无需预先选中，拖动时自动检测附近 wipe 类型污垢
+    if (tool.id === 'cloth') {
+      // 始终允许拖动，在拖动过程中检测附近污垢
+      return true;
+    }
+    
+    // 其他工具（如 rubbish_bin 等）无需特殊验证
+    return true;
+  }
+
+  /**
+   * 显示工具使用错误提示
+   */
+  _showToolError() {
+    // 简单的震动效果表示错误
+    this.toolShake = 1;
+    setTimeout(() => { this.toolShake = 0; }, 300);
+    
+    // 可以在这里添加更多错误提示，比如文字提示或音效
+    console.log('[GameplayScene] 工具使用错误提示');
+  }
+
+  /**
+   * throw 类型污垢飞向垃圾桶的动画
+   * @param {Object} dirt - 要处理的污垢
+   */
+  _throwDirtToBin(dirt) {
+    if (dirt.isFlying) return; // 防止重复点击
+    dirt.isFlying = true;
+    
+    const s = this.screenWidth / 750; // 屏幕缩放比例
+    const baseSize = 60 * s; // 基础尺寸
+    
+    // 获取垃圾桶工具的位置（屏幕底部工具槽位置）
+    const toolSlotY = this.screenHeight * 0.88; // 工具槽在底部 12%
+    const targetX = this.screenWidth / 2;
+    const targetY = toolSlotY;
+    
+    // 起始位置（转换为屏幕绝对坐标）
+    const gameAreaY = this.screenHeight * 0.08;
+    const startX = dirt.x;
+    const startY = dirt.y + gameAreaY;
+    
+    // 动画参数
+    const duration = 500; // 动画时长 500ms
+    const startTime = Date.now();
+    
+    // 贝塞尔曲线控制点（中间上方，形成抛物线）
+    const controlX = (startX + targetX) / 2;
+    const controlY = Math.min(startY, targetY) - 150 * s; // 控制点在上方，随屏幕缩放
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // 二次贝塞尔曲线
+      const t = progress;
+      const invT = 1 - t;
+      
+      // 贝塞尔公式: B(t) = (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+      const currentX = invT * invT * startX + 2 * invT * t * controlX + t * t * targetX;
+      const currentY = invT * invT * startY + 2 * invT * t * controlY + t * t * targetY;
+      
+      // 更新污垢位置（存相对坐标）
+      dirt.x = currentX;
+      dirt.y = currentY - gameAreaY;
+      
+      // 同时缩小污垢
+      const currentSize = baseSize * (1 - progress * 0.5); // 缩小到 50%
+      dirt.size = currentSize;
+      dirt.width = currentSize;
+      dirt.height = currentSize;
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        // 动画完成，标记为已清理
+        dirt.state = 'clean';
+        dirt.isFlying = false;
+        console.log(`[GameplayScene] ${dirt.name} 已扔进垃圾桶`);
+      }
+    };
+    
+    animate();
+  }
+  
+  /**
+   * 生成活动工具（从工具槽弹出到上方）
+   * 不再依赖选中的圆圈，点击工具槽直接弹出
+   */
+  _spawnTool() {
+    const tool = this.tools[this.currentToolIndex];
+    if (!tool) return;
+    
+    this.activeTool = tool;
+    
+    // 获取当前选中的槽位位置
+    const slotIndex = this.currentToolIndex;
+    const slotPos = this.toolSlot ? this.toolSlot.slotPositions[slotIndex] : null;
+    
+    // 工具槽区域
+    const toolSlotTopY = this.screenHeight * 0.88;
+    const toolSlotHeight = this.screenHeight * 0.12;
+    const toolSlotBottomY = toolSlotTopY + toolSlotHeight;
+    
+    // 目标位置：工具槽上方居中（离工具槽更近）
+    const targetY = toolSlotTopY - 40; // 工具槽上方40px
+    
+    if (slotPos) {
+      // 从槽位位置开始动画
+      this.toolAnim = {
+        active: true,
+        progress: 0,
+        startX: slotPos.x + slotPos.size / 2,
+        startY: toolSlotBottomY - 30, // 槽位内部起始
+        targetX: slotPos.x + slotPos.size / 2, // 水平居中于槽位
+        targetY: targetY,
+        scale: 0.3,
+        alpha: 0
+      };
+    } else {
+      // 默认位置（屏幕中央）
+      this.toolAnim = {
+        active: true,
+        progress: 0,
+        startX: this.screenWidth / 2,
+        startY: toolSlotBottomY - 30,
+        targetX: this.screenWidth / 2,
+        targetY: targetY,
+        scale: 0.3,
+        alpha: 0
+      };
+    }
+    
+    // 重置涂抹状态（后续拖动到圆圈时再用）
+    this.wipeStartAngle = null;
+    this.totalWipeAngle = 0;
+    this.clockwiseWipes = 0;
+  }
+  
+  /**
+   * 温和Q弹缓动函数（微弱回弹）
+   */
+  _easeOutElastic(t) {
+    // 更温和的弹性效果
+    if (t === 0) return 0;
+    if (t === 1) return 1;
+    // 减小振幅和频率，让回弹更微弱
+    return Math.pow(2, -6 * t) * Math.sin((t * 4 - 0.3) * ((2 * Math.PI) / 3)) * 0.3 + 1;
+  }
+  
+  /**
+   * 选择工具时回调
+   */
+  _selectTool(index) {
+    this.currentToolIndex = index;
+    
+    // 同步更新 ToolSlot 组件
+    if (this.toolSlot && this.toolSlot.selectedIndex !== index) {
+      this.toolSlot.selectedIndex = index;
+    }
+    
+    // 通知工具槽该槽位已空（工具被取出）
+    if (this.toolSlot) {
+      this.toolSlot.setEmptySlot(index);
+    }
+    
+    // 点击工具槽直接弹出活动工具（不再依赖选中的圆圈）
+    this._spawnTool();
+    
+    this.showToolTip = true;
+    // 重置提示框定时器
+    if (this._toolTipTimer) clearTimeout(this._toolTipTimer);
+    this._toolTipTimer = setTimeout(() => {
+      this.showToolTip = false;
+    }, 2000);
+  }
+  
+  /**
+   * 更新工具拖动，检测顺时针涂抹
+   */
+  _updateToolDrag(x, y) {
+    if (!this.isDraggingTool || !this.selectedDirt) return;
+    
+    const dirt = this.selectedDirt;
+    const gameAreaY = this.screenHeight * 0.08;
+    
+    // 计算工具相对于圆圈中心的角度
+    const dx = x - dirt.x;
+    const dy = y - (dirt.y + gameAreaY);
+    const angle = Math.atan2(dy, dx);
+    
+    if (this.wipeStartAngle === null) {
+      this.wipeStartAngle = angle;
+      this.lastDragAngle = angle;
+      this.totalWipeAngle = 0;
+    } else {
+      // 计算角度变化
+      let deltaAngle = angle - this.lastDragAngle;
+      
+      // 处理角度跨越 -PI 到 PI 的边界
+      if (deltaAngle > Math.PI) deltaAngle -= Math.PI * 2;
+      if (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
+      
+      // 只累加顺时针角度（正值）
+      if (deltaAngle > 0) {
+        this.totalWipeAngle += deltaAngle;
+      }
+      
+      this.lastDragAngle = angle;
+      
+      // 检查是否完成一圈（2PI）
+      if (this.totalWipeAngle >= Math.PI * 2) {
+        this.clockwiseWipes++;
+        this.totalWipeAngle = 0;
+        this.wipeStartAngle = angle;
+        
+        // 更新圆圈涂抹进度
+        dirt.wipeCount = this.clockwiseWipes;
+        
+        // 完成2次涂抹
+        if (this.clockwiseWipes >= 2) {
+          this._completeCleanDirt(dirt);
+        }
+      }
+    }
+    
+    // 更新工具位置
+    this.toolPosition = { x, y };
+    this.selectedDirt.cleaning = true;
+  }
+  
+  /**
+   * 完成清洁污垢
+   */
+  _completeCleanDirt(dirt) {
+    dirt.state = 'clean';
+    dirt.selected = false;
+    dirt.cleaning = false;
+    
+    // 清除活动工具
+    this.activeTool = null;
+    this.isDraggingTool = false;
+    this.selectedDirt = null;
+    
+    // 增加清洁度
+    this.cleanProgress += 10;
+    
+    // 显示 Toast
+    this._showToast('清洁完成！清洁度 +10');
+    
+    // 添加闪光粒子效果
+    const s = this.screenWidth / 750;
+    for (let i = 0; i < 8; i++) {
+      this.sparkles.push({
+        x: dirt.x,
+        y: dirt.y + this.screenHeight * 0.08,
+        vx: (Math.random() - 0.5) * 10 * s,
+        vy: (Math.random() - 0.5) * 10 * s,
+        life: 1,
+        size: (5 + Math.random() * 10) * s
+      });
+    }
+    
+    // 检查是否全部清洁完成
+    if (this.dirtObjects.every(d => d.state === 'clean')) {
+      setTimeout(() => {
+        this._showSettlement();
+      }, 1000);
+    }
+  }
+  
+  /**
+   * 显示 Toast 提示
+   */
+  _showToast(message) {
+    // 使用事件系统显示 toast
+    const { globalEvent } = require('../core/EventEmitter');
+    globalEvent.emit('game:toast', message);
+    
+    // 同时控制台输出
+    console.log(`[GameplayScene] Toast: ${message}`);
   }
 
   _cleanDirt(dirt) {

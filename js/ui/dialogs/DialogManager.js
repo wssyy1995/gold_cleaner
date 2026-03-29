@@ -32,8 +32,11 @@ class DialogManager {
       this.currentDialog.hide();
     }
 
-    // 设置屏幕尺寸
-    dialog.setScreenSize(this.screenWidth, this.screenHeight);
+    // 不再覆盖弹窗的屏幕尺寸，使用弹窗自身设置的值
+    // 如果弹窗没有设置屏幕尺寸，才使用管理器的尺寸
+    if (!dialog.screenWidth || !dialog.screenHeight) {
+      dialog.setScreenSize(this.screenWidth, this.screenHeight);
+    }
     
     // 显示新弹窗
     this.currentDialog = dialog;

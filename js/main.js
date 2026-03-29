@@ -6,6 +6,7 @@
 import GameManager from './managers/GameManager';
 import SceneManager from './engine/SceneManager';
 import ResourceLoader from './cloud/ResourceLoader';
+import haptic from './utils/HapticFeedback';
 
 // 导入场景
 import LoadingScene from './scenes/LoadingScene';
@@ -312,6 +313,9 @@ class Main {
    * 处理触摸开始
    */
   _handleTouchStart(x, y) {
+    // 全局点击振动反馈（仅 iOS/Android）
+    haptic.light();
+    
     // 先检查弹窗
     if (this.dialogManager.hasVisibleDialog()) {
       this.dialogManager.onTouchStart(x, y);

@@ -670,15 +670,19 @@ class HomeScene extends Scene {
       ctx.fillRect(0, 0, w, 60);
     }
 
+    // 绘制顶部淡蓝色渐变蒙层（占屏幕顶部 30%）
+    this._drawTopBlueOverlay(ctx, w, h);
+
     if (!this.coinComponent) return;
 
     // 绘制金币组件
     this._drawCoinComponent(ctx);
 
-    // 绘制游戏标题和阶段标签（在主页面中间）
-    this._drawTitleImages(ctx);
-
+    // 先绘制关卡图标
     this._drawLevelIcons(ctx);
+    
+    // 再绘制游戏标题和阶段标签（确保在关卡图标之上）
+    this._drawTitleImages(ctx);
 
     if (this.shopBtn) this.shopBtn.onRender(ctx);
     if (this.toolBtn) this.toolBtn.onRender(ctx);
@@ -697,20 +701,37 @@ class HomeScene extends Scene {
   }
 
   /**
+   * 绘制顶部白色渐变蒙层
+   * 占屏幕顶部 30%，从顶部向下渐变变淡
+   */
+  _drawTopBlueOverlay(ctx, sw, sh) {
+    const overlayHeight = sh * 0.40; // 顶部 30% 区域
+    
+    // 创建从上到下的渐变（白色 -> 透明）
+    const gradient = ctx.createLinearGradient(0, 0, 0, overlayHeight);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.50)');    // 顶部：较深的白色
+    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.30)');  // 中间：更淡
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0.1)');       // 底部：完全透明
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, sw, overlayHeight);
+  }
+
+  /**
    * 绘制游戏标题和阶段标签
    */
   _drawTitleImages(ctx) {
     const s = this.screenWidth / 750;
     const centerX = this.screenWidth / 2;
-    const startY = 100 * s; // 从屏幕顶部往下 200px 开始绘制
+    const startY = 80 * s; // 从屏幕顶部往下 80px 开始绘制（可调整这个值）
     
     // 绘制游戏标题
     if (this._bg_game_titleImage && this._bg_game_titleLoaded) {
-      const titleHeight = 500 * s; // 标题高度
+      const titleHeight = 600 * s; // 标题高度
       const titleScale = titleHeight / this._bg_game_titleImage.height;
       const titleWidth = this._bg_game_titleImage.width * titleScale;
       const titleX = centerX - titleWidth / 2;
-      const titleY = startY;
+      const titleY = startY-20;
       
       ctx.drawImage(
         this._bg_game_titleImage, 
@@ -721,13 +742,13 @@ class HomeScene extends Scene {
     
     // 绘制阶段标签（在标题下方）
     if (this._bg_stage1_tagImage && this._bg_stage1_tagLoaded) {
-      const tagHeight = 200 * s; // 标签高度（从60加大到80）
+      const tagHeight = 120 * s; // 标签高度（从60加大到80）
       const tagScale = tagHeight / this._bg_stage1_tagImage.height;
       const tagWidth = this._bg_stage1_tagImage.width * tagScale;
       const tagX = centerX - tagWidth / 2;
       // 如果有标题，标签放在标题下方 20px；如果没有，放在 startY
       const tagY = (this._bg_game_titleImage && this._bg_game_titleLoaded) 
-        ? startY + 300 * s + 20 * s 
+        ? startY + 300 * s -10
         : startY;
       
       ctx.drawImage(

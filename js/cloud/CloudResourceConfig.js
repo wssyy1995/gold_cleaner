@@ -13,77 +13,59 @@
  * 请从微信开发者工具云存储控制台复制实际的完整 fileID
  */
 export const PRELOAD_CLOUD_FILE_IDS = {
-  // UI 图标（必须）
-  'ui_icon_locked': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/icon/ui-icon-locked.png',
-  'ui_icon_unlocked': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/icon/ui-icon-unlocked.png',
-  'ui_icon_pass': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/icon/ui-icon-pass.png',
+  // UI 图标（必须） - key 与文件名保持一致
+  'ui-icon-locked': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/icon/ui-icon-locked.png',
+  'ui-icon-unlocked': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/icon/ui-icon-unlocked.png',
+  'ui-icon-pass': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/icon/ui-icon-pass.png',
   // 主页背景图（根据用户进度动态选择 stage）
-  'bg_home_stage1': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage1-home.png',
-  'bg_home_stage2': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage2-home.png',
-  'bg_home_stage3': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage3-home.png',
-  'bg_home_stage4': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage4-home.png',
+  'bg-stage1-home': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage1-home.png',
+  'bg-stage2-home': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage2-home.png',
+  'bg-stage3-home': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage3-home.png',
+  'bg-stage4-home': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage4-home.png',
   // 新用户第一关预览图（必须预加载，用户第一眼看到的关卡）
-  'game_stage1_l1': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l1_home.png',
+  'game_stage1_l1_home': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l1_home.png',
   // 游戏标题和阶段标签（主页面中间显示）
   'bg_game_title': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_game_title.png',
   'bg_stage1_tag': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_stage1_tag.png'
 };
 
+// 云环境 ID（从 PRELOAD_CLOUD_FILE_IDS 中提取）
+const CLOUD_ENV_ID = 'cloudbase-0gku48938517adc7';
+const CLOUD_ENV_SUFFIX = '636c-cloudbase-0gku48938517adc7-1416711846';
+
 /**
- * 可选的云存储资源（如需要动态更新）
- * 如果配置了云存储 fileID，则优先从云存储加载
- * 否则从本地 images/ 目录加载
- * 
- * 关卡图片：配置后优先从云存储加载，不配置则从本地加载
+ * 根据 key 生成云存储 fileID
+ * 格式：cloud://{envId}.{wxappid}-{appid}-{timestamp}/images/xxx.png
+ * @param {string} key - 图片 key（不含扩展名）
+ * @returns {string|null} - fileID
  */
-export const OPTIONAL_CLOUD_FILE_IDS = {
-  // Stage 1 关卡预览图（l1 已在预加载列表中）
-  'game_stage1_l2': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l2_home.png',
-  'game_stage1_l3': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l3_home.png',
-  'game_stage1_l4': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l4_home.png',
-  'game_stage1_l5': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l5_home.png',
-  'game_stage1_l6': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l6_home.png',
-  'game_stage1_l7': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l7_home.png',
-  'game_stage1_l8': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l8_home.png',
-  'game_stage1_l9': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l9_home.png',
-  'game_stage1_l10': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l10_home.png',
+export function getCloudFileID(key) {
+  if (!key) return null;
   
-  // Stage 2 关卡预览图
-  'game_stage2_l1': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage2_l1_home.png',
-  'game_stage2_l2': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage2_l2_home.png',
-  'game_stage2_l3': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage2_l3_home.png',
-  'game_stage2_l4': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage2_l4_home.png',
-  'game_stage2_l5': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage2_l5_home.png',
-  'game_stage2_l6': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage2_l6_home.png',
-  'game_stage2_l7': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage2_l7_home.png',
-  'game_stage2_l8': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage2_l8_home.png',
-  'game_stage2_l9': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage2_l9_home.png',
-  'game_stage2_l10': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage2_l10_home.png',
+  // 根据 key 确定路径
+  let cloudPath = '';
   
-  // Stage 3 关卡预览图
-  'game_stage3_l1': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage3_l1_home.png',
-  'game_stage3_l2': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage3_l2_home.png',
-  'game_stage3_l3': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage3_l3_home.png',
-  'game_stage3_l4': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage3_l4_home.png',
-  'game_stage3_l5': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage3_l5_home.png',
-  'game_stage3_l6': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage3_l6_home.png',
-  'game_stage3_l7': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage3_l7_home.png',
-  'game_stage3_l8': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage3_l8_home.png',
-  'game_stage3_l9': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage3_l9_home.png',
-  'game_stage3_l10': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage3_l10_home.png',
+  // UI 图标
+  if (key.startsWith('ui-icon-')) {
+    cloudPath = `images/ui/icon/${key}.png`;
+  }
+  // 主页背景
+  else if (key.startsWith('bg-stage') && key.endsWith('-home')) {
+    cloudPath = `images/backgrounds/${key}.png`;
+  }
+  // 标题和标签
+  else if (key.startsWith('bg_')) {
+    cloudPath = `images/backgrounds/${key}.png`;
+  }
+  // 关卡图片
+  else if (key.startsWith('game_stage') && key.endsWith('_home')) {
+    cloudPath = `images/game/${key}.png`;
+  }
   
-  // Stage 4 关卡预览图
-  'game_stage4_l1': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage4_l1_home.png',
-  'game_stage4_l2': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage4_l2_home.png',
-  'game_stage4_l3': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage4_l3_home.png',
-  'game_stage4_l4': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage4_l4_home.png',
-  'game_stage4_l5': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage4_l5_home.png',
-  'game_stage4_l6': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage4_l6_home.png',
-  'game_stage4_l7': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage4_l7_home.png',
-  'game_stage4_l8': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage4_l8_home.png',
-  'game_stage4_l9': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage4_l9_home.png',
-  'game_stage4_l10': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage4_l10_home.png',
-};
+  if (!cloudPath) return null;
+  
+  return `cloud://${CLOUD_ENV_ID}.${CLOUD_ENV_SUFFIX}/${cloudPath}`;
+}
 
 /**
  * 获取所有需要预加载的图片列表（给 LoadingScene 使用）
@@ -97,11 +79,23 @@ export function getAllPreloadImages() {
 
 /**
  * 获取图片加载配置
+ * 逻辑：
+ * 1. 如果是 bg-001-loading，强制从本地加载
+ * 2. 如果在必预载列表中，从云存储加载
+ * 3. 其他图片，尝试从云存储缓存记录中获取 fileID，找不到则回退到本地
  * @param {string} key - 图片标识
  * @returns {Object} - { type: 'cloud'|'local', fileID?: string, localPath: string }
  */
 export function getImageLoadConfig(key) {
-  // 1. 检查是否在必预载列表中
+  // 1. 强制本地加载的图片（加载页背景）
+  if (key === 'bg-001-loading') {
+    return {
+      type: 'local',
+      localPath: 'images/backgrounds/bg-001-loading.png'
+    };
+  }
+  
+  // 2. 检查是否在必预载列表中
   if (PRELOAD_CLOUD_FILE_IDS[key]) {
     return {
       type: 'cloud',
@@ -110,16 +104,17 @@ export function getImageLoadConfig(key) {
     };
   }
   
-  // 2. 检查是否在可选云存储列表中
-  if (OPTIONAL_CLOUD_FILE_IDS[key]) {
+  // 3. 尝试从云存储缓存记录中获取 fileID
+  const fileID = getCloudFileID(key);
+  if (fileID) {
     return {
       type: 'cloud',
-      fileID: OPTIONAL_CLOUD_FILE_IDS[key],
+      fileID: fileID,
       cacheKey: key
     };
   }
   
-  // 3. 返回本地路径
+  // 4. 回退到本地加载
   const localPath = getLocalImagePath(key);
   return {
     type: 'local',
@@ -129,31 +124,32 @@ export function getImageLoadConfig(key) {
 
 /**
  * 获取本地图片路径（动态构建，避免编译检查）
+ * key 与文件名保持一致（不含扩展名）
  */
 function getLocalImagePath(key) {
   const parts = ['images'];
   
-  // UI 图标
-  if (key.startsWith('ui_icon_')) {
-    const name = key.replace('ui_icon_', '');
-    parts.push('ui', 'icon', `ui-icon-${name}.png`);
+  // UI 图标 (ui-icon-locked → images/ui/icon/ui-icon-locked.png)
+  if (key.startsWith('ui-icon-')) {
+    parts.push('ui', 'icon', `${key}.png`);
     return parts.join('/');
   }
   
-  // 背景
-  if (key === 'bg_loading') {
-    parts.push('backgrounds', 'bg-001-loading.png');
-    return parts.join('/');
-  }
-  if (key === 'bg_home') {
-    parts.push('backgrounds', 'bg-stage1-home.png');
+  // 主页背景 (bg-stage1-home → images/backgrounds/bg-stage1-home.png)
+  if (key.startsWith('bg-stage') && key.endsWith('-home')) {
+    parts.push('backgrounds', `${key}.png`);
     return parts.join('/');
   }
   
-  // 关卡图片
-  const match = key.match(/game_stage(\d+)_l(\d+)/);
-  if (match) {
-    parts.push('game', `game_stage${match[1]}_l${match[2]}_home.png`);
+  // 标题和标签 (bg_game_title → images/backgrounds/bg_game_title.png)
+  if (key.startsWith('bg_')) {
+    parts.push('backgrounds', `${key}.png`);
+    return parts.join('/');
+  }
+  
+  // 关卡图片 (game_stage1_l1_home → images/game/game_stage1_l1_home.png)
+  if (key.startsWith('game_stage') && key.endsWith('_home')) {
+    parts.push('game', `${key}.png`);
     return parts.join('/');
   }
   
@@ -162,9 +158,10 @@ function getLocalImagePath(key) {
 
 /**
  * 根据阶段和关卡生成 key
+ * key 与文件名保持一致（不含扩展名）
  */
 export function getLevelImageKey(stage, level) {
-  return `game_stage${stage}_l${level}`;
+  return `game_stage${stage}_l${level}_home`;
 }
 
 /**
@@ -184,9 +181,9 @@ export function isPreloadCloudImage(key) {
 
 export default {
   PRELOAD_CLOUD_FILE_IDS,
-  OPTIONAL_CLOUD_FILE_IDS,
   getAllPreloadImages,
   getImageLoadConfig,
+  getCloudFileID,
   getLevelImageKey,
   getLevelImageConfig,
   isPreloadCloudImage
@@ -196,9 +193,9 @@ export default {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     PRELOAD_CLOUD_FILE_IDS,
-    OPTIONAL_CLOUD_FILE_IDS,
     getAllPreloadImages,
     getImageLoadConfig,
+    getCloudFileID,
     getLevelImageKey,
     getLevelImageConfig,
     isPreloadCloudImage

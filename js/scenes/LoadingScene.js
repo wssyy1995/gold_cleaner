@@ -81,9 +81,9 @@ class LoadingScene extends Scene {
     // 过滤掉其他 stage 的背景图，只保留当前 stage 的
     this.resourcesToLoad = this.resourcesToLoad.filter(resource => {
       // 保留非背景图资源
-      if (!resource.key.startsWith('bg_home_stage')) return true;
+      if (!resource.key.startsWith('bg-stage')) return true;
       // 只保留当前 stage 的背景图
-      return resource.key === `bg_home_stage${currentStage}`;
+      return resource.key === `bg-stage${currentStage}-home`;
     });
     
     console.log(`[LoadingScene] 需要加载 ${this.resourcesToLoad.length} 个资源，当前 stage: ${currentStage}`);
@@ -261,7 +261,7 @@ class LoadingScene extends Scene {
       
       // 从缓存记录中获取云存储 fileID
       const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
-      const cacheKey = `bg_home_stage${currentStage}`;
+      const cacheKey = `bg-stage${currentStage}-home`;
       const cacheInfo = cacheRecord[cacheKey];
       
       if (cacheInfo && cacheInfo.fileID) {

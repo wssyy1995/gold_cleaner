@@ -182,7 +182,10 @@ class ShopScene extends Scene {
     }
     
     // 显示确认弹窗
-    globalEvent.emit('dialog:show', 'ConfirmDialog', {
+    const ConfirmDialog = require('../ui/dialogs/ConfirmDialog').default;
+    const dialog = new ConfirmDialog({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight,
       title: '确认购买',
       message: `确定要花费 ${product.price} 金币购买 ${product.name} 吗？`,
       confirmText: '购买',
@@ -191,6 +194,7 @@ class ShopScene extends Scene {
         this._confirmPurchase(product);
       }
     });
+    globalEvent.emit('dialog:show', dialog);
   }
 
   _confirmPurchase(product) {

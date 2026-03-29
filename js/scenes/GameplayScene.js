@@ -8,6 +8,8 @@ import Text from '../ui/components/Text';
 import ProgressBar from '../ui/components/ProgressBar';
 import TopBar from '../ui/components/TopBar';
 import ToolSlot from '../ui/components/ToolSlot';
+import GameConfig from '../config/GameConfig';
+import { BASE_TOOLS, getTool } from '../config/ToolConfig';
 import { GlobalPreviewCache } from './HomeScene';
 import { globalEvent } from '../core/EventEmitter';
 import { getGame } from '../../app';
@@ -132,13 +134,21 @@ class GameplayScene extends Scene {
   _initUI() {
     const s = this.screenWidth / 750;
     
+    // 先从配置获取关卡数据（TopBar 需要用到 timeLimit）
+    this.timeLimit = GameConfig.getTimeLimit(this.levelId);
+    this.remainingTime = this.timeLimit;
+    
+    // 从配置获取当前关卡可用的工具
+    this.tools = GameConfig.getAvailableTools(this.levelId);
+    this.currentToolIndex = 0;
+    
     // 新的 TopBar 组件（替换原有顶部 UI）
     this.topBar = new TopBar({
       screenWidth: this.screenWidth,
       screenHeight: this.screenHeight,
       levelText: `${this.levelId}/10`,
       progress: 0,
-      timeText: '60s',
+      timeText: `${this.timeLimit}s`,
       paused: false,
       onPauseClick: () => this._showPauseMenu()
     });
@@ -171,16 +181,6 @@ class GameplayScene extends Scene {
       }
     });
 
-    // 工具数据
-    this.tools = [
-      { id: 'cloth', name: '抹布', color: '#4A90D9' },
-      { id: 'sponge', name: '海绵', color: '#66BB6A' },
-      { id: 'brush', name: '刷子', color: '#FFA726' },
-      { id: 'spray', name: '喷雾', color: '#AB47BC' },
-      { id: 'vacuum', name: '吸尘器', color: '#EF5350' },
-    ];
-    this.currentToolIndex = 0;
-    
     // 创建 ToolSlot 组件
     this.toolSlot = new ToolSlot({
       screenWidth: this.screenWidth,
@@ -221,36 +221,35 @@ class GameplayScene extends Scene {
     const s = this.screenWidth / 750;
     this.dirtObjects = [];
     
-    // 定义几种污垢类型和对应的清洁配方
-    const dirtTypes = [
-      { type: 'dust', name: '灰尘', color: '#8B4513', recipes: [['cloth'], ['sponge']] },
-      { type: 'stain', name: '污渍', color: '#654321', recipes: [['spray', 'cloth'], ['sponge']] },
-      { type: 'grime', name: '油垢', color: '#3E2723', recipes: [['spray', 'brush'], ['sponge', 'sponge']] },
-    ];
+    // 从配置获取当前关卡可用的污垢类型和数量
+    const availableDirtTypes = GameConfig.getAvailableDirtTypes(this.levelId);
+    const dirtCount = GameConfig.getDirtCount(this.levelId);
     
     // 游戏区域是屏幕下方 90%
     const gameAreaHeight = this.screenHeight * 0.9;
     
-    for (let i = 0; i < 5; i++) {
-      const dirtType = dirtTypes[Math.floor(Math.random() * dirtTypes.length)];
+    for (let i = 0; i < dirtCount; i++) {
+      const dirtConfig = availableDirtTypes[Math.floor(Math.random() * availableDirtTypes.length)];
       // y 坐标基于游戏区域（0 ~ gameAreaHeight），渲染时会加上 top_bar 偏移
       const relativeY = (50 + Math.random() * (gameAreaHeight / s - 150)) * s;
       
       this.dirtObjects.push({
         id: i,
-        type: dirtType.type,
-        name: dirtType.name,
+        type: dirtConfig.type,
+        name: dirtConfig.name,
         x: (80 + Math.random() * 590) * s,
         y: relativeY, // 相对于游戏区域的 y 坐标
         width: 100 * s, 
         height: 100 * s,
         state: 'dirty', // dirty, cleaning, clean
         cleanProgress: 0,
-        maxProgress: dirtType.recipes[0].length * 100, // 需要多少次清洁
-        currentRecipe: dirtType.recipes[0],
+        maxProgress: dirtConfig.recipes[0].length * 100, // 需要多少次清洁
+        currentRecipe: dirtConfig.recipes[0],
         currentStep: 0, // 当前清洁步骤
-        color: dirtType.color,
-        recipes: dirtType.recipes
+        color: dirtConfig.color,
+        recipes: dirtConfig.recipes,
+        score: dirtConfig.score,
+        coinReward: dirtConfig.coinReward
       });
     }
   }
@@ -361,10 +360,19 @@ class GameplayScene extends Scene {
    * 显示结算弹窗
    */
   _showSettlement() {
-    const stars = 3; // 根据时间和清洁度计算
-    const coins = 100 + Math.floor(Math.random() * 50);
+    // 使用配置计算星级
+    const stars = GameConfig.calculateStars(this.remainingTime || this.timeLimit, this.timeLimit);
     
-    globalEvent.emit('dialog:show', 'SettlementDialog', {
+    // 计算清洁的污垢数量和总奖励
+    const dirtCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+    const coins = GameConfig.calculateCoins(stars, this.remainingTime || this.timeLimit, dirtCleaned);
+    
+    // 导入 SettlementDialog
+    const SettlementDialog = require('../ui/dialogs/SettlementDialog').default;
+    
+    const dialog = new SettlementDialog({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight,
       levelId: this.levelId,
       stars: stars,
       coins: coins,
@@ -378,6 +386,8 @@ class GameplayScene extends Scene {
         globalEvent.emit('scene:switch', 'HomeScene');
       }
     });
+    
+    globalEvent.emit('dialog:show', dialog);
   }
 
   /**
@@ -392,13 +402,11 @@ class GameplayScene extends Scene {
       this.topBar.updateData({ paused: true });
     }
     
-    const s = this.screenWidth / 750;
     const pauseMenu = new PauseMenu({
       screenWidth: this.screenWidth,
       screenHeight: this.screenHeight,
       onResume: () => {
         this.isPaused = false;
-        // 恢复 TopBar 暂停状态
         if (this.topBar) {
           this.topBar.updateData({ paused: false });
         }
@@ -414,24 +422,28 @@ class GameplayScene extends Scene {
       }
     });
     
-    globalEvent.emit('dialog:show', 'PauseMenu', pauseMenu);
+    globalEvent.emit('dialog:show', pauseMenu);
   }
 
   /**
    * 退出按钮点击处理
    */
   _onQuitClick() {
-    // 显示确认弹窗
-    globalEvent.emit('dialog:show', 'ConfirmDialog', {
+    const ConfirmDialog = require('../ui/dialogs/ConfirmDialog').default;
+    
+    const dialog = new ConfirmDialog({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight,
       title: '确认退出',
       message: '确定要退出当前关卡吗？进度将不会保存。',
       confirmText: '退出',
       cancelText: '继续游戏',
       onConfirm: () => {
-        // 返回首页
         globalEvent.emit('scene:switch', 'HomeScene');
       }
     });
+    
+    globalEvent.emit('dialog:show', dialog);
   }
   
   /**
@@ -448,29 +460,21 @@ class GameplayScene extends Scene {
    * 显示通关弹窗
    */
   _showLevelCompleteDialog() {
-    console.log('[GameplayScene] _showLevelCompleteDialog 开始执行');
+    console.log('[GameplayScene] 显示通关弹窗');
     
-    try {
-      const dialog = new LevelCompleteDialog({
-        screenWidth: this.screenWidth,
-        screenHeight: this.screenHeight,
-        levelId: this.levelId,
-        stage: this.stage,
-        stars: 3,
-        onConfirm: (result) => {
-          console.log('[GameplayScene] 弹窗确认回调触发:', result);
-          this._handleLevelComplete(result);
-        }
-      });
-      
-      console.log('[GameplayScene] LevelCompleteDialog 实例创建成功');
-      
-      // 注册并显示弹窗
-      globalEvent.emit('dialog:open', 'LevelCompleteDialog', dialog);
-      console.log('[GameplayScene] dialog:open 事件已发送');
-    } catch (e) {
-      console.error('[GameplayScene] 显示通关弹窗失败:', e);
-    }
+    const dialog = new LevelCompleteDialog({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight,
+      levelId: this.levelId,
+      stage: this.stage,
+      stars: 3,
+      onConfirm: (result) => {
+        this._handleLevelComplete(result);
+      }
+    });
+    
+    // 直接显示弹窗
+    globalEvent.emit('dialog:show', dialog);
   }
   
   /**
@@ -631,13 +635,13 @@ class GameplayScene extends Scene {
 
   /**
    * 渲染房间视图
-   * 布局：顶部 8% 浅棕黄色，中间 80% 游戏区域，底部 10% 浅棕黄色（工具槽）
+   * 布局：顶部 8% 浅棕黄色，中间 80% 游戏区域，底部 12% 浅棕黄色（工具槽）
    */
   _renderRoomView(ctx, s) {
-    // 区域划分
+    // 区域划分（总和 100%）
     const topAreaHeight = this.screenHeight * 0.08;    // 顶部 8%
     const gameAreaHeight = this.screenHeight * 0.80;   // 中间 80%（游戏区域）
-    const bottomAreaHeight = this.screenHeight * 0.10; // 底部 10%
+    const bottomAreaHeight = this.screenHeight * 0.12; // 底部 12%（原来是10%，现在填满剩余空间）
     
     const gameAreaY = topAreaHeight;  // 游戏区域起始 Y
     const bottomAreaY = gameAreaY + gameAreaHeight; // 底部区域起始 Y
@@ -645,9 +649,11 @@ class GameplayScene extends Scene {
     // 浅棕黄色（与 TopBar 背景色一致）
     const lightBrown = '#f3c06a';
     
-    // 1. 绘制顶部 8% 浅棕黄色背景
+    // 先填充整个屏幕背景（确保没有空白）
     ctx.fillStyle = lightBrown;
-    ctx.fillRect(0, 0, this.screenWidth, topAreaHeight);
+    ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
+    
+    // 1. 顶部区域已经是浅棕黄色（上面已填充）
     
     // 2. 绘制中间 80% 游戏区域（背景图）
     if (this.bgImage && this.bgLoaded) {

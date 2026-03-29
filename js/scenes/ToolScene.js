@@ -155,7 +155,10 @@ class ToolScene extends Scene {
   }
 
   _resetConfig() {
-    globalEvent.emit('dialog:show', 'ConfirmDialog', {
+    const ConfirmDialog = require('../ui/dialogs/ConfirmDialog').default;
+    const dialog = new ConfirmDialog({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight,
       title: '确认重置',
       message: '确定要重置工具配置吗？这将恢复默认设置。',
       confirmText: '重置',
@@ -166,6 +169,7 @@ class ToolScene extends Scene {
         this._showToast('已重置为默认配置');
       }
     });
+    globalEvent.emit('dialog:show', dialog);
   }
 
   _showToast(message) {

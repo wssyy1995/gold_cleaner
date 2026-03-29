@@ -128,10 +128,10 @@ class HomeScene extends Scene {
    * 从本地缓存加载图片（LoadingScene 已下载）
    */
   async _loadCachedImages() {
-    // 加载图标
-    await this._loadCachedIcon('locked', 'ui_icon_locked');
-    await this._loadCachedIcon('unlocked', 'ui_icon_unlocked');
-    await this._loadCachedIcon('pass', 'ui_icon_pass');
+    // 加载图标 - key 与文件名保持一致（不含扩展名）
+    await this._loadCachedIcon('locked', 'ui-icon-locked');
+    await this._loadCachedIcon('unlocked', 'ui-icon-unlocked');
+    await this._loadCachedIcon('pass', 'ui-icon-pass');
     
     // 加载背景
     await this._loadCachedBackground();
@@ -188,7 +188,7 @@ class HomeScene extends Scene {
     // 1. 尝试从云存储缓存加载（根据 currentStage 选择对应的背景）
     try {
       const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
-      const cacheKey = `bg_home_stage${this.currentStage}`;
+      const cacheKey = `bg-stage${this.currentStage}-home`;
       const cacheInfo = cacheRecord[cacheKey];
       
       if (cacheInfo && cacheInfo.fileID) {
@@ -702,11 +702,11 @@ class HomeScene extends Scene {
   _drawTitleImages(ctx) {
     const s = this.screenWidth / 750;
     const centerX = this.screenWidth / 2;
-    const startY = 200 * s; // 从屏幕顶部往下 200px 开始绘制
+    const startY = 100 * s; // 从屏幕顶部往下 200px 开始绘制
     
     // 绘制游戏标题
     if (this._bg_game_titleImage && this._bg_game_titleLoaded) {
-      const titleHeight = 120 * s; // 标题高度
+      const titleHeight = 500 * s; // 标题高度
       const titleScale = titleHeight / this._bg_game_titleImage.height;
       const titleWidth = this._bg_game_titleImage.width * titleScale;
       const titleX = centerX - titleWidth / 2;
@@ -721,13 +721,13 @@ class HomeScene extends Scene {
     
     // 绘制阶段标签（在标题下方）
     if (this._bg_stage1_tagImage && this._bg_stage1_tagLoaded) {
-      const tagHeight = 60 * s; // 标签高度
+      const tagHeight = 200 * s; // 标签高度（从60加大到80）
       const tagScale = tagHeight / this._bg_stage1_tagImage.height;
       const tagWidth = this._bg_stage1_tagImage.width * tagScale;
       const tagX = centerX - tagWidth / 2;
       // 如果有标题，标签放在标题下方 20px；如果没有，放在 startY
       const tagY = (this._bg_game_titleImage && this._bg_game_titleLoaded) 
-        ? startY + 120 * s + 20 * s 
+        ? startY + 300 * s + 20 * s 
         : startY;
       
       ctx.drawImage(

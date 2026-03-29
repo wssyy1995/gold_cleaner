@@ -32,7 +32,7 @@ export const BASE_TOOLS = [
     description: '刷洗顽固污垢',
     efficiency: 1.0,
     type: 'base',
-    unlockLevel: 3
+    unlockLevel: 1
   },
   {
     id: 'spray',
@@ -42,7 +42,7 @@ export const BASE_TOOLS = [
     description: '喷洒清洁剂，预处理污垢',
     efficiency: 0.5, // 喷雾本身清洁力低，但可组合
     type: 'auxiliary',
-    unlockLevel: 3
+    unlockLevel: 1
   },
   {
     id: 'vacuum',
@@ -52,7 +52,7 @@ export const BASE_TOOLS = [
     description: '快速清理大量灰尘',
     efficiency: 2.0,
     type: 'advanced',
-    unlockLevel: 5
+    unlockLevel: 2
   }
 ];
 

@@ -1,190 +1,208 @@
 /**
- * GameConfig 游戏常量与系统配置
+ * 游戏配置文件
+ * 集中管理游戏数据：污垢、关卡等
+ * 工具配置在 ToolConfig.js 中
  */
 
-export const GAME_INFO = {
-  name: '金牌保洁升职记',
-  version: '1.0.0',
-  company: '金牌保洁工作室',
-  copyright: '© 2024 金牌保洁工作室 版权所有'
-};
+import { BASE_TOOLS } from './ToolConfig';
 
-// 游戏常量
-export const GAME_CONSTANTS = {
-  // 时间相关
-  DEFAULT_LEVEL_TIME: 60, // 默认关卡时间（秒）
-  MIN_LEVEL_TIME: 30,
-  MAX_LEVEL_TIME: 300,
-  
-  // 评分标准
-  STAR_RATINGS: {
-    3: { threshold: 0.9, timeBonus: 50 }, // 90%清洁度+时间奖励
-    2: { threshold: 0.7, timeBonus: 0 },  // 70%清洁度
-    1: { threshold: 0.5, timeBonus: 0 }   // 50%清洁度
+const GameConfig = {
+  // ==================== 污垢配置 ====================
+  dirtTypes: [
+    {
+      type: 'dust',
+      name: '灰尘',
+      color: '#8B4513',
+      description: '普通灰尘，容易清理',
+      recipes: [
+        ['cloth'],           // 方案1：抹布
+        ['sponge'],          // 方案2：海绵
+        ['vacuum']           // 方案3：吸尘器
+      ],
+      score: 10,             // 清洁得分
+      coinReward: 5          // 金币奖励
+    },
+    {
+      type: 'stain',
+      name: '污渍',
+      color: '#654321',
+      description: '液体留下的污渍',
+      recipes: [
+        ['sponge'],                  // 方案1：海绵
+        ['spray', 'cloth'],          // 方案2：喷雾+抹布
+        ['spray', 'sponge']          // 方案3：喷雾+海绵
+      ],
+      score: 20,
+      coinReward: 10
+    },
+    {
+      type: 'grime',
+      name: '油垢',
+      color: '#3E2723',
+      description: '顽固的油垢，需要多次清洁',
+      recipes: [
+        ['spray', 'brush'],          // 方案1：喷雾+刷子
+        ['spray', 'sponge', 'sponge'], // 方案2：喷雾+海绵x2
+        ['spray', 'spray', 'cloth']    // 方案3：喷雾x2+抹布
+      ],
+      score: 30,
+      coinReward: 15
+    },
+    {
+      type: 'mud',
+      name: '泥渍',
+      color: '#5D4037',
+      description: '干掉的泥巴',
+      recipes: [
+        ['brush', 'sponge'],         // 方案1：刷子+海绵
+        ['spray', 'brush', 'cloth'], // 方案2：喷雾+刷子+抹布
+        ['vacuum', 'sponge']         // 方案3：吸尘器+海绵
+      ],
+      score: 25,
+      coinReward: 12
+    },
+    {
+      type: 'paint',
+      name: '油漆',
+      color: '#C62828',
+      description: '最难清理的油漆渍',
+      recipes: [
+        ['spray', 'spray', 'brush', 'cloth'],  // 方案1
+        ['spray', 'brush', 'sponge', 'sponge'] // 方案2
+      ],
+      score: 50,
+      coinReward: 25
+    }
+  ],
+
+  // ==================== 关卡配置 ====================
+  levels: {
+    // 每关的污垢数量
+    dirtCount: {
+      1: 3,
+      2: 4,
+      3: 4,
+      4: 5,
+      5: 5,
+      6: 6,
+      7: 6,
+      8: 7,
+      9: 7,
+      10: 8
+    },
+    // 每关的时间限制（秒）
+    timeLimit: {
+      1: 60,
+      2: 60,
+      3: 70,
+      4: 70,
+      5: 80,
+      6: 80,
+      7: 90,
+      8: 90,
+      9: 100,
+      10: 120
+    },
+    // 每关可用的污垢类型
+    availableDirtTypes: {
+      1: ['dust'],                    // 第1关：只有灰尘
+      2: ['dust', 'stain'],           // 第2关：灰尘、污渍
+      3: ['dust', 'stain'],           // 第3关：灰尘、污渍
+      4: ['dust', 'stain', 'mud'],    // 第4关：新增泥渍
+      5: ['dust', 'stain', 'mud'],
+      6: ['dust', 'stain', 'mud', 'grime'], // 第6关：新增油垢
+      7: ['stain', 'mud', 'grime'],
+      8: ['stain', 'mud', 'grime', 'paint'], // 第8关：新增油漆
+      9: ['mud', 'grime', 'paint'],
+      10: ['dust', 'stain', 'mud', 'grime', 'paint'] // 第10关：全部类型
+    }
   },
-  
-  // 经济系统
-  BASE_COINS_PER_LEVEL: 50,
-  COINS_PER_STAR: 30,
-  PERFECT_BONUS: 100,
-  
-  // 分享奖励
-  SHARE_REWARD: 50,
-  MAX_SHARES_PER_DAY: 3,
-  
-  // 工具槽
-  MAX_TOOL_SLOTS: 8,
-  DEFAULT_TOOL_SLOTS: 4,
-  
-  // 动画
-  ANIMATION_DURATION: 300,
-  CLEAN_EFFECT_DURATION: 1000,
-  
-  // 物理
-  DRAG_THRESHOLD: 10, // 拖动判定阈值
-  DOUBLE_CLICK_TIME: 300, // 双击时间间隔
-  
-  // 保存
-  AUTO_SAVE_INTERVAL: 30000 // 自动保存间隔（30秒）
-};
 
-// 本地存储键名
-export const STORAGE_KEYS = {
-  PLAYER_DATA: 'playerData',
-  GAME_SETTINGS: 'gameSettings',
-  TOOL_SLOTS: 'toolSlots',
-  TOOL_INVENTORY: 'toolInventory',
-  OWNED_PRODUCTS: 'ownedProducts',
-  OWNED_SKILLS: 'ownedSkills',
-  COMPLETED_LEVELS: 'completedLevels',
-  CURRENT_STAGE: 'currentStage',
-  COINS: 'coins',
-  SHARE_COUNT: 'shareCount',
-  SHARE_DATE: 'shareDate',
-  FIRST_PLAY: 'firstPlay',
-  TUTORIAL_COMPLETED: 'tutorialCompleted'
-};
+  // ==================== 游戏参数 ====================
+  game: {
+    // 屏幕布局比例
+    layout: {
+      topBarHeight: 0.08,      // 顶部栏高度占比
+      gameAreaHeight: 0.80,    // 游戏区域高度占比
+      toolSlotHeight: 0.10     // 工具槽高度占比
+    },
+    // 评分标准（根据剩余时间）
+    starRating: {
+      3: 0.6,  // 剩余 60% 以上时间 = 3星
+      2: 0.3,  // 剩余 30% 以上时间 = 2星
+      1: 0     // 其他 = 1星
+    },
+    // 金币计算
+    coins: {
+      baseReward: 50,          // 基础奖励
+      perStarBonus: 25,        // 每颗星额外奖励
+      timeBonus: 0.5           // 每秒剩余时间兑换金币
+    }
+  },
 
-// 玩家数据结构
-export const DEFAULT_PLAYER_DATA = {
-  coins: 0,
-  currentStage: 1,
-  completedLevels: {}, // { '1-1': { stars: 3, score: 100 }, ... }
-  ownedTools: ['cloth', 'sponge'],
-  ownedSkills: [],
-  toolSlots: ['cloth', 'sponge', null, null, null, null, null, null],
-  stats: {
-    totalLevelsPlayed: 0,
-    totalLevelsCompleted: 0,
-    totalStars: 0,
-    totalCoinsEarned: 0
+  // ==================== 工具方法 ====================
+  
+  /**
+   * 获取指定类型的污垢配置
+   */
+  getDirtType(type) {
+    return this.dirtTypes.find(d => d.type === type) || null;
+  },
+
+  /**
+   * 获取指定关卡可用的工具列表（从 ToolConfig）
+   */
+  getAvailableTools(levelId) {
+    // 从 ToolConfig 的 BASE_TOOLS 中筛选
+    return BASE_TOOLS.filter(t => t.unlockLevel <= levelId);
+  },
+
+  /**
+   * 获取指定关卡可用的污垢类型
+   */
+  getAvailableDirtTypes(levelId) {
+    const types = this.levels.availableDirtTypes[levelId] || ['dust'];
+    return types.map(type => this.getDirtType(type)).filter(Boolean);
+  },
+
+  /**
+   * 获取关卡的污垢数量
+   */
+  getDirtCount(levelId) {
+    return this.levels.dirtCount[levelId] || 5;
+  },
+
+  /**
+   * 获取关卡的时间限制
+   */
+  getTimeLimit(levelId) {
+    return this.levels.timeLimit[levelId] || 60;
+  },
+
+  /**
+   * 计算星级评分
+   * @param {number} remainingTime - 剩余时间（秒）
+   * @param {number} totalTime - 总时间（秒）
+   */
+  calculateStars(remainingTime, totalTime) {
+    const ratio = remainingTime / totalTime;
+    if (ratio >= this.game.starRating[3]) return 3;
+    if (ratio >= this.game.starRating[2]) return 2;
+    return 1;
+  },
+
+  /**
+   * 计算金币奖励
+   * @param {number} stars - 星级
+   * @param {number} remainingTime - 剩余时间
+   * @param {number} dirtCleaned - 清洁的污垢数量
+   */
+  calculateCoins(stars, remainingTime, dirtCleaned) {
+    const base = this.game.coins.baseReward;
+    const starBonus = stars * this.game.coins.perStarBonus;
+    const timeBonus = Math.floor(remainingTime * this.game.coins.timeBonus);
+    return base + starBonus + timeBonus;
   }
 };
 
-// 默认游戏设置
-export const DEFAULT_SETTINGS = {
-  musicVolume: 0.8,
-  soundVolume: 1.0,
-  vibration: true,
-  notification: true,
-  highQuality: true
-};
-
-// 音频资源清单
-export const AUDIO_ASSETS = {
-  bgm: {
-    menu: 'audio/bgm_menu.mp3',
-    gameplay: 'audio/bgm_gameplay.mp3',
-    boss: 'audio/bgm_boss.mp3'
-  },
-  sfx: {
-    click: 'audio/sfx_click.mp3',
-    clean: 'audio/sfx_clean.mp3',
-    complete: 'audio/sfx_complete.mp3',
-    error: 'audio/sfx_error.mp3',
-    success: 'audio/sfx_success.mp3',
-    coin: 'audio/sfx_coin.mp3',
-    star: 'audio/sfx_star.mp3',
-    unlock: 'audio/sfx_unlock.mp3'
-  }
-};
-
-// UI资源清单
-export const UI_ASSETS = {
-  backgrounds: {
-    loading: 'images/backgrounds/bg-001-loading.png',
-    home: 'images/backgrounds/bg-stage1-home.png',
-    shop: 'images/backgrounds/bg-003-shop.png'
-  },
-  icons: {
-    locked: 'images/ui/icon/ui-icon-locked.png',
-    unlocked: 'images/ui/icon/ui-icon-unlocked.png',
-    pass: 'images/ui/icon/ui-icon-pass.png',
-    coin: 'images/ui/coin.png',
-    star: 'images/ui/star.png'
-  }
-};
-
-// 颜色配置
-export const COLORS = {
-  primary: '#4A90D9',
-  success: '#4CAF50',
-  warning: '#FF9500',
-  danger: '#EF5350',
-  info: '#2196F3',
-  
-  text: {
-    primary: '#333333',
-    secondary: '#666666',
-    tertiary: '#999999',
-    inverse: '#FFFFFF'
-  },
-  
-  background: {
-    primary: '#FFFFFF',
-    secondary: '#F5F5F5',
-    tertiary: '#E8E8E8'
-  },
-  
-  stage: {
-    1: '#4CAF50', // 绿
-    2: '#2196F3', // 蓝
-    3: '#FF9800', // 橙
-    4: '#9C27B0'  // 紫
-  }
-};
-
-// 微信分享配置
-export const SHARE_CONFIG = {
-  title: '金牌保洁升职记 - 来挑战清洁大师吧！',
-  imageUrl: 'images/share.png',
-  query: '',
-  templates: [
-    '我在金牌保洁升职记中完成了关卡{level}，获得了{stars}星！',
-    '清洁小能手就是我！刚在金牌保洁升职记中获得了{stars}星评价！',
-    '这关太难了吧！有人能帮我通关金牌保洁升职记关卡{level}吗？',
-    '我又解锁了新工具！金牌保洁升职记真的会上瘾！'
-  ]
-};
-
-// 调试配置
-export const DEBUG = {
-  enabled: false,
-  showFPS: false,
-  showHitBoxes: false,
-  unlimitedCoins: false,
-  skipTutorial: false
-};
-
-export default {
-  GAME_INFO,
-  GAME_CONSTANTS,
-  STORAGE_KEYS,
-  DEFAULT_PLAYER_DATA,
-  DEFAULT_SETTINGS,
-  AUDIO_ASSETS,
-  UI_ASSETS,
-  COLORS,
-  SHARE_CONFIG,
-  DEBUG
-};
+export default GameConfig;

@@ -268,22 +268,16 @@ class Main {
           globalEvent.emit('scene:switch', 'HomeScene');
         }
       });
-      this.dialogManager.register('settlement', dialog);
-      this.dialogManager.show('settlement');
+      this.dialogManager.show(dialog);
     });
     
-    // 弹窗显示事件（使用 dialog:open 避免与 Dialog.show() 内部事件冲突）
-    globalEvent.on('dialog:open', (dialogName, dialogInstance) => {
-      console.log(`[Main] 接收到 dialog:open 事件: ${dialogName}`);
-      if (!dialogInstance) {
-        console.error(`[Main] 弹窗实例为 null: ${dialogName}`);
-        return;
+    // 弹窗显示事件（简化版）
+    globalEvent.on('dialog:show', (arg1) => {
+      // 检查是否是 Dialog 实例（对象且有 name 属性）
+      if (arg1 && typeof arg1 === 'object' && arg1.name) {
+        this.dialogManager.show(arg1);
       }
-      console.log(`[Main] 注册弹窗: ${dialogName}`);
-      this.dialogManager.register(dialogName, dialogInstance);
-      console.log(`[Main] 显示弹窗: ${dialogName}`);
-      this.dialogManager.show(dialogName);
-      console.log(`[Main] 弹窗显示完成: ${dialogName}`);
+      // 否则是 Dialog 内部事件，忽略
     });
     
     // 绑定触摸事件 - 只需要绑定一次

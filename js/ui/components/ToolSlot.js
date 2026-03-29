@@ -24,8 +24,8 @@ class ToolSlot {
     // 回调
     this.onSelect = options.onSelect || (() => {});
     
-    // 配置
-    this.slotCount = this.tools.length || 5;
+    // 配置 - 始终显示 5 个槽位
+    this.maxSlotCount = 5;
     this.slotSize = options.slotSize || 80;
     this.slotGap = options.slotGap || 15;
     this.padding = options.padding || 20;
@@ -36,31 +36,38 @@ class ToolSlot {
   
   /**
    * 计算尺寸和位置
+   * 宽度占满整个屏幕，始终显示 5 个槽位
    */
   _calculateDimensions() {
     const W = this.screenWidth;
+    const H = this.screenHeight;
     
-    // 容器在底部 10% 区域内居中
-    this.containerH = this.screenHeight * 0.10 * 0.9; // 留一点边距
-    this.containerY = this.screenHeight * 0.90 + (this.screenHeight * 0.10 - this.containerH) / 2;
+    // 容器高度占底部 12% 区域的 90%（底部现在是 12%，不是 10%）
+    this.containerH = H * 0.12 * 0.90;
+    // 往上移动 10px
+    this.containerY = H * 0.88 + (H * 0.12 - this.containerH) / 2 ;
     
-    // 槽位大小基于容器高度
-    this.slotSize = this.containerH * 0.65;
-    this.slotGap = this.slotSize * 0.2;
-    this.padding = this.slotSize * 0.25;
+    // 左右边距（屏幕宽度的 2%）
+    this.sidePadding = W * 0.02;
     
-    // 计算容器宽度
-    const innerW = this.slotCount * this.slotSize + (this.slotCount - 1) * this.slotGap;
-    this.containerW = innerW + this.padding * 2;
-    this.containerX = (W - this.containerW) / 2;
+    // 容器宽度占满屏幕（减去边距）
+    this.containerX = this.sidePadding;
+    this.containerW = W - this.sidePadding * 2;
     
-    // 槽位起始位置
-    this.startX = this.containerX + this.padding;
+    // 槽位之间的间隙（固定值或基于宽度）
+    this.slotGap = W * 0.03;
+    
+    // 槽位大小：根据可用空间计算，然后减小5
+    const availableWidth = this.containerW - this.slotGap * (this.maxSlotCount - 1);
+    this.slotSize = availableWidth / this.maxSlotCount - 5;
+    
+    // 槽位垂直居中
+    this.startX = this.containerX+10;
     this.startY = this.containerY + (this.containerH - this.slotSize) / 2;
     
     // 存储槽位位置（用于点击检测）
     this.slotPositions = [];
-    for (let i = 0; i < this.slotCount; i++) {
+    for (let i = 0; i < this.maxSlotCount; i++) {
       this.slotPositions[i] = {
         x: this.startX + i * (this.slotSize + this.slotGap),
         y: this.startY,
@@ -148,27 +155,32 @@ class ToolSlot {
   
   /**
    * 2) 绘制所有槽位
+   * 始终显示 5 个槽位，不足时显示"待解锁"
    */
   _drawSlots(ctx) {
-    for (let i = 0; i < this.slotCount; i++) {
+    for (let i = 0; i < this.maxSlotCount; i++) {
       const pos = this.slotPositions[i];
       const isSelected = i === this.selectedIndex;
       const isDisabled = this.disabledSlots.has(i);
+      // 判断是否有工具
+      const hasTool = i < this.tools.length;
       
-      this._drawSlot(ctx, pos.x, pos.y, pos.size, i, isSelected, isDisabled);
+      this._drawSlot(ctx, pos.x, pos.y, pos.size, i, isSelected, isDisabled, hasTool);
     }
   }
   
   /**
    * 3) 绘制单个槽位
+   * @param {boolean} hasTool - 是否有工具
    */
-  _drawSlot(ctx, x, y, size, index, isSelected, isDisabled) {
+  _drawSlot(ctx, x, y, size, index, isSelected, isDisabled, hasTool) {
     // 槽位背景渐变
     const slotGrad = ctx.createLinearGradient(x, y, x, y + size);
-    if (isDisabled) {
-      slotGrad.addColorStop(0, '#7a7a7a');
-      slotGrad.addColorStop(0.5, '#5a5a5a');
-      slotGrad.addColorStop(1, '#3a3a3a');
+    if (isDisabled || !hasTool) {
+      // 禁用或空槽位：灰色系
+      slotGrad.addColorStop(0, '#8a8a8a');
+      slotGrad.addColorStop(0.5, '#6a6a6a');
+      slotGrad.addColorStop(1, '#4a4a4a');
     } else {
       slotGrad.addColorStop(0, '#e8d4b8');
       slotGrad.addColorStop(0.5, '#d9c399');
@@ -177,8 +189,8 @@ class ToolSlot {
     
     ctx.save();
     
-    // 选中状态：添加发光边框
-    if (isSelected) {
+    // 选中状态：添加发光边框（仅对有工具的槽位）
+    if (isSelected && hasTool) {
       ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
       ctx.shadowBlur = 15;
       ctx.shadowOffsetX = 0;
@@ -186,20 +198,20 @@ class ToolSlot {
     }
     
     // 槽位背景
-    this._drawRoundedRect(ctx, x, y, size, size, 8);
+    this._drawRoundedRect(ctx, x, y, size, size, size * 0.15);
     ctx.fillStyle = slotGrad;
     ctx.fill();
     
     // 槽位边框
-    const borderColor = isSelected ? '#ffd700' : isDisabled ? '#555' : '#8b7355';
+    const borderColor = (isSelected && hasTool) ? '#ffd700' : (isDisabled || !hasTool) ? '#555' : '#8b7355';
     ctx.strokeStyle = borderColor;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = size * 0.03;
     ctx.stroke();
     
     // 槽位内阴影
     ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
     ctx.shadowBlur = 3;
-    this._drawRoundedRect(ctx, x + 2, y + 2, size - 4, size - 4, 6);
+    this._drawRoundedRect(ctx, x + size * 0.03, y + size * 0.03, size * 0.94, size * 0.94, size * 0.12);
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
     ctx.lineWidth = 1;
     ctx.stroke();
@@ -211,11 +223,49 @@ class ToolSlot {
       this._drawDisabledPattern(ctx, x, y, size);
     }
     
-    // 绘制工具图标
-    const tool = this.tools[index];
-    if (tool) {
+    // 绘制内容
+    if (hasTool) {
+      // 有工具：绘制工具图标
+      const tool = this.tools[index];
       this._drawToolIcon(ctx, x, y, size, tool, isDisabled);
+    } else {
+      // 无工具：显示"待解锁"
+      this._drawLockedSlot(ctx, x, y, size);
     }
+  }
+  
+  /**
+   * 绘制锁定/待解锁槽位
+   */
+  _drawLockedSlot(ctx, x, y, size) {
+    const centerX = x + size / 2;
+    const centerY = y + size / 2;
+    
+    ctx.save();
+    
+    // 绘制锁图标（简单圆形 + 锁扣）
+    const iconSize = size * 0.25;
+    
+    // 锁体（矩形）
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    this._drawRoundedRect(ctx, centerX - iconSize * 0.6, centerY - iconSize * 0.3, iconSize * 1.2, iconSize * 0.9, iconSize * 0.2);
+    ctx.fill();
+    
+    // 锁扣（弧形）
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = iconSize * 0.15;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY - iconSize * 0.3, iconSize * 0.35, Math.PI, 0);
+    ctx.stroke();
+    
+    // "待解锁" 文字
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = `${Math.floor(size * 0.18)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('待解锁', centerX, centerY + size * 0.25);
+    
+    ctx.restore();
   }
   
   /**
@@ -239,38 +289,47 @@ class ToolSlot {
   
   /**
    * 5) 绘制工具图标
+   * 优先使用 tool.icon (emoji)，如果没有则使用 Canvas 绘制
    */
   _drawToolIcon(ctx, x, y, size, tool, isDisabled) {
     const iconX = x + size / 2;
     const iconY = y + size / 2;
-    const iconSize = size * 0.55;
     
     ctx.save();
     if (isDisabled) ctx.globalAlpha = 0.4;
     
-    // 根据工具类型绘制不同图标
-    switch (tool.id) {
-      case 'cloth':
-        this._drawCloth(ctx, iconX, iconY, iconSize, tool.color);
-        break;
-      case 'sponge':
-        this._drawSponge(ctx, iconX, iconY, iconSize, tool.color);
-        break;
-      case 'brush':
-        this._drawBrush(ctx, iconX, iconY, iconSize, tool.color);
-        break;
-      case 'spray':
-        this._drawSpray(ctx, iconX, iconY, iconSize, tool.color);
-        break;
-      case 'vacuum':
-        this._drawVacuum(ctx, iconX, iconY, iconSize, tool.color);
-        break;
-      default:
-        // 默认圆形图标
-        ctx.fillStyle = tool.color || '#4A90D9';
-        ctx.beginPath();
-        ctx.arc(iconX, iconY, iconSize * 0.4, 0, Math.PI * 2);
-        ctx.fill();
+    // 如果有 emoji 图标，优先使用
+    if (tool.icon && tool.icon.length > 0) {
+      ctx.font = `${Math.floor(size * 0.5)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(tool.icon, iconX, iconY);
+    } else {
+      // 没有 icon 时，使用 Canvas 绘制
+      const iconSize = size * 0.55;
+      switch (tool.id) {
+        case 'cloth':
+          this._drawCloth(ctx, iconX, iconY, iconSize, tool.color);
+          break;
+        case 'sponge':
+          this._drawSponge(ctx, iconX, iconY, iconSize, tool.color);
+          break;
+        case 'brush':
+          this._drawBrush(ctx, iconX, iconY, iconSize, tool.color);
+          break;
+        case 'spray':
+          this._drawSpray(ctx, iconX, iconY, iconSize, tool.color);
+          break;
+        case 'vacuum':
+          this._drawVacuum(ctx, iconX, iconY, iconSize, tool.color);
+          break;
+        default:
+          // 默认圆形图标
+          ctx.fillStyle = tool.color || '#4A90D9';
+          ctx.beginPath();
+          ctx.arc(iconX, iconY, iconSize * 0.4, 0, Math.PI * 2);
+          ctx.fill();
+      }
     }
     
     ctx.restore();
@@ -366,7 +425,7 @@ class ToolSlot {
    * 检查点击位置是否在槽位内
    */
   getSlotIndexAt(x, y) {
-    for (let i = 0; i < this.slotCount; i++) {
+    for (let i = 0; i < this.maxSlotCount; i++) {
       const slot = this.slotPositions[i];
       if (x >= slot.x && x <= slot.x + slot.size &&
           y >= slot.y && y <= slot.y + slot.size) {
@@ -377,11 +436,19 @@ class ToolSlot {
   }
   
   /**
+   * 检查槽位是否有工具
+   */
+  hasToolAt(index) {
+    return index >= 0 && index < this.tools.length;
+  }
+  
+  /**
    * 处理触摸开始
    */
   onTouchStart(x, y) {
     const slotIndex = this.getSlotIndexAt(x, y);
-    if (slotIndex >= 0 && !this.disabledSlots.has(slotIndex)) {
+    // 只有有工具的槽位才能被选中
+    if (slotIndex >= 0 && this.hasToolAt(slotIndex) && !this.disabledSlots.has(slotIndex)) {
       return { slotIndex };
     }
     return null;
@@ -392,7 +459,8 @@ class ToolSlot {
    */
   onTouchEnd(x, y) {
     const slotIndex = this.getSlotIndexAt(x, y);
-    if (slotIndex >= 0 && !this.disabledSlots.has(slotIndex)) {
+    // 只有有工具的槽位才能被选中
+    if (slotIndex >= 0 && this.hasToolAt(slotIndex) && !this.disabledSlots.has(slotIndex)) {
       // 切换选中
       if (this.selectedIndex !== slotIndex) {
         this.selectedIndex = slotIndex;

@@ -6,16 +6,14 @@
 import Dialog from './Dialog';
 import Button from '../components/Button';
 import Text from '../components/Text';
-import { globalEvent } from '../../core/EventEmitter';
 
 class LevelCompleteDialog extends Dialog {
   constructor(options = {}) {
     super({
       name: 'LevelCompleteDialog',
-      width: options.width || 400,
-      height: options.height || 220,
+      width: 400,
+      height: 220,
       showCloseButton: false,
-      modal: true,
       ...options
     });
 
@@ -57,14 +55,13 @@ class LevelCompleteDialog extends Dialog {
     // 确认按钮
     this.confirmBtn = new Button({
       x: this.x + centerX - 70,
-      y: this.y + this.height - 70,
+      y: this.y + 150,
       width: 140,
       height: 50,
       text: '确认',
       fontSize: 24,
       bgColor: '#4CAF50',
       borderRadius: 6,
-      shadow: { color: 'rgba(0,0,0,0.2)', blur: 4, offsetX: 0, offsetY: 2 },
       onClick: () => this._onConfirmClick()
     });
 
@@ -79,7 +76,6 @@ class LevelCompleteDialog extends Dialog {
    */
   _onConfirmClick() {
     this.close();
-    
     if (this.onConfirm) {
       this.onConfirm({
         levelId: this.levelId,
@@ -87,6 +83,24 @@ class LevelCompleteDialog extends Dialog {
         stars: this.stars
       });
     }
+  }
+
+  /**
+   * 处理触摸开始
+   */
+  onTouchStart(x, y) {
+    // 先检查按钮
+    if (this.confirmBtn.onTouchStart(x, y)) return true;
+    // 再交给父类处理
+    return super.onTouchStart(x, y);
+  }
+
+  /**
+   * 处理触摸结束
+   */
+  onTouchEnd(x, y) {
+    if (this.confirmBtn.onTouchEnd(x, y)) return true;
+    return super.onTouchEnd(x, y);
   }
 
   /**

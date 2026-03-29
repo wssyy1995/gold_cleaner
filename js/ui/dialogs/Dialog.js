@@ -51,6 +51,7 @@ class Dialog extends Panel {
     this._targetScale = 0.8;
     this._isShowing = false;
     this._isHiding = false;
+    this._tween = null;
 
     // 5.2.6 实现弹窗的关闭按钮与事件回调
     this.showCloseButton = options.showCloseButton !== false;
@@ -153,11 +154,12 @@ class Dialog extends Panel {
    */
   _animateIn(data) {
     // 使用Tween动画
-    new Tween(this, { _opacity: 1, _scale: 1 }, {
+    this._tween = new Tween(this, { _opacity: 1, _scale: 1 }, {
       duration: this.animationDuration,
       easing: Easing.easeOutBack,
       onComplete: () => {
         this._isShowing = false;
+        this._tween = null;
         this._onShowComplete(data);
       }
     }).start();
@@ -167,11 +169,12 @@ class Dialog extends Panel {
    * 退出动画
    */
   _animateOut(result) {
-    new Tween(this, { _opacity: 0, _scale: 0.8 }, {
+    this._tween = new Tween(this, { _opacity: 0, _scale: 0.8 }, {
       duration: this.animationDuration,
       easing: Easing.easeInQuad,
       onComplete: () => {
         this._isHiding = false;
+        this._tween = null;
         this._onHideComplete(result);
       }
     }).start();
@@ -201,6 +204,14 @@ class Dialog extends Panel {
    * 更新
    */
   update(deltaTime) {
+    // 更新 Tween 动画（即使不可见也要更新，因为动画可能正在让弹窗显示）
+    if (this._tween) {
+      this._tween.update(deltaTime);
+      if (this._isShowing) {
+        console.log(`[Dialog] ${this.name} 动画更新: opacity=${this._opacity.toFixed(2)}, scale=${this._scale.toFixed(2)}`);
+      }
+    }
+    
     if (!this.isVisible()) return;
 
     super.update(deltaTime);

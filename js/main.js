@@ -274,13 +274,16 @@ class Main {
     
     // 弹窗显示事件（使用 dialog:open 避免与 Dialog.show() 内部事件冲突）
     globalEvent.on('dialog:open', (dialogName, dialogInstance) => {
-      console.log(`[Main] 显示弹窗: ${dialogName}`);
+      console.log(`[Main] 接收到 dialog:open 事件: ${dialogName}`);
       if (!dialogInstance) {
         console.error(`[Main] 弹窗实例为 null: ${dialogName}`);
         return;
       }
+      console.log(`[Main] 注册弹窗: ${dialogName}`);
       this.dialogManager.register(dialogName, dialogInstance);
+      console.log(`[Main] 显示弹窗: ${dialogName}`);
       this.dialogManager.show(dialogName);
+      console.log(`[Main] 弹窗显示完成: ${dialogName}`);
     });
     
     // 绑定触摸事件 - 只需要绑定一次

@@ -40,7 +40,8 @@ const GlobalBgCache = {
 };
 
 // 全局关卡预览图缓存 - 避免重复加载
-const GlobalPreviewCache = {
+// 导出供其他场景复用（如 GameplayScene）
+export const GlobalPreviewCache = {
   // key: "preview_1_1" -> { img, loaded }
   _cache: {},
   
@@ -323,17 +324,94 @@ class HomeScene extends Scene {
     const s = this.screenWidth / 750;
     const cx = this.screenWidth / 2;
     
-    this.titleText = new Text({ 
-      x: cx, y: 60 * s, text: '金牌保洁升职记', fontSize: 36 * s, fontWeight: 'bold', 
-      color: '#4A90D9', align: 'center' 
-    });
-    this.coinText = new Text({ 
-      x: 20 * s, y: 60 * s, text: '💰 100', fontSize: 28 * s, color: '#333333', align: 'left' 
-    });
-    this.stageText = new Text({ 
-      x: cx, y: 160 * s, text: `阶段 ${this.currentStage}`, fontSize: 32 * s, 
-      fontWeight: 'bold', color: '#333333', align: 'center' 
-    });
+    // 金币组件配置
+    this.coinComponent = {
+      x: 30 * s,
+      y: 40 * s,
+      height: 56 * s,
+      padding: 16 * s,
+      bgColor: '#E3F2FD',  // 浅蓝色背景
+      borderColor: '#BBDEFB',
+      textColor: '#1976D2', // 深蓝色文字
+      fontSize: 24 * s,
+      coinSize: 36 * s,
+      coinIcon: '💰'
+    };
+    
+    // 初始化时更新金币显示
+    this._updateCoinDisplay();
+  }
+
+  /**
+   * 更新金币显示
+   */
+  _updateCoinDisplay() {
+    const game = getGame();
+    const dataManager = game ? game.dataManager : null;
+    this.coinAmount = dataManager ? dataManager.getCoins() : 100;
+  }
+
+  /**
+   * 绘制金币组件
+   */
+  _drawCoinComponent(ctx) {
+    if (!this.coinComponent) return;
+    
+    const s = this.screenWidth / 750;
+    const { x, y, height, padding, bgColor, borderColor, textColor, fontSize, coinSize, coinIcon } = this.coinComponent;
+    
+    // 计算文字宽度
+    ctx.font = `bold ${fontSize}px Arial`;
+    const text = this.coinAmount !== undefined ? this.coinAmount.toString() : '100';
+    const textWidth = ctx.measureText(text).width;
+    
+    // 胶囊总宽度 = 左边距 + 金币图标 + 间距 + 文字 + 右边距
+    const capsuleWidth = padding + coinSize + 8 * s + textWidth + padding;
+    const capsuleHeight = height;
+    const capsuleX = x;
+    const capsuleY = y;
+    
+    // 绘制胶囊背景
+    ctx.save();
+    ctx.fillStyle = bgColor;
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 2 * s;
+    this._drawRoundedRect(ctx, capsuleX, capsuleY, capsuleWidth, capsuleHeight, capsuleHeight / 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    
+    // 绘制金币图标（带圆形金色背景）
+    const coinCenterX = capsuleX + padding + coinSize / 2;
+    const coinCenterY = capsuleY + capsuleHeight / 2;
+    
+    ctx.save();
+    ctx.fillStyle = '#FFD700';
+    ctx.beginPath();
+    ctx.arc(coinCenterX, coinCenterY, coinSize / 2 + 2 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#FFA000';
+    ctx.lineWidth = 2 * s;
+    ctx.stroke();
+    ctx.restore();
+    
+    ctx.save();
+    ctx.font = `${coinSize * 0.8}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(coinIcon, coinCenterX, coinCenterY + 2 * s);
+    ctx.restore();
+    
+    // 绘制金币数字
+    ctx.save();
+    ctx.fillStyle = textColor;
+    ctx.font = `bold ${fontSize}px Arial`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const textX = capsuleX + padding + coinSize + 8 * s;
+    const textY = capsuleY + capsuleHeight / 2;
+    ctx.fillText(text, textX, textY);
+    ctx.restore();
 
     this.iconSize = 80 * s;
     this.iconHitArea = 100 * s;
@@ -547,11 +625,10 @@ class HomeScene extends Scene {
       ctx.fillRect(0, 0, w, 60);
     }
 
-    if (!this.titleText) return;
+    if (!this.coinComponent) return;
 
-    this.titleText.onRender(ctx);
-    if (this.coinText) this.coinText.onRender(ctx);
-    if (this.stageText) this.stageText.onRender(ctx);
+    // 绘制金币组件
+    this._drawCoinComponent(ctx);
 
     this._drawLevelIcons(ctx);
 
@@ -578,8 +655,11 @@ class HomeScene extends Scene {
     const iconSize = this.iconSize;
     const currentLevel = this._getCurrentLevel();
     
+    // 第一步：绘制所有关卡图标（确保在最底层）
     this.levels.forEach(level => {
-      let iconImg = this.iconImages[level.status] || this.iconImages.locked;
+      // 状态到图标的映射: completed -> pass
+      const iconName = level.status === 'completed' ? 'pass' : level.status;
+      let iconImg = this.iconImages[iconName] || this.iconImages.locked;
       if (!iconImg) return;
       
       const x = level.x * s;
@@ -592,11 +672,15 @@ class HomeScene extends Scene {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(level.id.toString(), x, y + iconSize/2 + 16 * s);
-      
-      if (currentLevel && level.id === currentLevel.id) {
-        this._drawLevelPreviewCard(ctx, level, s);
-      }
     });
+    
+    // 第二步：在所有图标绘制完成后，再绘制预览卡片（确保在最上层）
+    if (currentLevel) {
+      const currentLevelData = this.levels.find(l => l.id === currentLevel.id);
+      if (currentLevelData) {
+        this._drawLevelPreviewCard(ctx, currentLevelData, s);
+      }
+    }
   }
 
   _drawLevelPreviewCard(ctx, level, s) {

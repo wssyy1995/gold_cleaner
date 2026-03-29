@@ -6,11 +6,15 @@ import Scene from '../core/Scene';
 import Button from '../ui/components/Button';
 import Text from '../ui/components/Text';
 import ProgressBar from '../ui/components/ProgressBar';
+import TopBar from '../ui/components/TopBar';
+import { GlobalPreviewCache } from './HomeScene';
 import { globalEvent } from '../core/EventEmitter';
+import { getGame } from '../../app';
 import { getLevelImageKey } from '../cloud/CloudResourceConfig';
 import CloudStorage from '../cloud/CloudStorage';
 
 import PauseMenu from '../ui/dialogs/PauseMenu';
+import LevelCompleteDialog from '../ui/dialogs/LevelCompleteDialog';
 
 class GameplayScene extends Scene {
   constructor() {
@@ -63,22 +67,55 @@ class GameplayScene extends Scene {
   }
 
   /**
-   * 加载关卡背景图（从本地）
+   * 加载关卡背景图（复用预览缓存 → 云存储 → 本地）
    */
   async _loadBackground() {
     if (typeof wx === 'undefined') return;
     
-    // 动态构建路径，避免编译时检查
-    const pathParts = ['images', 'game', `game_stage${this.stage}_l${this.levelId}_home.png`];
-    const localPath = pathParts.join('/');
+    const previewKey = `preview_${this.stage}_${this.levelId}`;
+    const cacheKey = `game_stage${this.stage}_l${this.levelId}`;
     
+    // 1. 优先复用内存中的预览图缓存（HomeScene 已加载）
+    if (GlobalPreviewCache) {
+      const cached = GlobalPreviewCache.get(previewKey);
+      if (cached && cached.img) {
+        this.bgImage = cached.img;
+        this.bgLoaded = true;
+        console.log(`[GameplayScene] 背景复用预览缓存: ${previewKey}`);
+        return;
+      }
+    }
+    
+    // 2. 从云存储缓存加载
     try {
+      const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
+      const cacheInfo = cacheRecord[cacheKey];
+      
+      if (cacheInfo && cacheInfo.fileID) {
+        const tempURL = await this.cloudStorage.getTempFileURL(cacheInfo.fileID);
+        if (tempURL) {
+          const img = await this._downloadImage(tempURL);
+          this.bgImage = img;
+          this.bgLoaded = true;
+          console.log(`[GameplayScene] 背景从云存储加载: ${cacheKey}`);
+          return;
+        }
+      }
+    } catch (e) {
+      console.log(`[GameplayScene] 云存储背景加载失败: ${cacheKey}`);
+    }
+    
+    // 3. 从本地加载（后备）
+    try {
+      const pathParts = ['images', 'game', `game_stage${this.stage}_l${this.levelId}_home.png`];
+      const localPath = pathParts.join('/');
+      
       const img = await this._downloadLocalImage(localPath);
       this.bgImage = img;
       this.bgLoaded = true;
-      console.log(`[GameplayScene] 本地背景加载完成: stage${this.stage}_l${this.levelId}`);
+      console.log(`[GameplayScene] 背景从本地加载: ${cacheKey}`);
     } catch (e) {
-      console.log(`[GameplayScene] 本地背景不存在或加载失败: stage${this.stage}_l${this.levelId}`);
+      console.log(`[GameplayScene] 本地背景加载失败: ${cacheKey}`);
     }
   }
   
@@ -97,11 +134,36 @@ class GameplayScene extends Scene {
   _initUI() {
     const s = this.screenWidth / 750;
     
-    // 顶部栏
+    // 新的 TopBar 组件（替换原有顶部 UI）
+    this.topBar = new TopBar({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight,
+      levelText: `${this.levelId}/10`,
+      progress: 0,
+      timeText: '60s',
+      paused: false,
+      onPauseClick: () => this._showPauseMenu()
+    });
+    
+    // 通关按钮（调试用，自动完成本关）- 放在 TopBar 下方
+    this.winBtn = new Button({
+      x: 20 * s, y: 150 * s, width: 120 * s, height: 60 * s,
+      text: '通关', fontSize: 28 * s,
+      bgColor: '#4CAF50', textColor: '#FFFFFF',
+      borderRadius: 12 * s,
+      shadow: { color: 'rgba(0,0,0,0.3)', blur: 8, offsetX: 0, offsetY: 4 },
+      onClick: () => {
+        console.log('[GameplayScene] 通关按钮 onClick 回调触发');
+        this._onWinClick();
+      }
+    });
+    
+    // 返回按钮（调试用）- 放在通关按钮下方
     this.backBtn = new Button({ 
-      x: 20 * s, y: 40 * s, width: 100 * s, height: 50 * s, 
+      x: 20 * s, y: 220 * s, width: 100 * s, height: 50 * s, 
       text: '← 返回', fontSize: 24 * s, 
-      bgColor: 'transparent', textColor: '#333333', 
+      bgColor: 'rgba(0,0,0,0.3)', textColor: '#FFFFFF', 
+      borderRadius: 8 * s,
       onClick: () => {
         if (this.viewMode === 'zoom') {
           this._exitZoomView();
@@ -109,47 +171,6 @@ class GameplayScene extends Scene {
           globalEvent.emit('scene:switch', 'HomeScene');
         }
       }
-    });
-    
-    // 通关按钮（调试用，自动完成本关）
-    this.winBtn = new Button({
-      x: 20 * s, y: 110 * s, width: 120 * s, height: 60 * s,
-      text: '通关', fontSize: 28 * s,
-      bgColor: '#4CAF50', textColor: '#FFFFFF',
-      borderRadius: 12 * s,
-      shadow: { color: 'rgba(0,0,0,0.3)', blur: 8, offsetX: 0, offsetY: 4 },
-      onClick: () => this._onWinClick()
-    });
-    this.levelText = new Text({ 
-      x: 375 * s, y: 65 * s, 
-      text: `关卡 ${this.levelId}`, 
-      fontSize: 32 * s, fontWeight: 'bold', 
-      color: '#333333', align: 'center' 
-    });
-    
-    // 清洁度球
-    this.cleanlinessText = new Text({ 
-      x: 680 * s, y: 65 * s, 
-      text: '0%', 
-      fontSize: 24 * s, fontWeight: 'bold', 
-      color: '#4CAF50', align: 'center' 
-    });
-    
-    // 暂停按钮
-    this.pauseBtn = new Button({
-      x: 600 * s, y: 40 * s, width: 60 * s, height: 50 * s,
-      text: '⏸', fontSize: 24 * s,
-      bgColor: 'transparent', textColor: '#333333',
-      onClick: () => this._showPauseMenu()
-    });
-    
-    // 退出按钮（右上角）
-    this.quitBtn = new Button({
-      x: 670 * s, y: 40 * s, width: 70 * s, height: 50 * s,
-      text: '退出', fontSize: 22 * s,
-      bgColor: 'rgba(255, 107, 107, 0.9)', textColor: '#FFFFFF',
-      borderRadius: 8 * s,
-      onClick: () => this._onQuitClick()
     });
 
     // 工具槽（支持滑动）
@@ -352,12 +373,21 @@ class GameplayScene extends Scene {
     this.isPaused = true;
     globalEvent.emit('game:pause');
     
+    // 更新 TopBar 暂停状态
+    if (this.topBar) {
+      this.topBar.updateData({ paused: true });
+    }
+    
     const s = this.screenWidth / 750;
     const pauseMenu = new PauseMenu({
       screenWidth: this.screenWidth,
       screenHeight: this.screenHeight,
       onResume: () => {
         this.isPaused = false;
+        // 恢复 TopBar 暂停状态
+        if (this.topBar) {
+          this.topBar.updateData({ paused: false });
+        }
         globalEvent.emit('game:resume');
       },
       onRestart: () => {
@@ -391,29 +421,82 @@ class GameplayScene extends Scene {
   }
   
   /**
-   * 通关按钮点击 - 自动完成本关并解锁下一关
+   * 通关按钮点击 - 显示通关弹窗
    */
   _onWinClick() {
-    console.log(`[GameplayScene] 自动通关按钮被点击: level ${this.levelId}`);
+    console.log(`[GameplayScene] === 通关按钮被点击: level ${this.levelId} ===`);
     
-    // 模拟关卡完成（3星满分）
-    const result = {
-      levelId: this.levelId,
-      stars: 3,
-      score: 1000,
-      timeUsed: 10,
-      accuracy: 100,
-      maxCombo: 1,
-      rewards: { coins: 50, stars: 3 }
-    };
+    // 显示简易通关弹窗
+    this._showLevelCompleteDialog();
+  }
+  
+  /**
+   * 显示通关弹窗
+   */
+  _showLevelCompleteDialog() {
+    console.log('[GameplayScene] _showLevelCompleteDialog 开始执行');
     
-    console.log('[GameplayScene] 发送 game:levelComplete 事件:', result);
+    try {
+      const dialog = new LevelCompleteDialog({
+        screenWidth: this.screenWidth,
+        screenHeight: this.screenHeight,
+        levelId: this.levelId,
+        stage: this.stage,
+        stars: 3,
+        onConfirm: (result) => {
+          console.log('[GameplayScene] 弹窗确认回调触发:', result);
+          this._handleLevelComplete(result);
+        }
+      });
+      
+      console.log('[GameplayScene] LevelCompleteDialog 实例创建成功');
+      
+      // 注册并显示弹窗
+      globalEvent.emit('dialog:open', 'LevelCompleteDialog', dialog);
+      console.log('[GameplayScene] dialog:open 事件已发送');
+    } catch (e) {
+      console.error('[GameplayScene] 显示通关弹窗失败:', e);
+    }
+  }
+  
+  /**
+   * 处理关卡完成
+   */
+  _handleLevelComplete(result) {
+    console.log('[GameplayScene] 处理关卡完成:', result);
     
-    // 发送关卡完成事件
-    globalEvent.emit('game:levelComplete', result);
+    const game = getGame();
+    const dataManager = game ? game.dataManager : null;
     
-    // 立即预加载下一关的预览图
+    if (dataManager) {
+      // 计算全局关卡ID
+      const globalLevelId = (this.stage - 1) * 10 + this.levelId;
+      const nextGlobalLevelId = globalLevelId + 1;
+      
+      // 1. 完成当前关卡
+      dataManager.completeLevel(globalLevelId, result.stars);
+      console.log(`[GameplayScene] 关卡 ${globalLevelId} 完成，星级: ${result.stars}`);
+      
+      // 2. 解锁下一关
+      if (this.levelId < 10) {
+        // 同一阶段的下一关
+        dataManager.unlockLevel(nextGlobalLevelId);
+        console.log(`[GameplayScene] 解锁关卡 ${nextGlobalLevelId}`);
+      }
+      
+      // 3. 增加金币奖励
+      dataManager.addCoins(50);
+      console.log('[GameplayScene] 获得金币奖励: 50');
+      
+      // 4. 保存数据
+      dataManager.save();
+    }
+    
+    // 5. 预加载下一关预览图
     this._preloadNextLevelPreview();
+    
+    // 6. 返回游戏主页面
+    globalEvent.emit('scene:switch', 'HomeScene');
   }
   
   /**
@@ -481,15 +564,17 @@ class GameplayScene extends Scene {
     // 更新按钮
     if (this.backBtn) this.backBtn.update(deltaTime);
     if (this.winBtn) this.winBtn.update(deltaTime);
-    if (this.pauseBtn) this.pauseBtn.update(deltaTime);
-    if (this.quitBtn) this.quitBtn.update(deltaTime);
     if (this.exitZoomBtn) this.exitZoomBtn.update(deltaTime);
     
     // 更新清洁度
-    if (this.dirtObjects && this.cleanlinessText) {
+    if (this.dirtObjects && this.dirtObjects.length > 0) {
       const cleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
-      this.cleanProgress = cleaned / this.dirtObjects.length;
-      this.cleanlinessText.setText(`${Math.floor(this.cleanProgress * 100)}%`);
+      this.cleanProgress = (cleaned / this.dirtObjects.length) * 100;
+      
+      // 更新 TopBar 的进度
+      if (this.topBar) {
+        this.topBar.updateData({ progress: this.cleanProgress });
+      }
     }
     
     // 更新粒子
@@ -532,35 +617,42 @@ class GameplayScene extends Scene {
 
   /**
    * 渲染房间视图
-   * 布局：顶部 10% 为 top_bar，下方 90% 为游戏区域
+   * 布局：顶部 8% 浅棕黄色，中间 80% 游戏区域，底部 10% 浅棕黄色（工具槽）
    */
   _renderRoomView(ctx, s) {
-    const topBarHeight = this.screenHeight * 0.1; // 顶部栏高度 10%
-    const gameAreaY = topBarHeight; // 游戏区域起始 Y
-    const gameAreaHeight = this.screenHeight - topBarHeight; // 游戏区域高度 90%
+    // 区域划分
+    const topAreaHeight = this.screenHeight * 0.08;    // 顶部 8%
+    const gameAreaHeight = this.screenHeight * 0.80;   // 中间 80%（游戏区域）
+    const bottomAreaHeight = this.screenHeight * 0.10; // 底部 10%
     
-    // 先绘制顶部栏背景（防止图片覆盖）
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, this.screenWidth, topBarHeight);
+    const gameAreaY = topAreaHeight;  // 游戏区域起始 Y
+    const bottomAreaY = gameAreaY + gameAreaHeight; // 底部区域起始 Y
     
-    // 绘制关卡背景图（在游戏区域内，占屏幕下方 90%）
+    // 浅棕黄色（与 TopBar 背景色一致）
+    const lightBrown = '#f3c06a';
+    
+    // 1. 绘制顶部 8% 浅棕黄色背景
+    ctx.fillStyle = lightBrown;
+    ctx.fillRect(0, 0, this.screenWidth, topAreaHeight);
+    
+    // 2. 绘制中间 80% 游戏区域（背景图）
     if (this.bgImage && this.bgLoaded) {
-      // 使用 Cover 模式绘制背景图在游戏区域，并裁剪到游戏区域内
+      // 使用 Cover 模式绘制背景图填满游戏区域
       ctx.save();
       ctx.rect(0, gameAreaY, this.screenWidth, gameAreaHeight);
-      ctx.clip(); // 裁剪，防止图片覆盖 top_bar
+      ctx.clip();
       this._drawBackgroundCover(ctx, this.bgImage, 0, gameAreaY, this.screenWidth, gameAreaHeight);
       ctx.restore();
     } else {
       // 未加载时显示默认背景
       ctx.fillStyle = '#F5F5DC';
-      ctx.fillRect(20 * s, gameAreaY + 20 * s, this.screenWidth - 40 * s, gameAreaHeight - 40 * s);
+      ctx.fillRect(0, gameAreaY, this.screenWidth, gameAreaHeight);
     }
 
     // 检查UI是否已初始化
     if (!this.dirtObjects) return;
     
-    // 绘制污垢（y 坐标加上 gameAreaY 偏移，因为图片区域下移了）
+    // 3. 绘制污垢（y 坐标相对于游戏区域）
     this.dirtObjects.forEach(dirt => {
       if (dirt.state !== 'clean') {
         const dy = dirt.y + gameAreaY; // 加上游戏区域偏移
@@ -584,19 +676,21 @@ class GameplayScene extends Scene {
       }
     });
 
-    // UI元素
+    // 4. 绘制底部 10% 浅棕黄色背景（工具槽区域）
+    ctx.fillStyle = lightBrown;
+    ctx.fillRect(0, bottomAreaY, this.screenWidth, bottomAreaHeight);
+
+    // 5. 绘制 TopBar（在顶部区域）
+    if (this.topBar) {
+      this.topBar.render(ctx);
+    }
+    
+    // UI元素（调试按钮）
     if (this.backBtn) this.backBtn.onRender(ctx);
     if (this.winBtn) this.winBtn.onRender(ctx);
-    if (this.levelText) this.levelText.onRender(ctx);
-    if (this.cleanlinessText) this.cleanlinessText.onRender(ctx);
-    if (this.pauseBtn) this.pauseBtn.onRender(ctx);
-    if (this.quitBtn) this.quitBtn.onRender(ctx);
 
-    // 绘制清洁度球
-    this._renderCleanlinessBall(ctx, s);
-
-    // 工具栏
-    this._renderToolSlot(ctx, s);
+    // 6. 绘制工具槽（在底部区域）
+    this._renderToolSlot(ctx, s, bottomAreaY, bottomAreaHeight);
   }
 
   /**
@@ -683,8 +777,10 @@ class GameplayScene extends Scene {
       this.toolTipText.onRender(ctx);
     }
     
-    // 绘制工具槽
-    this._renderToolSlot(ctx, s);
+    // 绘制工具槽（在底部 10% 区域）
+    const bottomY = this.screenHeight * 0.90;
+    const bottomHeight = this.screenHeight * 0.10;
+    this._renderToolSlot(ctx, s, bottomY, bottomHeight);
     
     // 绘制拖动的工具
     if (this.isDraggingTool) {
@@ -715,63 +811,58 @@ class GameplayScene extends Scene {
   }
 
   /**
-   * 渲染工具槽
+   * 渲染工具槽（在底部区域）
+   * @param {number} bottomY - 底部区域起始 Y
+   * @param {number} bottomHeight - 底部区域高度
    */
-  _renderToolSlot(ctx, s) {
-    const slotY = 1100 * s;
-    const slotHeight = 234 * s;
-    
-    // 工具栏背景
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, slotY, this.screenWidth, slotHeight);
-    
-    // 绘制工具项
-    const toolWidth = 140 * s;
+  _renderToolSlot(ctx, s, bottomY, bottomHeight) {
+    // 工具在底部区域垂直居中
+    const toolSize = Math.min(bottomHeight * 0.7, 100 * s);
+    const toolY = bottomY + (bottomHeight - toolSize) / 2;
+    const toolWidth = toolSize * 1.15; // 工具宽度略大于高度
     const startX = 40 * s + this.toolSlotOffset;
     
     this.tools.forEach((tool, index) => {
       const x = startX + index * toolWidth;
-      const y = slotY + 30 * s;
-      const size = 120 * s;
       
       // 只绘制可见的
-      if (x + size < 0 || x > this.screenWidth) return;
+      if (x + toolSize < 0 || x > this.screenWidth) return;
       
       // 选中高亮
       if (index === this.currentToolIndex) {
         ctx.fillStyle = tool.color;
-        this._drawRoundedRect(ctx, x - 5 * s, y - 5 * s, size + 10 * s, size + 10 * s, 16 * s);
+        this._drawRoundedRect(ctx, x - 5 * s, toolY - 5 * s, toolSize + 10 * s, toolSize + 10 * s, 16 * s);
         ctx.fill();
       }
       
-      // 工具背景
-      ctx.fillStyle = index === this.currentToolIndex ? 'rgba(255,255,255,0.9)' : '#F5F5F5';
-      this._drawRoundedRect(ctx, x, y, size, size, 12 * s);
+      // 工具背景（白色半透明）
+      ctx.fillStyle = index === this.currentToolIndex ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.85)';
+      this._drawRoundedRect(ctx, x, toolY, toolSize, toolSize, 12 * s);
       ctx.fill();
       
       // 工具图标
       ctx.fillStyle = tool.color;
-      ctx.font = `${48 * s}px sans-serif`;
+      ctx.font = `${toolSize * 0.4}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(tool.icon, x + size/2, y + size/2 - 10 * s);
+      ctx.fillText(tool.icon, x + toolSize/2, toolY + toolSize/2 - toolSize * 0.08);
       
       // 工具名称
       ctx.fillStyle = '#333333';
-      ctx.font = `${16 * s}px sans-serif`;
-      ctx.fillText(tool.name, x + size/2, y + size - 20 * s);
+      ctx.font = `${toolSize * 0.15}px sans-serif`;
+      ctx.fillText(tool.name, x + toolSize/2, toolY + toolSize - toolSize * 0.15);
     });
     
-    // 分页指示器
+    // 分页指示器（在底部区域底部）
     const pageCount = this.tools.length;
-    const dotSize = 8 * s;
-    const dotGap = 16 * s;
+    const dotSize = 6 * s;
+    const dotGap = 12 * s;
     const totalWidth = pageCount * dotGap - dotGap;
     const startDotX = (this.screenWidth - totalWidth) / 2;
+    const dotY = bottomY + bottomHeight - 12 * s; // 距离底部区域底部 12*s
     
     for (let i = 0; i < pageCount; i++) {
       const dotX = startDotX + i * dotGap;
-      const dotY = slotY + slotHeight - 20 * s;
       const isActive = i === this.currentToolIndex;
       
       ctx.fillStyle = isActive ? '#4A90D9' : '#CCCCCC';
@@ -872,9 +963,10 @@ class GameplayScene extends Scene {
       // 检查退出按钮
       if (this.exitZoomBtn && this.exitZoomBtn.onTouchStart(x, y)) return true;
       
-      // 检查是否在工具槽区域（开始拖动）
-      if (y > 1100 * s) {
-        const toolIndex = this._getToolIndexAt(x);
+      // 检查是否在工具槽区域（底部 10%）
+      const bottomAreaY = this.screenHeight * 0.90;
+      if (y > bottomAreaY) {
+        const toolIndex = this._getToolIndexAt(x, y, bottomAreaY);
         if (toolIndex >= 0) {
           this._selectTool(toolIndex);
           this.isDraggingTool = true;
@@ -895,22 +987,26 @@ class GameplayScene extends Scene {
     }
     
     // 房间视图模式
+    // 先检查 TopBar（暂停按钮）
+    if (this.topBar && this.topBar.onTouchStart(x, y)) {
+      return true;
+    }
+    
     if (this.backBtn && this.backBtn.onTouchStart(x, y)) return true;
     if (this.winBtn && this.winBtn.onTouchStart(x, y)) {
       console.log('[GameplayScene] 通关按钮 onTouchStart 触发');
       return true;
     }
-    if (this.pauseBtn && this.pauseBtn.onTouchStart(x, y)) return true;
-    if (this.quitBtn && this.quitBtn.onTouchStart(x, y)) return true;
     
-    // 检查工具槽滑动
-    if (y > 1100 * s) {
+    // 检查工具槽滑动（底部 10% 区域）
+    const bottomAreaY = this.screenHeight * 0.90;
+    if (y > bottomAreaY) {
       this.toolSlotDragging = true;
       this.toolSlotStartX = x;
       this.toolSlotLastX = x;
       
       // 检查是否点击了某个工具
-      const toolIndex = this._getToolIndexAt(x);
+      const toolIndex = this._getToolIndexAt(x, y, bottomAreaY);
       if (toolIndex >= 0) {
         this._selectTool(toolIndex);
       }
@@ -987,13 +1083,16 @@ class GameplayScene extends Scene {
     }
     
     // 房间视图模式
+    // 先检查 TopBar（暂停按钮）
+    if (this.topBar && this.topBar.onTouchEnd(x, y)) {
+      return true;
+    }
+    
     if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
     if (this.winBtn && this.winBtn.onTouchEnd(x, y)) {
       console.log('[GameplayScene] 通关按钮 onTouchEnd 触发');
       return true;
     }
-    if (this.pauseBtn && this.pauseBtn.onTouchEnd(x, y)) return true;
-    if (this.quitBtn && this.quitBtn.onTouchEnd(x, y)) return true;
     
     // 结束工具槽滑动
     if (this.toolSlotDragging) {
@@ -1013,11 +1112,23 @@ class GameplayScene extends Scene {
 
   /**
    * 获取点击位置的工具索引
+   * @param {number} x - 点击 X 坐标
+   * @param {number} y - 点击 Y 坐标
+   * @param {number} bottomY - 底部区域起始 Y（工具槽区域）
    */
-  _getToolIndexAt(x) {
+  _getToolIndexAt(x, y, bottomY) {
     const s = this.screenWidth / 750;
     const startX = 40 * s + this.toolSlotOffset;
-    const toolWidth = 140 * s;
+    
+    // 计算工具大小（与渲染时一致）
+    const bottomHeight = this.screenHeight * 0.10;
+    const toolSize = Math.min(bottomHeight * 0.7, 100 * s);
+    const toolWidth = toolSize * 1.15;
+    
+    // 检查 Y 是否在工具槽区域内
+    if (y < bottomY || y > bottomY + bottomHeight) {
+      return -1;
+    }
     
     const index = Math.floor((x - startX) / toolWidth);
     if (index >= 0 && index < this.tools.length) {
@@ -1027,8 +1138,8 @@ class GameplayScene extends Scene {
   }
 
   _findDirtAt(x, y) {
-    // 将屏幕坐标转换为游戏区域坐标（减去 top_bar 高度）
-    const gameAreaY = this.screenHeight * 0.1;
+    // 将屏幕坐标转换为游戏区域坐标（减去顶部 8%）
+    const gameAreaY = this.screenHeight * 0.08;
     const gameY = y - gameAreaY;
     
     for (let i = this.dirtObjects.length - 1; i >= 0; i--) {

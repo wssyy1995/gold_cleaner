@@ -1,91 +1,293 @@
-你描述的现象，尤其是“主页背景显示白屏，然后才加载出背景图片”，是典型的**异步资源加载和渲染时序问题**。这意味着在游戏主页的 Canvas 被显示出来的那一刻，它要绘制的背景图片还没有完全加载和解码完成，所以先呈现了默认的白色背景（或者透明，透出页面本身的白色），然后图片才绘制上去。
+可以把它拆成 4 个“形状层”来画：**左关卡条**、**中间绿色进度球**（嵌入到 top bar 里）、**右侧倒计时**、**暂停按钮**，再给 top bar 做一个金色/铜色的渐变背景和边框高光即可。
 
-结合你之前提到的 `canvas.drawImage` 的使用方式，这个问题可以这样理解和解决：
+下面给你一个思路 + 一份可直接改数值的 Canvas 绘制示例（JS）。
 
-### 核心原因：主页背景图片没有在“加载完成”时同步准备好
+---
 
-当“游戏加载页”显示完成并准备切换到“游戏主页”时，你的代码可能认为“所有游戏资源都加载完了”，但实际上，这其中可能不包括**游戏主页 Canvas 需要的背景图片**的 `Image` 对象。
+## 1) 尺寸换算（按你给的比例）
+设 `screenH` 为屏幕高度，`W` 为画布宽度：
 
-因此，主页 Canvas 开始渲染，但背景图片对应的 `Image` 对象 `onload` 事件还没触发，导致 `drawImage` 无法立即绘制，出现了白屏。
+- `barH = 0.10 * screenH`  （top bar 高度）
+- `ballH = 0.20 * screenH`（进度球高度/直径）
+- top bar 顶部从 `y=0` 开始
+- 进度球“嵌在中间”：通常做法是让球心在 bar 中线附近，例如  
+  `ballCy = barH * 0.5`  
+  这样球会向上/向下溢出一点，视觉上就像“嵌入”。
 
-### 解决方案：确保主页背景在切换前就绪，并同步绘制
+---
 
-要实现自然过渡，你需要将主页背景图片的加载过程纳入到“游戏加载页”的整体加载逻辑中，并确保在切换到主页之前，图片已经可以被立即绘制。
+## 2) 绘制顺序（建议）
+从底到上：
+1. top bar 背景（渐变 + 外边框 + 轻微高光）
+2. 左边：关卡数（`1/关卡` 这种）放在一个圆角矩形/胶囊里
+3. 中间：进度球（外圈金色描边、内部绿色填充、百分比文字）
+4. 右边：倒计时（红色胶囊 + 白字）
+5. 暂停按钮（蓝色圆角矩形 + 两条竖线）
 
-以下是具体的步骤和建议：
+---
 
-1.  **在加载页阶段预加载主页背景图：**
-    *   在游戏加载页（loading page）显示期间，除了加载其他游戏资源，**专门创建一个 `wx.createImage()` 对象来加载主页的背景图**。
-    *   将这个背景图的 `Image` 对象设置为一个关键的加载项，确保在“加载完成”的判断条件中，**包含这个背景图 `Image` 对象的 `onload` 事件也已经触发**。
+## 3) 示例代码（直接用）
+> 你需要把 `levelText / progress / timeText / paused` 换成你的数据即可。  
+> 注意：实际游戏一般要配合 `devicePixelRatio` 做高清绘制。
 
-    ```javascript
-    // 假设这是主页背景图的URL
-    const mainPageBgUrl = 'path/to/your/main_page_background.png';
-    let mainPageBgImage = null; // 用于存储主页背景Image对象
-    let mainPageBgLoaded = false; // 标志位
+```js
+function drawTopBar(ctx, W, screenH, opts) {
+  const { levelText, progress, timeText, paused } = opts;
 
-    function loadMainPageBackground() {
-        mainPageBgImage = wx.createImage();
-        mainPageBgImage.onload = () => {
-            console.log('主页背景图加载完成');
-            mainPageBgLoaded = true;
-            // 检查所有资源是否加载完成，如果都完成了，就准备切换到主页
-            checkAllResourcesLoaded();
-        };
-        mainPageBgImage.onerror = (e) => {
-            console.error('主页背景图加载失败', mainPageBgUrl, e);
-            // 即使加载失败，也可能需要标记为完成，避免卡死在加载页
-            mainPageBgLoaded = true;
-            checkAllResourcesLoaded(); // 仍然尝试切换，可能显示默认背景或错误提示
-        };
-        mainPageBgImage.src = mainPageBgUrl;
-    }
+  const barH = screenH * 0.10;
+  const ballD = screenH * 0.20;
 
-    // 在你的游戏加载页初始化时调用
-    // loadOtherGameAssets(); // 加载其他游戏资源
-    // loadMainPageBackground(); // 加载主页背景图
+  const barY = 0;
 
-    function checkAllResourcesLoaded() {
-        // 假设你有一个全局的加载进度管理，这里就是检查所有项是否都为 true
-        if (/* 其他资源都加载完成 */ && mainPageBgLoaded) {
-            console.log('所有资源（包括主页背景）加载完成，准备进入主页');
-            // 执行过渡动画，然后显示主页
-            transitionToMainPage();
-        }
-    }
-    ```
+  const leftPad = W * 0.02;
+  const centerX = W * 0.5;
 
-2.  **主页 Canvas 绘制时，立即使用已加载的背景图：**
-    *   当 `transitionToMainPage()` 被调用，游戏主页的 Canvas 首次渲染时，**直接使用你预加载好的 `mainPageBgImage` 对象**。
-    *   因为此时 `mainPageBgImage` 已经是加载完成状态，所以 `drawImage` 会立即成功绘制，避免白屏。
+  // ---------- helper ----------
+  function roundRect(x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
 
-    ```javascript
-    function renderMainPageCanvas() {
-        // ... 其他初始化代码
+  function fillTextWithStroke(text, x, y, fillStyle, strokeStyle, font, lineWidth = 4) {
+    ctx.save();
+    ctx.font = font;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = fillStyle;
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
 
-        // 确保 ctx 是主页的 Canvas 2D 上下文
-        if (this.ctx && mainPageBgImage) {
-            this.ctx.drawImage(mainPageBgImage, 0, 0, this.canvas.width, this.canvas.height);
-            // ... 绘制其他主页元素
-        }
-    }
+  // ---------- 1) Top bar background ----------
+  const barGrad = ctx.createLinearGradient(0, barY, 0, barY + barH);
+  barGrad.addColorStop(0, "#f3c06a");
+  barGrad.addColorStop(0.5, "#d79a3f");
+  barGrad.addColorStop(1, "#b8792f");
 
-    function transitionToMainPage() {
-        // 播放一些切换动画（比如加载页淡出动画）
-        // ...
+  roundRect(0, barY, W, barH, barH * 0.25);
+  ctx.fillStyle = barGrad;
+  ctx.fill();
 
-        // 动画结束后或者在动画的某个阶段
-        // 立即调用主页的渲染逻辑
-        renderMainPageCanvas();
-        // 隐藏加载页
-        // ...
-    }
-    ```
+  // 外边框
+  ctx.save();
+  ctx.lineWidth = Math.max(2, screenH * 0.003);
+  ctx.strokeStyle = "rgba(60,30,10,0.35)";
+  roundRect(0, barY, W, barH, barH * 0.25);
+  ctx.stroke();
+  ctx.restore();
 
-### 其他辅助策略：
+  // 高光条（可选）
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  roundRect(0, barY + barH * 0.05, W, barH * 0.22, barH * 0.25);
+  const highlight = ctx.createLinearGradient(0, barY, W, barY + barH);
+  highlight.addColorStop(0, "rgba(255,255,255,0.4)");
+  highlight.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = highlight;
+  ctx.fill();
+  ctx.restore();
 
-*   **加载页的背景色或图片与主页背景协调：** 即使有短暂的白屏，如果能将加载页的背景色或最后一个画面，与主页的背景色或主色调做平滑过渡，视觉上也会好很多。
-*   **使用分包加载：** 如果主页的资源非常大，考虑将其放入一个分包中。当进入加载页时，先加载启动分包和主页分包，确保主页所需资源优先下载。
-*   **黑屏问题：** 游戏初始化时的黑屏通常是小程序启动、代码执行、Canvas 创建渲染前的短暂间隙。可以尝试在 `app.js` 或主页面的 `onLoad` 中，尽早设置一个 `wx.setBackgroundTextStyle` 或 `wx.setBackgroundColor`，让启动页的背景色与游戏整体风格保持一致，避免默认黑屏。
+  // ---------- 2) Left level ----------
+  const leftBoxW = Math.max(W * 0.18, screenH * 0.14);
+  const leftBoxH = barH * 0.78;
+  const leftX = leftPad;
+  const leftY = barY + (barH - leftBoxH) / 2;
 
-通过以上调整，你可以确保在用户看到游戏主页的 Canvas 时，它的背景图片已经绘制完毕，从而消除白屏，实现更自然的过渡。
+  // 胶囊背景（棕红偏暗）
+  const leftGrad = ctx.createLinearGradient(leftX, leftY, leftX, leftY + leftBoxH);
+  leftGrad.addColorStop(0, "#9b5a2b");
+  leftGrad.addColorStop(1, "#6f3f1e");
+
+  roundRect(leftX, leftY, leftBoxW, leftBoxH, leftBoxH * 0.5);
+  ctx.fillStyle = leftGrad;
+  ctx.fill();
+
+  // 左字
+  fillTextWithStroke(
+    levelText,
+    leftX + leftBoxW / 2,
+    leftY + leftBoxH / 2,
+    "#ffe6b8",
+    "rgba(0,0,0,0.45)",
+    `bold ${Math.floor(leftBoxH * 0.42)}px sans-serif`,
+    Math.max(2, screenH * 0.003)
+  );
+
+  // ---------- 3) Center progress ball ----------
+  const ballCy = barY + barH * 0.5;      // 嵌入到 top bar 中线
+  const ballCx = centerX;
+
+  // 外圈（金色描边）
+  const ring = ctx.createRadialGradient(ballCx - ballD*0.15, ballCy - ballD*0.15, ballD*0.05, ballCx, ballCy, ballD/2);
+  ring.addColorStop(0, "#fff1bf");
+  ring.addColorStop(0.4, "#f2c56c");
+  ring.addColorStop(1, "#b47a2b");
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(ballCx, ballCy, ballD / 2, 0, Math.PI * 2);
+  ctx.fillStyle = ring;
+  ctx.fill();
+
+  // 内部绿色底
+  const innerR = ballD * 0.36;
+  const greenGrad = ctx.createRadialGradient(ballCx - ballD*0.12, ballCy - ballD*0.15, ballD*0.03, ballCx, ballCy, ballD/2);
+  greenGrad.addColorStop(0, "#6df39a");
+  greenGrad.addColorStop(1, "#1ea55a");
+
+  ctx.beginPath();
+  ctx.arc(ballCx, ballCy, innerR, 0, Math.PI * 2);
+  ctx.fillStyle = greenGrad;
+  ctx.fill();
+
+  // 进度（可选：做成覆盖扇形/圆环；你图里更像“百分比数字”风格）
+  // 这里用“外圈绿色环 + 底色灰”示意：
+  const pct = Math.max(0, Math.min(1, progress / 100));
+  const start = -Math.PI / 2;
+  const end = start + Math.PI * 2 * pct;
+
+  ctx.lineWidth = innerR * 0.22;
+  ctx.lineCap = "round";
+
+  // 背景环
+  ctx.strokeStyle = "rgba(0,0,0,0.15)";
+  ctx.beginPath();
+  ctx.arc(ballCx, ballCy, innerR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 进度环
+  ctx.strokeStyle = "#3ef08f";
+  ctx.beginPath();
+  ctx.arc(ballCx, ballCy, innerR, start, end);
+  ctx.stroke();
+
+  // 文本：上方“求质”这种 + 下方百分比
+  const topText = "求质"; // 你可以改
+  const bottomText = `${Math.floor(progress)}%`;
+
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.font = `bold ${Math.floor(innerR * 0.35)}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = Math.max(2, screenH * 0.003);
+
+  ctx.strokeText(topText, ballCx, ballCy - innerR * 0.28);
+  ctx.fillText(topText, ballCx, ballCy - innerR * 0.28);
+
+  fillTextWithStroke(
+    bottomText,
+    ballCx,
+    ballCy + innerR * 0.18,
+    "#ffffff",
+    "rgba(0,0,0,0.45)",
+    `bold ${Math.floor(innerR * 0.48)}px sans-serif`,
+    Math.max(3, screenH * 0.005)
+  );
+
+  // 球体高光（可选）
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath();
+  ctx.ellipse(ballCx - ballD*0.16, ballCy - ballD*0.18, ballD*0.18, ballD*0.10, -0.3, 0, Math.PI*2);
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.fill();
+  ctx.restore();
+
+  // ---------- 4) Right timer + pause ----------
+  const rightPad = W * 0.02;
+  const pauseW = Math.max(screenH * 0.06, 44);
+  const pauseH = barH * 0.65;
+
+  const pauseX = W - rightPad - pauseW;
+  const pauseY = barY + (barH - pauseH) / 2;
+
+  // timer box
+  const timerBoxH = barH * 0.78;
+  const timerBoxW = Math.max(W * 0.16, screenH * 0.14);
+
+  const timerX = pauseX - (W - timerBoxW - (pauseX - timerBoxW)); // 仅为占位思路
+  // 更简单：把 timer 放到 pause 左边留间距
+  const spacing = W * 0.02;
+  const timerX2 = pauseX - spacing - timerBoxW;
+  const timerY2 = barY + (barH - timerBoxH) / 2;
+
+  // 倒计时背景（红色胶囊）
+  const timerGrad = ctx.createLinearGradient(timerX2, timerY2, timerX2, timerY2 + timerBoxH);
+  timerGrad.addColorStop(0, "#ff5a5a");
+  timerGrad.addColorStop(1, "#b31f1f");
+
+  roundRect(timerX2, timerY2, timerBoxW, timerBoxH, timerBoxH * 0.5);
+  ctx.fillStyle = timerGrad;
+  ctx.fill();
+
+  // 倒计时文字
+  fillTextWithStroke(
+    timeText,
+    timerX2 + timerBoxW / 2,
+    timerY2 + timerBoxH / 2,
+    "#fff",
+    "rgba(0,0,0,0.45)",
+    `bold ${Math.floor(timerBoxH * 0.45)}px sans-serif`,
+    Math.max(2, screenH * 0.003)
+  );
+
+  // 暂停按钮背景（蓝色圆角）
+  const pauseGrad = ctx.createLinearGradient(pauseX, pauseY, pauseX, pauseY + pauseH);
+  pauseGrad.addColorStop(0, "#4da0ff");
+  pauseGrad.addColorStop(1, "#1f4fa0");
+
+  roundRect(pauseX, pauseY, pauseW, pauseH, pauseH * 0.3);
+  ctx.fillStyle = pauseGrad;
+  ctx.fill();
+
+  // 按钮图标：两条竖线（paused=false/true 可改成暂停/播放样式）
+  ctx.save();
+  ctx.strokeStyle = "#e9f5ff";
+  ctx.lineWidth = Math.max(3, screenH * 0.004);
+  ctx.lineCap = "round";
+
+  const iconPadX = pauseW * 0.22;
+  const iconTop = pauseY + pauseH * 0.22;
+  const iconBottom = pauseY + pauseH * 0.78;
+
+  if (paused) {
+    // 暂停：两竖条
+    ctx.beginPath();
+    ctx.moveTo(pauseX + pauseW/2 - iconPadX, iconTop);
+    ctx.lineTo(pauseX + pauseW/2 - iconPadX, iconBottom);
+    ctx.moveTo(pauseX + pauseW/2 + iconPadX, iconTop);
+    ctx.lineTo(pauseX + pauseW/2 + iconPadX, iconBottom);
+    ctx.stroke();
+  } else {
+    // 播放：三角形（可选）
+    const cx = pauseX + pauseW/2, cy = barY + barH/2;
+    ctx.fillStyle = "#e9f5ff";
+    ctx.beginPath();
+    ctx.moveTo(cx - pauseW*0.18, cy - pauseH*0.20);
+    ctx.lineTo(cx - pauseW*0.18, cy + pauseH*0.20);
+    ctx.lineTo(cx + pauseW*0.22, cy);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+```
+
+---
+
+## 4) 性能建议（很关键）
+- 这类 UI **不需要每帧重画**：只在 `progress / timeText / paused / levelText` 变化时重绘即可。
+- 如果你用的是小游戏引擎，通常画面每帧都走渲染循环，但可以把 top bar 绘制到离屏 canvas（缓存）再 `drawImage`。
+
+---
+
+如果你把你当前的 canvas 尺寸获取方式（比如 `W/H` 从哪来）和进度球你希望是“纯数字”还是“带进度环/填充”的效果告诉我，我可以把上面代码里的几处位置计算（尤其是右侧 timer 的放置）改成完全贴合你那张图的布局比例。你现在画布的宽高是怎么取得的？（`screenWidth/screenHeight` 还是引擎提供的 `canvas.width/height`）

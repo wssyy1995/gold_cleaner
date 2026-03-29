@@ -42,7 +42,7 @@ const STAGE_1_LEVELS = [
   {
     id: 1,
     stage: 1,
-    name: '入门练习',
+    name: '老年人卧室',
     background: 'images/game/stage1_level1.png',
     preview: 'images/game/stage1_l1_home.png',
     dirts: [

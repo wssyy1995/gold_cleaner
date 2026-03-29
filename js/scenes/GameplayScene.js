@@ -9,7 +9,8 @@ import ProgressBar from '../ui/components/ProgressBar';
 import TopBar from '../ui/components/TopBar';
 import ToolSlot from '../ui/components/ToolSlot';
 import GameConfig from '../config/GameConfig';
-import { BASE_TOOLS, getTool } from '../config/ToolConfig';
+import { BASE_TOOLS, PREMIUM_TOOLS, getTool } from '../config/ToolConfig';
+import { getLevel, DIRT_TYPES } from '../config/LevelConfig';
 import { GlobalPreviewCache } from './HomeScene';
 import { globalEvent } from '../core/EventEmitter';
 import { getGame } from '../../app';
@@ -58,6 +59,19 @@ class GameplayScene extends Scene {
     this.bgImage = null;
     this.bgLoaded = false;
     
+    // 从 LevelConfig 获取关卡配置
+    this.levelConfig = getLevel(this.stage, this.levelId);
+    if (!this.levelConfig) {
+      console.error(`[GameplayScene] 未找到关卡配置: stage=${this.stage}, level=${this.levelId}`);
+      // 使用默认配置
+      this.levelConfig = {
+        name: `关卡 ${this.levelId}`,
+        timeLimit: 60,
+        dirts: []
+      };
+    }
+    console.log(`[GameplayScene] 加载关卡: ${this.levelConfig.name}`);
+    
     // 初始化云存储
     await this.cloudStorage.init();
     
@@ -67,10 +81,17 @@ class GameplayScene extends Scene {
   }
 
   /**
-   * 加载关卡背景图（复用预览缓存 → 云存储 → 本地）
+   * 加载关卡背景图（使用 LevelConfig 配置）
    */
   async _loadBackground() {
     if (typeof wx === 'undefined') return;
+    
+    // 从 LevelConfig 获取背景图路径
+    const bgPath = this.levelConfig.background;
+    if (!bgPath) {
+      console.warn('[GameplayScene] 关卡未配置背景图');
+      return;
+    }
     
     const previewKey = `preview_${this.stage}_${this.levelId}`;
     const cacheKey = `game_stage${this.stage}_l${this.levelId}`;
@@ -86,7 +107,18 @@ class GameplayScene extends Scene {
       }
     }
     
-    // 2. 从云存储缓存加载
+    // 2. 尝试从本地加载（使用 LevelConfig 配置的路径）
+    try {
+      const img = await this._downloadLocalImage(bgPath);
+      this.bgImage = img;
+      this.bgLoaded = true;
+      console.log(`[GameplayScene] 背景从本地加载: ${bgPath}`);
+      return;
+    } catch (e) {
+      console.log(`[GameplayScene] 本地背景加载失败: ${bgPath}`);
+    }
+    
+    // 3. 从云存储缓存加载（后备）
     try {
       const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
       const cacheInfo = cacheRecord[cacheKey];
@@ -103,19 +135,6 @@ class GameplayScene extends Scene {
       }
     } catch (e) {
       console.log(`[GameplayScene] 云存储背景加载失败: ${cacheKey}`);
-    }
-    
-    // 3. 从本地加载（后备）
-    try {
-      const pathParts = ['images', 'game', `game_stage${this.stage}_l${this.levelId}_home.png`];
-      const localPath = pathParts.join('/');
-      
-      const img = await this._downloadLocalImage(localPath);
-      this.bgImage = img;
-      this.bgLoaded = true;
-      console.log(`[GameplayScene] 背景从本地加载: ${cacheKey}`);
-    } catch (e) {
-      console.log(`[GameplayScene] 本地背景加载失败: ${cacheKey}`);
     }
   }
   
@@ -134,12 +153,12 @@ class GameplayScene extends Scene {
   _initUI() {
     const s = this.screenWidth / 750;
     
-    // 先从配置获取关卡数据（TopBar 需要用到 timeLimit）
-    this.timeLimit = GameConfig.getTimeLimit(this.levelId);
+    // 从 LevelConfig 获取时间限制
+    this.timeLimit = this.levelConfig.timeLimit || 60;
     this.remainingTime = this.timeLimit;
     
-    // 从配置获取当前关卡可用的工具
-    this.tools = GameConfig.getAvailableTools(this.levelId);
+    // 从 LevelConfig 的污垢配方中确定需要的工具
+    this.tools = this._getRequiredTools();
     this.currentToolIndex = 0;
     
     // 新的 TopBar 组件（替换原有顶部 UI）
@@ -217,35 +236,120 @@ class GameplayScene extends Scene {
     });
   }
 
+  /**
+   * 获取关卡需要的工具（从污垢配方中提取）
+   */
+  _getRequiredTools() {
+    const configDirts = this.levelConfig.dirts || [];
+    const requiredToolIds = new Set();
+    
+    // 收集所有需要的工具
+    configDirts.forEach(dirtConfig => {
+      const dirtType = DIRT_TYPES[dirtConfig.type];
+      if (dirtType && dirtType.recipes) {
+        // 使用第一个配方
+        const recipe = dirtType.recipes[0];
+        recipe.forEach(toolId => requiredToolIds.add(toolId));
+      }
+    });
+    
+    // 如果没有配置污垢，返回所有基础工具
+    if (requiredToolIds.size === 0) {
+      return BASE_TOOLS.filter(t => t.unlockLevel <= this.levelId);
+    }
+    
+    // 从 BASE_TOOLS 和 PREMIUM_TOOLS 中查找需要的工具
+    const allTools = [...BASE_TOOLS, ...PREMIUM_TOOLS];
+    
+    // 过滤出需要的工具，保持基础工具始终可用
+    const tools = allTools.filter(t => 
+      requiredToolIds.has(t.id) || (t.type === 'base' && t.unlockLevel <= this.levelId)
+    );
+    
+    console.log('[GameplayScene] 关卡可用工具:', tools.map(t => t.id).join(', '));
+    return tools.length > 0 ? tools : BASE_TOOLS.slice(0, 4);
+  }
+
   _generateDirts() {
     const s = this.screenWidth / 750;
     this.dirtObjects = [];
     
-    // 从配置获取当前关卡可用的污垢类型和数量
-    const availableDirtTypes = GameConfig.getAvailableDirtTypes(this.levelId);
-    const dirtCount = GameConfig.getDirtCount(this.levelId);
+    // 从 LevelConfig 获取配置的污垢
+    const configDirts = this.levelConfig.dirts || [];
+    
+    if (configDirts.length === 0) {
+      console.warn('[GameplayScene] 关卡没有配置污垢，使用随机生成');
+      this._generateRandomDirts();
+      return;
+    }
     
     // 游戏区域是屏幕下方 90%
     const gameAreaHeight = this.screenHeight * 0.9;
+    const topOffset = this.screenHeight * 0.08; // 顶部 8% 偏移
+    
+    configDirts.forEach((dirtConfig, i) => {
+      // 获取污垢类型定义
+      const dirtType = DIRT_TYPES[dirtConfig.type];
+      if (!dirtType) {
+        console.warn(`[GameplayScene] 未知污垢类型: ${dirtConfig.type}`);
+        return;
+      }
+      
+      // 配置中的坐标是设计尺寸（750x1334），需要适配当前屏幕
+      const x = (dirtConfig.x || 300) * s;
+      const y = (dirtConfig.y || 400) * s;
+      
+      // 尺寸可以配置，默认 100
+      const size = (dirtConfig.size || 1) * 100 * s;
+      
+      this.dirtObjects.push({
+        id: i,
+        type: dirtConfig.type,
+        name: dirtType.name,
+        x: x,
+        y: y, // 直接使用配置的 y 坐标
+        width: size,
+        height: size,
+        state: 'dirty',
+        cleanProgress: 0,
+        maxProgress: dirtType.recipes[0].length * 100,
+        currentRecipe: dirtType.recipes[0],
+        currentStep: 0,
+        color: dirtType.color,
+        recipes: dirtType.recipes,
+        score: 10 * dirtType.difficulty,
+        coinReward: 5 * dirtType.difficulty
+      });
+    });
+    
+    console.log(`[GameplayScene] 生成了 ${this.dirtObjects.length} 个污垢`);
+  }
+
+  /**
+   * 随机生成污垢（后备方案）
+   */
+  _generateRandomDirts() {
+    const s = this.screenWidth / 750;
+    const availableDirtTypes = GameConfig.getAvailableDirtTypes(this.levelId);
+    const dirtCount = GameConfig.getDirtCount(this.levelId);
     
     for (let i = 0; i < dirtCount; i++) {
       const dirtConfig = availableDirtTypes[Math.floor(Math.random() * availableDirtTypes.length)];
-      // y 坐标基于游戏区域（0 ~ gameAreaHeight），渲染时会加上 top_bar 偏移
-      const relativeY = (50 + Math.random() * (gameAreaHeight / s - 150)) * s;
+      const relativeY = (50 + Math.random() * (this.screenHeight * 0.9 / s - 150)) * s;
       
       this.dirtObjects.push({
         id: i,
         type: dirtConfig.type,
         name: dirtConfig.name,
         x: (80 + Math.random() * 590) * s,
-        y: relativeY, // 相对于游戏区域的 y 坐标
-        width: 100 * s, 
+        y: relativeY,
+        width: 100 * s,
         height: 100 * s,
-        state: 'dirty', // dirty, cleaning, clean
+        state: 'dirty',
         cleanProgress: 0,
-        maxProgress: dirtConfig.recipes[0].length * 100, // 需要多少次清洁
+        maxProgress: dirtConfig.recipes[0].length * 100,
         currentRecipe: dirtConfig.recipes[0],
-        currentStep: 0, // 当前清洁步骤
+        currentStep: 0,
         color: dirtConfig.color,
         recipes: dirtConfig.recipes,
         score: dirtConfig.score,
@@ -360,12 +464,19 @@ class GameplayScene extends Scene {
    * 显示结算弹窗
    */
   _showSettlement() {
-    // 使用配置计算星级
-    const stars = GameConfig.calculateStars(this.remainingTime || this.timeLimit, this.timeLimit);
+    // 从 LevelConfig 获取奖励配置
+    const reward = this.levelConfig.reward || { coins: 50, stars: 3 };
     
-    // 计算清洁的污垢数量和总奖励
-    const dirtCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
-    const coins = GameConfig.calculateCoins(stars, this.remainingTime || this.timeLimit, dirtCleaned);
+    // 计算星级（基于剩余时间比例）
+    const timeRatio = (this.remainingTime || this.timeLimit) / this.timeLimit;
+    let stars = 1;
+    if (timeRatio >= 0.6) stars = 3;
+    else if (timeRatio >= 0.3) stars = 2;
+    
+    // 计算金币（基础奖励 + 星级奖励）
+    const baseCoins = reward.coins || 50;
+    const starBonus = (stars - 1) * 25;
+    const coins = baseCoins + starBonus;
     
     // 导入 SettlementDialog
     const SettlementDialog = require('../ui/dialogs/SettlementDialog').default;

@@ -7,6 +7,7 @@ import Button from '../ui/components/Button';
 import Text from '../ui/components/Text';
 import ProgressBar from '../ui/components/ProgressBar';
 import TopBar from '../ui/components/TopBar';
+import ToolSlot from '../ui/components/ToolSlot';
 import { GlobalPreviewCache } from './HomeScene';
 import { globalEvent } from '../core/EventEmitter';
 import { getGame } from '../../app';
@@ -33,11 +34,8 @@ class GameplayScene extends Scene {
     this.zoomedDirt = null;
     this.zoomAnimation = 0;
     
-    // 工具槽滑动
-    this.toolSlotOffset = 0;
-    this.toolSlotDragging = false;
-    this.toolSlotStartX = 0;
-    this.toolSlotLastX = 0;
+    // ToolSlot 组件
+    this.toolSlot = null;
     
     // 工具拖动清洁
     this.isDraggingTool = false;
@@ -173,16 +171,26 @@ class GameplayScene extends Scene {
       }
     });
 
-    // 工具槽（支持滑动）
+    // 工具数据
     this.tools = [
-      { id: 'cloth', name: '抹布', icon: '🧽', color: '#4A90D9' },
-      { id: 'sponge', name: '海绵', icon: '🧼', color: '#66BB6A' },
-      { id: 'brush', name: '刷子', icon: '🪥', color: '#FFA726' },
-      { id: 'spray', name: '喷雾', icon: '🧴', color: '#AB47BC' },
-      { id: 'vacuum', name: '吸尘器', icon: '🌪️', color: '#EF5350' },
+      { id: 'cloth', name: '抹布', color: '#4A90D9' },
+      { id: 'sponge', name: '海绵', color: '#66BB6A' },
+      { id: 'brush', name: '刷子', color: '#FFA726' },
+      { id: 'spray', name: '喷雾', color: '#AB47BC' },
+      { id: 'vacuum', name: '吸尘器', color: '#EF5350' },
     ];
     this.currentToolIndex = 0;
-    this.toolSlotOffset = 0;
+    
+    // 创建 ToolSlot 组件
+    this.toolSlot = new ToolSlot({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight,
+      tools: this.tools,
+      selectedIndex: this.currentToolIndex,
+      onSelect: (index, tool) => {
+        this._selectTool(index);
+      }
+    });
     
     // 工具提示框
     this.toolTipText = new Text({
@@ -249,6 +257,12 @@ class GameplayScene extends Scene {
 
   _selectTool(index) {
     this.currentToolIndex = index;
+    
+    // 同步更新 ToolSlot 组件
+    if (this.toolSlot && this.toolSlot.selectedIndex !== index) {
+      this.toolSlot.selectedIndex = index;
+    }
+    
     this.showToolTip = true;
     // 重置提示框定时器
     if (this._toolTipTimer) clearTimeout(this._toolTipTimer);
@@ -689,8 +703,10 @@ class GameplayScene extends Scene {
     if (this.backBtn) this.backBtn.onRender(ctx);
     if (this.winBtn) this.winBtn.onRender(ctx);
 
-    // 6. 绘制工具槽（在底部区域）
-    this._renderToolSlot(ctx, s, bottomAreaY, bottomAreaHeight);
+    // 6. 绘制 ToolSlot 组件（在底部区域）
+    if (this.toolSlot) {
+      this.toolSlot.render(ctx);
+    }
   }
 
   /**
@@ -777,10 +793,10 @@ class GameplayScene extends Scene {
       this.toolTipText.onRender(ctx);
     }
     
-    // 绘制工具槽（在底部 10% 区域）
-    const bottomY = this.screenHeight * 0.90;
-    const bottomHeight = this.screenHeight * 0.10;
-    this._renderToolSlot(ctx, s, bottomY, bottomHeight);
+    // 绘制 ToolSlot 组件（在底部 10% 区域）
+    if (this.toolSlot) {
+      this.toolSlot.render(ctx);
+    }
     
     // 绘制拖动的工具
     if (this.isDraggingTool) {
@@ -807,68 +823,6 @@ class GameplayScene extends Scene {
         ctx.arc(this.dragCurrentPos.x, this.dragCurrentPos.y, 35 * s, 0, Math.PI * 2);
         ctx.stroke();
       }
-    }
-  }
-
-  /**
-   * 渲染工具槽（在底部区域）
-   * @param {number} bottomY - 底部区域起始 Y
-   * @param {number} bottomHeight - 底部区域高度
-   */
-  _renderToolSlot(ctx, s, bottomY, bottomHeight) {
-    // 工具在底部区域垂直居中
-    const toolSize = Math.min(bottomHeight * 0.7, 100 * s);
-    const toolY = bottomY + (bottomHeight - toolSize) / 2;
-    const toolWidth = toolSize * 1.15; // 工具宽度略大于高度
-    const startX = 40 * s + this.toolSlotOffset;
-    
-    this.tools.forEach((tool, index) => {
-      const x = startX + index * toolWidth;
-      
-      // 只绘制可见的
-      if (x + toolSize < 0 || x > this.screenWidth) return;
-      
-      // 选中高亮
-      if (index === this.currentToolIndex) {
-        ctx.fillStyle = tool.color;
-        this._drawRoundedRect(ctx, x - 5 * s, toolY - 5 * s, toolSize + 10 * s, toolSize + 10 * s, 16 * s);
-        ctx.fill();
-      }
-      
-      // 工具背景（白色半透明）
-      ctx.fillStyle = index === this.currentToolIndex ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.85)';
-      this._drawRoundedRect(ctx, x, toolY, toolSize, toolSize, 12 * s);
-      ctx.fill();
-      
-      // 工具图标
-      ctx.fillStyle = tool.color;
-      ctx.font = `${toolSize * 0.4}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(tool.icon, x + toolSize/2, toolY + toolSize/2 - toolSize * 0.08);
-      
-      // 工具名称
-      ctx.fillStyle = '#333333';
-      ctx.font = `${toolSize * 0.15}px sans-serif`;
-      ctx.fillText(tool.name, x + toolSize/2, toolY + toolSize - toolSize * 0.15);
-    });
-    
-    // 分页指示器（在底部区域底部）
-    const pageCount = this.tools.length;
-    const dotSize = 6 * s;
-    const dotGap = 12 * s;
-    const totalWidth = pageCount * dotGap - dotGap;
-    const startDotX = (this.screenWidth - totalWidth) / 2;
-    const dotY = bottomY + bottomHeight - 12 * s; // 距离底部区域底部 12*s
-    
-    for (let i = 0; i < pageCount; i++) {
-      const dotX = startDotX + i * dotGap;
-      const isActive = i === this.currentToolIndex;
-      
-      ctx.fillStyle = isActive ? '#4A90D9' : '#CCCCCC';
-      ctx.beginPath();
-      ctx.arc(dotX, dotY, isActive ? dotSize : dotSize/2, 0, Math.PI * 2);
-      ctx.fill();
     }
   }
 
@@ -963,23 +917,28 @@ class GameplayScene extends Scene {
       // 检查退出按钮
       if (this.exitZoomBtn && this.exitZoomBtn.onTouchStart(x, y)) return true;
       
-      // 检查是否在工具槽区域（底部 10%）
-      const bottomAreaY = this.screenHeight * 0.90;
-      if (y > bottomAreaY) {
-        const toolIndex = this._getToolIndexAt(x, y, bottomAreaY);
-        if (toolIndex >= 0) {
-          this._selectTool(toolIndex);
-          this.isDraggingTool = true;
-          this.dragStartPos = { x, y };
-          this.dragCurrentPos = { x, y };
-          this.showToolTip = false;
+      // 检查 ToolSlot 区域（底部 10%）
+      if (this.toolSlot) {
+        const result = this.toolSlot.onTouchStart(x, y);
+        if (result) {
+          // 点击了工具槽，稍后 onTouchEnd 会处理选中
           return true;
         }
       }
       
       // 检查是否点击污垢区域（开始拖动工具）
-      if (this.isDraggingTool) {
+      const s = this.screenWidth / 750;
+      const centerX = 375 * s;
+      const centerY = 600 * s;
+      const size = 300 * s;
+      
+      if (x >= centerX - size/2 && x <= centerX + size/2 &&
+          y >= centerY - size/2 && y <= centerY + size/2) {
+        // 在污垢区域点击，开始拖动工具
+        this.isDraggingTool = true;
+        this.dragStartPos = { x, y };
         this.dragCurrentPos = { x, y };
+        this.showToolTip = false;
         return true;
       }
       
@@ -998,19 +957,13 @@ class GameplayScene extends Scene {
       return true;
     }
     
-    // 检查工具槽滑动（底部 10% 区域）
-    const bottomAreaY = this.screenHeight * 0.90;
-    if (y > bottomAreaY) {
-      this.toolSlotDragging = true;
-      this.toolSlotStartX = x;
-      this.toolSlotLastX = x;
-      
-      // 检查是否点击了某个工具
-      const toolIndex = this._getToolIndexAt(x, y, bottomAreaY);
-      if (toolIndex >= 0) {
-        this._selectTool(toolIndex);
+    // 检查 ToolSlot 区域（底部 10%）
+    if (this.toolSlot) {
+      const result = this.toolSlot.onTouchStart(x, y);
+      if (result) {
+        // 点击了工具槽内的工具
+        return true;
       }
-      return true;
     }
 
     // 检查污垢点击（双击检测）
@@ -1030,24 +983,9 @@ class GameplayScene extends Scene {
   }
 
   onTouchMove(x, y) {
-    const s = this.screenWidth / 750;
-    
     if (this.viewMode === 'zoom' && this.isDraggingTool) {
       // 放大视图中的工具拖动
       this.dragCurrentPos = { x, y };
-      return true;
-    }
-    
-    if (this.toolSlotDragging) {
-      // 工具槽滑动
-      const deltaX = x - this.toolSlotLastX;
-      this.toolSlotOffset += deltaX;
-      
-      // 限制滑动范围
-      const minOffset = -(this.tools.length - 4) * 140 * s;
-      this.toolSlotOffset = Math.max(minOffset, Math.min(0, this.toolSlotOffset));
-      
-      this.toolSlotLastX = x;
       return true;
     }
     
@@ -1060,6 +998,11 @@ class GameplayScene extends Scene {
     // 放大视图模式
     if (this.viewMode === 'zoom') {
       if (this.exitZoomBtn && this.exitZoomBtn.onTouchEnd(x, y)) return true;
+      
+      // 先处理 ToolSlot 的触摸结束（用于选中工具）
+      if (this.toolSlot && this.toolSlot.onTouchEnd(x, y)) {
+        return true;
+      }
       
       // 检查工具拖动结束
       if (this.isDraggingTool && this.zoomedDirt) {
@@ -1094,47 +1037,12 @@ class GameplayScene extends Scene {
       return true;
     }
     
-    // 结束工具槽滑动
-    if (this.toolSlotDragging) {
-      this.toolSlotDragging = false;
-      
-      // 吸附到最近的工具
-      const toolWidth = 140 * s;
-      const index = Math.round(-this.toolSlotOffset / toolWidth);
-      const clampedIndex = Math.max(0, Math.min(this.tools.length - 1, index));
-      this.toolSlotOffset = -clampedIndex * toolWidth;
-      
+    // 处理 ToolSlot 的触摸结束（用于选中工具）
+    if (this.toolSlot && this.toolSlot.onTouchEnd(x, y)) {
       return true;
     }
     
     return false;
-  }
-
-  /**
-   * 获取点击位置的工具索引
-   * @param {number} x - 点击 X 坐标
-   * @param {number} y - 点击 Y 坐标
-   * @param {number} bottomY - 底部区域起始 Y（工具槽区域）
-   */
-  _getToolIndexAt(x, y, bottomY) {
-    const s = this.screenWidth / 750;
-    const startX = 40 * s + this.toolSlotOffset;
-    
-    // 计算工具大小（与渲染时一致）
-    const bottomHeight = this.screenHeight * 0.10;
-    const toolSize = Math.min(bottomHeight * 0.7, 100 * s);
-    const toolWidth = toolSize * 1.15;
-    
-    // 检查 Y 是否在工具槽区域内
-    if (y < bottomY || y > bottomY + bottomHeight) {
-      return -1;
-    }
-    
-    const index = Math.floor((x - startX) / toolWidth);
-    if (index >= 0 && index < this.tools.length) {
-      return index;
-    }
-    return -1;
   }
 
   _findDirtAt(x, y) {

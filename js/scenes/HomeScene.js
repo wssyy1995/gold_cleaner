@@ -119,6 +119,9 @@ class HomeScene extends Scene {
     
     // 预加载当前关卡预览图
     this._preloadCurrentLevelPreview();
+    
+    // 加载主页面标题和阶段标签图
+    this._loadTitleImages();
   }
 
   /**
@@ -340,6 +343,9 @@ class HomeScene extends Scene {
     
     // 初始化时更新金币显示
     this._updateCoinDisplay();
+    
+    // 初始化按钮和图标
+    this._initButtonAndIcon();
   }
 
   /**
@@ -412,7 +418,11 @@ class HomeScene extends Scene {
     const textY = capsuleY + capsuleHeight / 2;
     ctx.fillText(text, textX, textY);
     ctx.restore();
+  }
 
+  _initButtonAndIcon() {
+    const s = this.screenWidth / 750;
+    
     this.iconSize = 80 * s;
     this.iconHitArea = 100 * s;
 
@@ -443,6 +453,41 @@ class HomeScene extends Scene {
     const currentLevel = this._getCurrentLevel();
     if (currentLevel) {
       await this._loadPreviewImage(this.currentStage, currentLevel.id);
+    }
+  }
+
+  /**
+   * 加载主页面标题和阶段标签图
+   */
+  async _loadTitleImages() {
+    // 加载游戏标题图
+    await this._loadCloudImage('bg_game_title', 'bg_game_title');
+    // 加载阶段标签图
+    await this._loadCloudImage('bg_stage1_tag', 'bg_stage1_tag');
+  }
+
+  /**
+   * 从云存储加载图片
+   * @param {string} cacheKey - 缓存key
+   * @param {string} configKey - 配置key
+   */
+  async _loadCloudImage(cacheKey, configKey) {
+    try {
+      const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
+      const cacheInfo = cacheRecord[configKey];
+      
+      if (cacheInfo && cacheInfo.fileID) {
+        const tempURL = await this.cloudStorage.getTempFileURL(cacheInfo.fileID);
+        if (tempURL) {
+          const img = await this._downloadImage(tempURL);
+          this[`_${cacheKey}Image`] = img;
+          this[`_${cacheKey}Loaded`] = true;
+          console.log(`[HomeScene] ${cacheKey} 从云存储加载完成`);
+          return;
+        }
+      }
+    } catch (e) {
+      console.log(`[HomeScene] ${cacheKey} 加载失败:`, e.message);
     }
   }
 
@@ -630,6 +675,9 @@ class HomeScene extends Scene {
     // 绘制金币组件
     this._drawCoinComponent(ctx);
 
+    // 绘制游戏标题和阶段标签（在主页面中间）
+    this._drawTitleImages(ctx);
+
     this._drawLevelIcons(ctx);
 
     if (this.shopBtn) this.shopBtn.onRender(ctx);
@@ -646,6 +694,48 @@ class HomeScene extends Scene {
     const dx = (sw - dw) / 2;
     const dy = (sh - dh) / 2;
     ctx.drawImage(img, dx, dy, dw, dh);
+  }
+
+  /**
+   * 绘制游戏标题和阶段标签
+   */
+  _drawTitleImages(ctx) {
+    const s = this.screenWidth / 750;
+    const centerX = this.screenWidth / 2;
+    const startY = 200 * s; // 从屏幕顶部往下 200px 开始绘制
+    
+    // 绘制游戏标题
+    if (this._bg_game_titleImage && this._bg_game_titleLoaded) {
+      const titleHeight = 120 * s; // 标题高度
+      const titleScale = titleHeight / this._bg_game_titleImage.height;
+      const titleWidth = this._bg_game_titleImage.width * titleScale;
+      const titleX = centerX - titleWidth / 2;
+      const titleY = startY;
+      
+      ctx.drawImage(
+        this._bg_game_titleImage, 
+        titleX, titleY, 
+        titleWidth, titleHeight
+      );
+    }
+    
+    // 绘制阶段标签（在标题下方）
+    if (this._bg_stage1_tagImage && this._bg_stage1_tagLoaded) {
+      const tagHeight = 60 * s; // 标签高度
+      const tagScale = tagHeight / this._bg_stage1_tagImage.height;
+      const tagWidth = this._bg_stage1_tagImage.width * tagScale;
+      const tagX = centerX - tagWidth / 2;
+      // 如果有标题，标签放在标题下方 20px；如果没有，放在 startY
+      const tagY = (this._bg_game_titleImage && this._bg_game_titleLoaded) 
+        ? startY + 120 * s + 20 * s 
+        : startY;
+      
+      ctx.drawImage(
+        this._bg_stage1_tagImage, 
+        tagX, tagY, 
+        tagWidth, tagHeight
+      );
+    }
   }
 
   _drawLevelIcons(ctx) {

@@ -1,293 +1,430 @@
-可以把它拆成 4 个“形状层”来画：**左关卡条**、**中间绿色进度球**（嵌入到 top bar 里）、**右侧倒计时**、**暂停按钮**，再给 top bar 做一个金色/铜色的渐变背景和边框高光即可。
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas 工具槽绘制</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: sans-serif;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        canvas {
+            border: 1px solid #ddd;
+            display: block;
+            margin: 20px 0;
+            background: #fff;
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 8px 16px;
+            background: #4da0ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #2a7ec9;
+        }
+        .info {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #4da0ff;
+            font-size: 13px;
+            color: #555;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Canvas 工具槽绘制</h2>
+        <canvas id="canvas"></canvas>
+        
+        <div class="controls">
+            <button onclick="toggleSlot(0)">切换槽 0 选中</button>
+            <button onclick="toggleSlot(1)">切换槽 1 禁用</button>
+            <button onclick="toggleSlot(2)">切换槽 2 选中</button>
+            <button onclick="redraw()">重绘</button>
+        </div>
 
-下面给你一个思路 + 一份可直接改数值的 Canvas 绘制示例（JS）。
+        <div class="info">
+            <strong>说明：</strong><br>
+            • 长按点击画布可检测槽位（demo 用）<br>
+            • 支持自定义槽位数、大小、颜色、图标<br>
+            • 可扩展为：禁用状态、数量提示、拖拽等功能
+        </div>
+    </div>
 
----
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
 
-## 1) 尺寸换算（按你给的比例）
-设 `screenH` 为屏幕高度，`W` 为画布宽度：
+        // ========== 配置 ==========
+        const config = {
+            canvasWidth: 600,
+            canvasHeight: 150,
+            slotCount: 5,
+            slotSize: 80,
+            slotGap: 15,
+            padding: 20,
+            // 状态追踪
+            selectedSlots: new Set(),
+            disabledSlots: new Set(),
+        };
 
-- `barH = 0.10 * screenH`  （top bar 高度）
-- `ballH = 0.20 * screenH`（进度球高度/直径）
-- top bar 顶部从 `y=0` 开始
-- 进度球“嵌在中间”：通常做法是让球心在 bar 中线附近，例如  
-  `ballCy = barH * 0.5`  
-  这样球会向上/向下溢出一点，视觉上就像“嵌入”。
+        // 物品数据（演示）
+        const items = [
+            { name: '金块', color: '#ffd700', icon: 'drawGoldBar' },
+            { name: '扫帚', color: '#d4882d', icon: 'drawBrush' },
+            { name: '喷雾', color: '#5b9bff', icon: 'drawSpray' },
+            { name: '炸弹', color: '#6b7b9f', icon: 'drawBomb' },
+            { name: '箱子', color: '#c9a95c', icon: 'drawBox' },
+        ];
 
----
+        // ========== 初始化 Canvas ==========
+        function initCanvas() {
+            canvas.width = config.canvasWidth;
+            canvas.height = config.canvasHeight;
+            canvas.style.cursor = 'pointer';
+            redraw();
+            canvas.addEventListener('click', handleCanvasClick);
+        }
 
-## 2) 绘制顺序（建议）
-从底到上：
-1. top bar 背景（渐变 + 外边框 + 轻微高光）
-2. 左边：关卡数（`1/关卡` 这种）放在一个圆角矩形/胶囊里
-3. 中间：进度球（外圈金色描边、内部绿色填充、百分比文字）
-4. 右边：倒计时（红色胶囊 + 白字）
-5. 暂停按钮（蓝色圆角矩形 + 两条竖线）
+        // ========== 主绘制函数 ==========
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawContainerBackground();
+            drawSlots();
+        }
 
----
+        // ========== 1) 容器背景 ==========
+        function drawContainerBackground() {
+            const { canvasWidth, canvasHeight, slotCount, slotSize, slotGap, padding } = config;
 
-## 3) 示例代码（直接用）
-> 你需要把 `levelText / progress / timeText / paused` 换成你的数据即可。  
-> 注意：实际游戏一般要配合 `devicePixelRatio` 做高清绘制。
+            // 计算容器宽度
+            const innerW = slotCount * slotSize + (slotCount - 1) * slotGap;
+            const containerW = innerW + padding * 2;
+            const containerH = slotSize + padding * 2;
+            const containerX = (canvasWidth - containerW) / 2;
+            const containerY = (canvasHeight - containerH) / 2;
 
-```js
-function drawTopBar(ctx, W, screenH, opts) {
-  const { levelText, progress, timeText, paused } = opts;
+            // 圆角矩形背景
+            const radius = 15;
+            drawRoundRect(ctx, containerX, containerY, containerW, containerH, radius);
+            
+            // 主背景色（棕色/金色）
+            const bgGrad = ctx.createLinearGradient(containerX, containerY, containerX, containerY + containerH);
+            bgGrad.addColorStop(0, '#c9905f');
+            bgGrad.addColorStop(0.5, '#a86f38');
+            bgGrad.addColorStop(1, '#8b5a2b');
+            ctx.fillStyle = bgGrad;
+            ctx.fill();
 
-  const barH = screenH * 0.10;
-  const ballD = screenH * 0.20;
+            // 外边框（深色）
+            ctx.strokeStyle = 'rgba(60, 30, 10, 0.6)';
+            ctx.lineWidth = 3;
+            ctx.stroke();
 
-  const barY = 0;
+            // 内高光（可选）
+            ctx.save();
+            ctx.globalAlpha = 0.25;
+            const highlightGrad = ctx.createLinearGradient(containerX, containerY, containerX, containerY + containerH * 0.3);
+            highlightGrad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+            highlightGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            drawRoundRect(ctx, containerX + 2, containerY + 2, containerW - 4, containerH * 0.25, radius - 1);
+            ctx.fillStyle = highlightGrad;
+            ctx.fill();
+            ctx.restore();
 
-  const leftPad = W * 0.02;
-  const centerX = W * 0.5;
+            // 存储容器位置（供槽位使用）
+            config.containerX = containerX;
+            config.containerY = containerY;
+            config.containerW = containerW;
+            config.containerH = containerH;
+        }
 
-  // ---------- helper ----------
-  function roundRect(x, y, w, h, r) {
-    const rr = Math.min(r, w / 2, h / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + rr, y);
-    ctx.arcTo(x + w, y, x + w, y + h, rr);
-    ctx.arcTo(x + w, y + h, x, y + h, rr);
-    ctx.arcTo(x, y + h, x, y, rr);
-    ctx.arcTo(x, y, x + w, y, rr);
-    ctx.closePath();
-  }
+        // ========== 2) 绘制所有槽位 ==========
+        function drawSlots() {
+            const { canvasWidth, canvasHeight, slotCount, slotSize, slotGap, padding } = config;
+            const { containerX, containerY } = config;
 
-  function fillTextWithStroke(text, x, y, fillStyle, strokeStyle, font, lineWidth = 4) {
-    ctx.save();
-    ctx.font = font;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = fillStyle;
-    ctx.strokeStyle = strokeStyle;
-    ctx.lineWidth = lineWidth;
-    ctx.strokeText(text, x, y);
-    ctx.fillText(text, x, y);
-    ctx.restore();
-  }
+            const innerW = slotCount * slotSize + (slotCount - 1) * slotGap;
+            const startX = containerX + padding + (config.containerW - padding * 2 - innerW) / 2;
+            const startY = containerY + padding;
 
-  // ---------- 1) Top bar background ----------
-  const barGrad = ctx.createLinearGradient(0, barY, 0, barY + barH);
-  barGrad.addColorStop(0, "#f3c06a");
-  barGrad.addColorStop(0.5, "#d79a3f");
-  barGrad.addColorStop(1, "#b8792f");
+            for (let i = 0; i < slotCount; i++) {
+                const x = startX + i * (slotSize + slotGap);
+                const y = startY;
 
-  roundRect(0, barY, W, barH, barH * 0.25);
-  ctx.fillStyle = barGrad;
-  ctx.fill();
+                drawSlot(x, y, slotSize, i);
+            }
+        }
 
-  // 外边框
-  ctx.save();
-  ctx.lineWidth = Math.max(2, screenH * 0.003);
-  ctx.strokeStyle = "rgba(60,30,10,0.35)";
-  roundRect(0, barY, W, barH, barH * 0.25);
-  ctx.stroke();
-  ctx.restore();
+        // ========== 3) 绘制单个槽位 ==========
+        function drawSlot(x, y, size, index) {
+            const isSelected = config.selectedSlots.has(index);
+            const isDisabled = config.disabledSlots.has(index);
 
-  // 高光条（可选）
-  ctx.save();
-  ctx.globalAlpha = 0.35;
-  roundRect(0, barY + barH * 0.05, W, barH * 0.22, barH * 0.25);
-  const highlight = ctx.createLinearGradient(0, barY, W, barY + barH);
-  highlight.addColorStop(0, "rgba(255,255,255,0.4)");
-  highlight.addColorStop(1, "rgba(255,255,255,0)");
-  ctx.fillStyle = highlight;
-  ctx.fill();
-  ctx.restore();
+            // 槽位背景
+            const slotGrad = ctx.createLinearGradient(x, y, x, y + size);
+            slotGrad.addColorStop(0, isDisabled ? '#7a7a7a' : '#e8d4b8');
+            slotGrad.addColorStop(0.5, isDisabled ? '#5a5a5a' : '#d9c399');
+            slotGrad.addColorStop(1, isDisabled ? '#3a3a3a' : '#b8956b');
 
-  // ---------- 2) Left level ----------
-  const leftBoxW = Math.max(W * 0.18, screenH * 0.14);
-  const leftBoxH = barH * 0.78;
-  const leftX = leftPad;
-  const leftY = barY + (barH - leftBoxH) / 2;
+            ctx.save();
 
-  // 胶囊背景（棕红偏暗）
-  const leftGrad = ctx.createLinearGradient(leftX, leftY, leftX, leftY + leftBoxH);
-  leftGrad.addColorStop(0, "#9b5a2b");
-  leftGrad.addColorStop(1, "#6f3f1e");
+            // 选中状态：添加发光边框
+            if (isSelected) {
+                ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
+                ctx.shadowBlur = 15;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+            }
 
-  roundRect(leftX, leftY, leftBoxW, leftBoxH, leftBoxH * 0.5);
-  ctx.fillStyle = leftGrad;
-  ctx.fill();
+            drawRoundRect(ctx, x, y, size, size, 8);
+            ctx.fillStyle = slotGrad;
+            ctx.fill();
 
-  // 左字
-  fillTextWithStroke(
-    levelText,
-    leftX + leftBoxW / 2,
-    leftY + leftBoxH / 2,
-    "#ffe6b8",
-    "rgba(0,0,0,0.45)",
-    `bold ${Math.floor(leftBoxH * 0.42)}px sans-serif`,
-    Math.max(2, screenH * 0.003)
-  );
+            // 槽位边框
+            const borderColor = isSelected ? '#ffd700' : isDisabled ? '#555' : '#8b7355';
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = 2;
+            ctx.stroke();
 
-  // ---------- 3) Center progress ball ----------
-  const ballCy = barY + barH * 0.5;      // 嵌入到 top bar 中线
-  const ballCx = centerX;
+            // 槽位内阴影
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+            ctx.shadowBlur = 3;
+            ctx.shadowInset = true;
+            drawRoundRect(ctx, x + 2, y + 2, size - 4, size - 4, 6);
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
 
-  // 外圈（金色描边）
-  const ring = ctx.createRadialGradient(ballCx - ballD*0.15, ballCy - ballD*0.15, ballD*0.05, ballCx, ballCy, ballD/2);
-  ring.addColorStop(0, "#fff1bf");
-  ring.addColorStop(0.4, "#f2c56c");
-  ring.addColorStop(1, "#b47a2b");
+            ctx.restore();
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(ballCx, ballCy, ballD / 2, 0, Math.PI * 2);
-  ctx.fillStyle = ring;
-  ctx.fill();
+            // 禁用时添加斜纹
+            if (isDisabled) {
+                drawDisabledPattern(x, y, size);
+            }
 
-  // 内部绿色底
-  const innerR = ballD * 0.36;
-  const greenGrad = ctx.createRadialGradient(ballCx - ballD*0.12, ballCy - ballD*0.15, ballD*0.03, ballCx, ballCy, ballD/2);
-  greenGrad.addColorStop(0, "#6df39a");
-  greenGrad.addColorStop(1, "#1ea55a");
+            // 绘制物品图标
+            const item = items[index];
+            if (item) {
+                drawItemIcon(x, y, size, item, isDisabled);
+            }
 
-  ctx.beginPath();
-  ctx.arc(ballCx, ballCy, innerR, 0, Math.PI * 2);
-  ctx.fillStyle = greenGrad;
-  ctx.fill();
+            // 存储槽位位置（供点击检测）
+            if (!config.slotPositions) config.slotPositions = [];
+            config.slotPositions[index] = { x, y, size };
+        }
 
-  // 进度（可选：做成覆盖扇形/圆环；你图里更像“百分比数字”风格）
-  // 这里用“外圈绿色环 + 底色灰”示意：
-  const pct = Math.max(0, Math.min(1, progress / 100));
-  const start = -Math.PI / 2;
-  const end = start + Math.PI * 2 * pct;
+        // ========== 4) 禁用状态斜纹 ==========
+        function drawDisabledPattern(x, y, size) {
+            ctx.save();
+            ctx.globalAlpha = 0.2;
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
 
-  ctx.lineWidth = innerR * 0.22;
-  ctx.lineCap = "round";
+            for (let i = -size; i < size * 2; i += 8) {
+                ctx.beginPath();
+                ctx.moveTo(x + i, y);
+                ctx.lineTo(x + i + size, y + size);
+                ctx.stroke();
+            }
 
-  // 背景环
-  ctx.strokeStyle = "rgba(0,0,0,0.15)";
-  ctx.beginPath();
-  ctx.arc(ballCx, ballCy, innerR, 0, Math.PI * 2);
-  ctx.stroke();
+            ctx.restore();
+        }
 
-  // 进度环
-  ctx.strokeStyle = "#3ef08f";
-  ctx.beginPath();
-  ctx.arc(ballCx, ballCy, innerR, start, end);
-  ctx.stroke();
+        // ========== 5) 绘制物品图标 ==========
+        function drawItemIcon(x, y, size, item, isDisabled) {
+            const iconX = x + size / 2;
+            const iconY = y + size / 2;
+            const iconSize = size * 0.55;
 
-  // 文本：上方“求质”这种 + 下方百分比
-  const topText = "求质"; // 你可以改
-  const bottomText = `${Math.floor(progress)}%`;
+            ctx.save();
+            if (isDisabled) ctx.globalAlpha = 0.4;
 
-  ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.font = `bold ${Math.floor(innerR * 0.35)}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.strokeStyle = "rgba(0,0,0,0.35)";
-  ctx.lineWidth = Math.max(2, screenH * 0.003);
+            // 根据物品类型调用对应绘制函数
+            if (typeof window[item.icon] === 'function') {
+                window[item.icon](iconX, iconY, iconSize, item.color);
+            }
 
-  ctx.strokeText(topText, ballCx, ballCy - innerR * 0.28);
-  ctx.fillText(topText, ballCx, ballCy - innerR * 0.28);
+            ctx.restore();
+        }
 
-  fillTextWithStroke(
-    bottomText,
-    ballCx,
-    ballCy + innerR * 0.18,
-    "#ffffff",
-    "rgba(0,0,0,0.45)",
-    `bold ${Math.floor(innerR * 0.48)}px sans-serif`,
-    Math.max(3, screenH * 0.005)
-  );
+        // ========== 图标绘制函数（可扩展）==========
+        function drawGoldBar(cx, cy, size, color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.rect(cx - size * 0.4, cy - size * 0.5, size * 0.8, size);
+            ctx.fill();
 
-  // 球体高光（可选）
-  ctx.globalAlpha = 0.35;
-  ctx.beginPath();
-  ctx.ellipse(ballCx - ballD*0.16, ballCy - ballD*0.18, ballD*0.18, ballD*0.10, -0.3, 0, Math.PI*2);
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
-  ctx.fill();
-  ctx.restore();
+            // 高光
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.beginPath();
+            ctx.rect(cx - size * 0.35, cy - size * 0.45, size * 0.2, size * 0.4);
+            ctx.fill();
 
-  // ---------- 4) Right timer + pause ----------
-  const rightPad = W * 0.02;
-  const pauseW = Math.max(screenH * 0.06, 44);
-  const pauseH = barH * 0.65;
+            ctx.restore();
+        }
 
-  const pauseX = W - rightPad - pauseW;
-  const pauseY = barY + (barH - pauseH) / 2;
+        function drawBrush(cx, cy, size, color) {
+            ctx.save();
+            // 刷毛
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy - size * 0.2, size * 0.35, size * 0.3, 0, 0, Math.PI * 2);
+            ctx.fill();
 
-  // timer box
-  const timerBoxH = barH * 0.78;
-  const timerBoxW = Math.max(W * 0.16, screenH * 0.14);
+            // 手柄
+            ctx.fillStyle = '#8b5a2b';
+            ctx.beginPath();
+            ctx.rect(cx - size * 0.15, cy - size * 0.15, size * 0.3, size * 0.5);
+            ctx.fill();
 
-  const timerX = pauseX - (W - timerBoxW - (pauseX - timerBoxW)); // 仅为占位思路
-  // 更简单：把 timer 放到 pause 左边留间距
-  const spacing = W * 0.02;
-  const timerX2 = pauseX - spacing - timerBoxW;
-  const timerY2 = barY + (barH - timerBoxH) / 2;
+            ctx.restore();
+        }
 
-  // 倒计时背景（红色胶囊）
-  const timerGrad = ctx.createLinearGradient(timerX2, timerY2, timerX2, timerY2 + timerBoxH);
-  timerGrad.addColorStop(0, "#ff5a5a");
-  timerGrad.addColorStop(1, "#b31f1f");
+        function drawSpray(cx, cy, size, color) {
+            ctx.save();
+            // 瓶身
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.rect(cx - size * 0.25, cy - size * 0.15, size * 0.5, size * 0.5);
+            ctx.fill();
 
-  roundRect(timerX2, timerY2, timerBoxW, timerBoxH, timerBoxH * 0.5);
-  ctx.fillStyle = timerGrad;
-  ctx.fill();
+            // 喷嘴
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.rect(cx - size * 0.2, cy - size * 0.35, size * 0.4, size * 0.25);
+            ctx.fill();
 
-  // 倒计时文字
-  fillTextWithStroke(
-    timeText,
-    timerX2 + timerBoxW / 2,
-    timerY2 + timerBoxH / 2,
-    "#fff",
-    "rgba(0,0,0,0.45)",
-    `bold ${Math.floor(timerBoxH * 0.45)}px sans-serif`,
-    Math.max(2, screenH * 0.003)
-  );
+            // 高光
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.beginPath();
+            ctx.rect(cx - size * 0.2, cy - size * 0.1, size * 0.15, size * 0.3);
+            ctx.fill();
 
-  // 暂停按钮背景（蓝色圆角）
-  const pauseGrad = ctx.createLinearGradient(pauseX, pauseY, pauseX, pauseY + pauseH);
-  pauseGrad.addColorStop(0, "#4da0ff");
-  pauseGrad.addColorStop(1, "#1f4fa0");
+            ctx.restore();
+        }
 
-  roundRect(pauseX, pauseY, pauseW, pauseH, pauseH * 0.3);
-  ctx.fillStyle = pauseGrad;
-  ctx.fill();
+        function drawBomb(cx, cy, size, color) {
+            ctx.save();
+            // 球体
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(cx, cy, size * 0.35, 0, Math.PI * 2);
+            ctx.fill();
 
-  // 按钮图标：两条竖线（paused=false/true 可改成暂停/播放样式）
-  ctx.save();
-  ctx.strokeStyle = "#e9f5ff";
-  ctx.lineWidth = Math.max(3, screenH * 0.004);
-  ctx.lineCap = "round";
+            // 引信
+            ctx.strokeStyle = '#d4a574';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - size * 0.35);
+            ctx.quadraticCurveTo(cx - size * 0.15, cy - size * 0.55, cx - size * 0.05, cy - size * 0.65);
+            ctx.stroke();
 
-  const iconPadX = pauseW * 0.22;
-  const iconTop = pauseY + pauseH * 0.22;
-  const iconBottom = pauseY + pauseH * 0.78;
+            ctx.restore();
+        }
 
-  if (paused) {
-    // 暂停：两竖条
-    ctx.beginPath();
-    ctx.moveTo(pauseX + pauseW/2 - iconPadX, iconTop);
-    ctx.lineTo(pauseX + pauseW/2 - iconPadX, iconBottom);
-    ctx.moveTo(pauseX + pauseW/2 + iconPadX, iconTop);
-    ctx.lineTo(pauseX + pauseW/2 + iconPadX, iconBottom);
-    ctx.stroke();
-  } else {
-    // 播放：三角形（可选）
-    const cx = pauseX + pauseW/2, cy = barY + barH/2;
-    ctx.fillStyle = "#e9f5ff";
-    ctx.beginPath();
-    ctx.moveTo(cx - pauseW*0.18, cy - pauseH*0.20);
-    ctx.lineTo(cx - pauseW*0.18, cy + pauseH*0.20);
-    ctx.lineTo(cx + pauseW*0.22, cy);
-    ctx.closePath();
-    ctx.fill();
-  }
-  ctx.restore();
-}
-```
+        function drawBox(cx, cy, size, color) {
+            ctx.save();
+            ctx.fillStyle = color;
 
----
+            // 前面
+            ctx.beginPath();
+            ctx.rect(cx - size * 0.35, cy - size * 0.2, size * 0.7, size * 0.5);
+            ctx.fill();
 
-## 4) 性能建议（很关键）
-- 这类 UI **不需要每帧重画**：只在 `progress / timeText / paused / levelText` 变化时重绘即可。
-- 如果你用的是小游戏引擎，通常画面每帧都走渲染循环，但可以把 top bar 绘制到离屏 canvas（缓存）再 `drawImage`。
+            // 顶部
+            ctx.fillStyle = '#daa02a';
+            ctx.beginPath();
+            ctx.moveTo(cx - size * 0.35, cy - size * 0.2);
+            ctx.lineTo(cx - size * 0.25, cy - size * 0.35);
+            ctx.lineTo(cx + size * 0.45, cy - size * 0.35);
+            ctx.lineTo(cx + size * 0.35, cy - size * 0.2);
+            ctx.closePath();
+            ctx.fill();
 
----
+            // 边框
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
 
-如果你把你当前的 canvas 尺寸获取方式（比如 `W/H` 从哪来）和进度球你希望是“纯数字”还是“带进度环/填充”的效果告诉我，我可以把上面代码里的几处位置计算（尤其是右侧 timer 的放置）改成完全贴合你那张图的布局比例。你现在画布的宽高是怎么取得的？（`screenWidth/screenHeight` 还是引擎提供的 `canvas.width/height`）
+            ctx.restore();
+        }
+
+        // ========== 工具函数 ==========
+        function drawRoundRect(ctx, x, y, w, h, r) {
+            const radius = Math.min(r, w / 2, h / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.arcTo(x + w, y, x + w, y + h, radius);
+            ctx.arcTo(x + w, y + h, x, y + h, radius);
+            ctx.arcTo(x, y + h, x, y, radius);
+            ctx.arcTo(x, y, x + w, y, radius);
+            ctx.closePath();
+        }
+
+        // ========== 交互 ==========
+        function handleCanvasClick(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            // 检测点击的槽位
+            for (let i = 0; i < config.slotCount; i++) {
+                const slot = config.slotPositions[i];
+                if (clickX >= slot.x && clickX <= slot.x + slot.size &&
+                    clickY >= slot.y && clickY <= slot.y + slot.size) {
+                    // 点击相同槽位不取消，点击不同槽位则切换
+                    if (!config.selectedSlots.has(i)) {
+                        config.selectedSlots.clear();
+                        config.selectedSlots.add(i);
+                        console.log(`选中槽位: ${i} (${items[i].name})`);
+                        redraw();
+                    }
+                    break;
+                }
+            }
+        }
+
+        function toggleSlot(index) {
+            // 单选模式：清空所有选中，然后选中这个
+            config.selectedSlots.clear();
+            config.selectedSlots.add(index);
+            console.log(`选中槽位: ${index} (${items[index].name})`);
+            redraw();
+        }
+
+        // ========== 初始化 ==========
+        initCanvas();
+    </script>
+</body>
+</html>

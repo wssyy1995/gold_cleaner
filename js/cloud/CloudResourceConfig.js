@@ -23,7 +23,10 @@ export const PRELOAD_CLOUD_FILE_IDS = {
   'bg_home_stage3': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage3-home.png',
   'bg_home_stage4': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage4-home.png',
   // 新用户第一关预览图（必须预加载，用户第一眼看到的关卡）
-  'game_stage1_l1': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l1_home.png'
+  'game_stage1_l1': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/game/game_stage1_l1_home.png',
+  // 游戏标题和阶段标签（主页面中间显示）
+  'bg_game_title': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_game_title.png',
+  'bg_stage1_tag': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_stage1_tag.png'
 };
 
 /**

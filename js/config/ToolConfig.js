@@ -8,6 +8,7 @@ export const BASE_TOOLS = [
     id: 'cloth',
     name: '抹布',
     icon: '🧽',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_cloth.png',
     color: '#4A90D9',
     description: '基础清洁工具，适合清理灰尘',
     efficiency: 1.0,

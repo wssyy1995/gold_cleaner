@@ -483,6 +483,11 @@ class SceneManager {
     // 预加载场景
     let scene = await this.preload(name, data);
 
+    // 提前设置为当前场景，让渲染循环可以在 onEnter 期间绘制
+    // 避免耗时 onEnter（如 LoadingScene 的资源加载）导致黑屏
+    this.currentScene = scene;
+    this.currentSceneName = name;
+
     // 调用进入回调
     if (scene.onEnter) {
       await scene.onEnter(data);

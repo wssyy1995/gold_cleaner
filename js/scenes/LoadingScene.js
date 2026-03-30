@@ -224,7 +224,7 @@ class LoadingScene extends Scene {
       x: centerX,
       y: 400 * s,
       text: '金牌保洁升职记',
-      fontSize: 56 * s,
+      fontSize: 57 * s,
       fontWeight: 'bold',
       color: '#4A90D9',
       align: 'center',

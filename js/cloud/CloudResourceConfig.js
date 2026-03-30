@@ -58,9 +58,13 @@ export function getCloudFileID(key) {
   else if (key.startsWith('bg_')) {
     cloudPath = `images/backgrounds/${key}.png`;
   }
-  // 关卡图片
+  // 关卡图片 (支持 game_stage1_l1_home 和 stage1_l1_home)
   else if (key.startsWith('game_stage') && key.endsWith('_home')) {
     cloudPath = `images/game/${key}.png`;
+  }
+  else if (key.startsWith('stage') && key.includes('_l') && key.endsWith('_home')) {
+    // 添加 game_ 前缀生成云存储路径
+    cloudPath = `images/game/game_${key}.png`;
   }
   // 污垢图片
   else if (key.startsWith('dirt_')) {
@@ -154,7 +158,12 @@ function getLocalImagePath(key) {
   }
   
   // 关卡图片 (game_stage1_l1_home → images/game/game_stage1_l1_home.png)
+  // 也支持 stage1_l1_home → images/game/stage1_l1_home.png
   if (key.startsWith('game_stage') && key.endsWith('_home')) {
+    parts.push('game', `${key}.png`);
+    return parts.join('/');
+  }
+  if (key.startsWith('stage') && key.includes('_l') && key.endsWith('_home')) {
     parts.push('game', `${key}.png`);
     return parts.join('/');
   }
@@ -171,7 +180,7 @@ function getLocalImagePath(key) {
 
 /**
  * 根据阶段和关卡生成 key
- * key 与文件名保持一致（不含扩展名）
+ * key 与文件名保持一致（不含扩展名）: game_stage1_l1_home
  */
 export function getLevelImageKey(stage, level) {
   return `game_stage${stage}_l${level}_home`;
@@ -179,8 +188,24 @@ export function getLevelImageKey(stage, level) {
 
 /**
  * 获取关卡图片配置
+ * 优先从 LevelConfig 获取 homeImagePath（完整的云存储 fileID）
  */
 export function getLevelImageConfig(stage, level) {
+  // 动态导入 LevelConfig 避免循环依赖
+  const { getLevel } = require('../config/LevelConfig');
+  const levelConfig = getLevel(stage, level);
+  
+  if (levelConfig && levelConfig.homeImagePath) {
+    // 使用 LevelConfig 中配置的完整云存储路径
+    return {
+      type: 'cloud',
+      fileID: levelConfig.homeImagePath,
+      cacheKey: getLevelImageKey(stage, level),
+      localPath: null  // 有云存储路径时不使用本地路径
+    };
+  }
+  
+  // 后备：使用 key 生成配置
   const key = getLevelImageKey(stage, level);
   return getImageLoadConfig(key);
 }

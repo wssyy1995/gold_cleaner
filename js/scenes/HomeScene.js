@@ -88,6 +88,41 @@ const GlobalTitleCache = {
   }
 };
 
+// 全局关卡状态缓存 - 保存关卡图标和状态
+export const GlobalLevelStateCache = {
+  // key: "stage1_level1" -> { status, stars, displayStatus }
+  _cache: {},
+  
+  // 保存关卡状态
+  save(stage, levelId, status, stars = 0) {
+    const key = `stage${stage}_level${levelId}`;
+    this._cache[key] = { status, stars, displayStatus: status };
+  },
+  
+  // 获取关卡状态
+  get(stage, levelId) {
+    const key = `stage${stage}_level${levelId}`;
+    return this._cache[key] || null;
+  },
+  
+  // 批量保存关卡列表
+  saveLevels(levels) {
+    levels.forEach(level => {
+      this.save(level.stage, level.id, level.status, level.stars);
+    });
+  },
+  
+  // 获取所有缓存的关卡
+  getAll() {
+    return { ...this._cache };
+  },
+  
+  // 清除缓存
+  clear() {
+    this._cache = {};
+  }
+};
+
 class HomeScene extends Scene {
   constructor() {
     super({ name: 'HomeScene' });
@@ -111,6 +146,18 @@ class HomeScene extends Scene {
     
     // 云存储
     this.cloudStorage = new CloudStorage();
+    
+    // 通关动画状态
+    this._levelCompleteAnim = {
+      active: false,        // 是否正在动画
+      levelId: null,        // 哪个关卡在动画
+      phase: 'none',        // 动画阶段: 'none' | 'jumping' | 'transforming'
+      jumpCount: 0,         // 当前跳跃次数
+      maxJumps: 3,          // 最大跳跃次数
+      jumpProgress: 0,      // 当前跳跃进度 0-1
+      transformProgress: 0, // 变形进度 0-1
+      timer: 0              // 动画计时器
+    };
   }
 
   async onLoad(data = {}) {
@@ -139,7 +186,17 @@ class HomeScene extends Scene {
     // 初始化云存储
     await this.cloudStorage.init();
     
-    this.generateLevels();
+    // 生成关卡（优先从全局缓存恢复状态）
+    this.generateLevels(data);
+    
+    // 检查是否需要播放通关动画
+    if (data.justCompletedLevel && data.completedStage === this.currentStage) {
+      this._startLevelCompleteAnimation(data.justCompletedLevel, data.completedStars);
+      
+      // 立即异步预加载下一关预览图（动画期间加载，避免卡片显示时图片未准备好）
+      this._preloadNextLevelPreview(data.justCompletedLevel);
+    }
+    
     this._initUI();
     
     // 从缓存加载图片（如果背景图未缓存）
@@ -291,7 +348,10 @@ class HomeScene extends Scene {
     });
   }
 
-  generateLevels() {
+  generateLevels(data = {}) {
+    // 重置关卡数组，避免累积旧数据
+    this.levels = [];
+    
     const positions = [
       { x: 375, y: 1180 },
       { x: 375, y: 1060 },
@@ -309,31 +369,49 @@ class HomeScene extends Scene {
     const game = getGame();
     const dataManager = game ? game.dataManager : null;
     
+    // 尝试从全局缓存恢复关卡状态
+    const cachedStates = GlobalLevelStateCache.getAll();
+    const hasCache = Object.keys(cachedStates).length > 0;
+    
+    // 如果是刚通关返回，强制从 DataManager 获取最新状态（缓存可能过期）
+    const isJustCompleted = data.justCompletedLevel && data.completedStage === this.currentStage;
+    
     for (let i = 1; i <= 10; i++) {
       // 计算全局关卡ID（用于 DataManager）
       // stage1: 1-10, stage2: 11-20, stage3: 21-30, stage4: 31-40
       const globalLevelId = (this.currentStage - 1) * 10 + i;
+      const cacheKey = `stage${this.currentStage}_level${i}`;
       
-      // 判断是否解锁：第一关默认解锁，其他检查 DataManager
-      let isUnlocked = false;
-      if (i === 1 && this.currentStage === 1) {
-        // Stage1 Level1 默认解锁（新用户起点）
-        isUnlocked = true;
-      } else if (i === 1 && this.currentStage > 1) {
-        // 其他 stage 的第一关，检查是否已解锁该 stage
-        isUnlocked = dataManager ? dataManager.getCurrentStage() >= this.currentStage : false;
+      // 优先从缓存获取状态（如果有）- 但刚通关返回时不使用缓存
+      let status, stars;
+      const cached = cachedStates[cacheKey];
+      
+      if (!isJustCompleted && hasCache && cached && cached.status) {
+        // 使用缓存的状态
+        status = cached.status;
+        stars = cached.stars || 0;
+        console.log(`[HomeScene] 关卡 ${i} 从缓存恢复: ${status}, 星级: ${stars}`);
       } else {
-        // 其他关卡，检查是否已解锁
-        isUnlocked = dataManager ? dataManager.isLevelUnlocked(globalLevelId) : (i === 1);
-      }
-      
-      // 获取星级
-      const stars = dataManager ? dataManager.getLevelStars(globalLevelId) : 0;
-      
-      // 确定状态
-      let status = 'locked';
-      if (isUnlocked) {
-        status = stars > 0 ? 'completed' : 'unlocked';
+        // 从 DataManager 获取最新状态
+        // 判断是否解锁：第一关始终默认解锁，其他检查 DataManager
+        let isUnlocked = false;
+        if (i === 1) {
+          isUnlocked = true;
+        } else {
+          isUnlocked = dataManager ? dataManager.isLevelUnlocked(globalLevelId) : false;
+        }
+        
+        stars = dataManager ? dataManager.getLevelStars(globalLevelId) : 0;
+        
+        // 确定状态
+        status = 'locked';
+        if (isUnlocked) {
+          status = stars > 0 ? 'completed' : 'unlocked';
+        }
+        
+        if (isJustCompleted) {
+          console.log(`[HomeScene] 关卡 ${i} 从 DataManager 获取（刚通关返回）: ${status}, 星级: ${stars}`);
+        }
       }
       
       // 从 LevelConfig 获取关卡名称
@@ -351,6 +429,9 @@ class HomeScene extends Scene {
         y: positions[i-1].y
       });
     }
+    
+    // 保存到全局缓存
+    GlobalLevelStateCache.saveLevels(this.levels);
     
     console.log(`[HomeScene] 生成阶段 ${this.currentStage} 的关卡:`, this.levels.map(l => `${l.id}:${l.status}`).join(', '));
   }
@@ -553,63 +634,26 @@ class HomeScene extends Scene {
       return;
     }
     
-    const config = getLevelImageConfig(stage, levelId);
-    console.log(`[HomeScene] 加载预览图配置:`, config);
+    // 2. 从 LevelConfig 获取 homeImagePath
+    const { getLevel } = require('../config/LevelConfig');
+    const levelConfig = getLevel(stage, levelId);
+    
+    if (!levelConfig || !levelConfig.homeImagePath) {
+      console.log(`[HomeScene] 关卡 ${levelId} 未配置 homeImagePath`);
+      return;
+    }
     
     try {
-      let img = null;
+      const fileID = levelConfig.homeImagePath;
+      console.log(`[HomeScene] 从云存储加载预览图: ${fileID.substring(0, 50)}...`);
       
-      if (config.type === 'cloud') {
-        // 尝试从云存储加载
-        let fileID = config.fileID; // 优先使用配置中的 fileID
-        
-        // 如果配置中没有，尝试从缓存获取
-        if (!fileID) {
-          const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
-          const cacheInfo = cacheRecord[config.cacheKey];
-          if (cacheInfo && cacheInfo.fileID) {
-            fileID = cacheInfo.fileID;
-          }
-        }
-        
-        if (!fileID) {
-          console.log(`[HomeScene] 关卡预览图无 fileID，尝试本地: ${config.cacheKey}`);
-          // 尝试从本地加载作为后备
-          if (config.localPath) {
-            img = await this._downloadLocalImageForCache(config.localPath);
-          } else {
-            return;
-          }
-        } else {
-          console.log(`[HomeScene] 从云存储下载: ${config.cacheKey}, fileID: ${fileID.substring(0, 30)}...`);
-          try {
-            const tempURL = await this.cloudStorage.getTempFileURL(fileID);
-            console.log(`[HomeScene] 获取临时URL: ${tempURL ? '成功' : '失败'}`);
-            if (!tempURL) {
-              console.log(`[HomeScene] 获取临时URL失败，尝试本地: ${config.cacheKey}`);
-              if (config.localPath) {
-                img = await this._downloadLocalImageForCache(config.localPath);
-              } else {
-                return;
-              }
-            } else {
-              img = await this._downloadImage(tempURL);
-              console.log(`[HomeScene] 云存储下载完成: ${config.cacheKey}`);
-            }
-          } catch (e) {
-            console.error(`[HomeScene] 云存储下载失败: ${config.cacheKey}`, e);
-            // 尝试本地后备
-            if (config.localPath) {
-              console.log(`[HomeScene] 尝试本地后备: ${config.localPath}`);
-              img = await this._downloadLocalImageForCache(config.localPath);
-            }
-          }
-        }
-      } else {
-        // 从本地加载
-        console.log(`[HomeScene] 从本地加载: ${config.localPath}`);
-        img = await this._downloadLocalImageForCache(config.localPath);
+      const tempURL = await this.cloudStorage.getTempFileURL(fileID);
+      if (!tempURL) {
+        console.log(`[HomeScene] 获取临时URL失败: ${key}`);
+        return;
       }
+      
+      const img = await this._downloadImage(tempURL);
       
       // 保存到实例缓存和全局缓存
       const cacheEntry = { loaded: true, img };
@@ -618,7 +662,6 @@ class HomeScene extends Scene {
       console.log(`[HomeScene] 预览图加载成功: ${key}`);
       
     } catch (e) {
-      // 加载失败不报错
       console.log(`[HomeScene] 预览图加载失败: ${key}`, e.message);
     }
   }
@@ -664,6 +707,17 @@ class HomeScene extends Scene {
   }
 
   _getCurrentLevel() {
+    // 如果动画刚完成，优先显示下一关的预览卡片
+    const anim = this._levelCompleteAnim;
+    if (!anim.active && anim.levelId && anim.phase === 'none') {
+      // 动画已完成，找到刚通关关卡的下一关
+      const nextLevel = this.levels.find(l => l.id === anim.levelId + 1);
+      if (nextLevel && nextLevel.status !== 'locked') {
+        return nextLevel;
+      }
+    }
+    
+    // 动画进行中或没有动画时，按原逻辑查找
     const unlockedLevel = this.levels.find(l => l.status === 'unlocked');
     if (unlockedLevel) return unlockedLevel;
     const lockedLevel = this.levels.find(l => l.status === 'locked');
@@ -675,14 +729,190 @@ class HomeScene extends Scene {
     const level = this.levels.find(l => l.id === levelId);
     if (!level) return;
     
-    level.status = 'pass';
+    level.status = 'completed';
     level.stars = stars;
+    
+    // 更新全局缓存
+    GlobalLevelStateCache.save(this.currentStage, levelId, 'completed', stars);
     
     const nextLevel = this.levels.find(l => l.id === levelId + 1);
     if (nextLevel && nextLevel.status === 'locked') {
       nextLevel.status = 'unlocked';
+      GlobalLevelStateCache.save(this.currentStage, nextLevel.id, 'unlocked', 0);
       this._loadPreviewImage(this.currentStage, nextLevel.id);
     }
+  }
+
+  /**
+   * 启动关卡通关动画
+   * @param {number} levelId - 通关的关卡ID
+   * @param {number} stars - 获得的星级
+   */
+  _startLevelCompleteAnimation(levelId, stars = 3) {
+    const level = this.levels.find(l => l.id === levelId);
+    if (!level) return;
+    
+    console.log(`[HomeScene] 启动关卡 ${levelId} 通关动画，星级: ${stars}`);
+    
+    // 设置关卡星级（用于后续状态更新）
+    level.stars = stars;
+    
+    // 设置动画状态
+    this._levelCompleteAnim = {
+      active: true,
+      levelId: levelId,
+      phase: 'jumping',      // 第一阶段：跳跃
+      jumpCount: 0,
+      maxJumps: 3,
+      jumpProgress: 0,
+      transformProgress: 0,
+      timer: 0,
+      jumpDuration: 667,     // 每次跳跃 667ms，3次共2秒
+      transformDuration: 300 // 变形阶段 300ms
+    };
+    
+    // 确保关卡当前显示为 unlocked 状态（用于跳跃动画）
+    level.displayStatus = 'unlocked';
+  }
+
+  /**
+   * 更新通关动画
+   */
+  _updateLevelCompleteAnimation(deltaTime) {
+    const anim = this._levelCompleteAnim;
+    if (!anim.active) return;
+    
+    const level = this.levels.find(l => l.id === anim.levelId);
+    if (!level) {
+      anim.active = false;
+      return;
+    }
+    
+    anim.timer += deltaTime;
+    
+    if (anim.phase === 'jumping') {
+      // 跳跃阶段：每次跳跃 667ms，3次共2秒
+      const jumpDuration = anim.jumpDuration || 667;
+      anim.jumpProgress = Math.min(1, anim.jumpProgress + deltaTime / jumpDuration);
+      
+      // 完成一次跳跃
+      if (anim.jumpProgress >= 1) {
+        anim.jumpCount++;
+        anim.jumpProgress = 0;
+        console.log(`[HomeScene] 跳跃 ${anim.jumpCount}/${anim.maxJumps}`);
+        
+        // 完成3次跳跃，进入变形阶段
+        if (anim.jumpCount >= anim.maxJumps) {
+          anim.phase = 'transforming';
+          anim.transformProgress = 0;
+          console.log('[HomeScene] 进入变形阶段');
+        }
+      }
+    } else if (anim.phase === 'transforming') {
+      // 变形阶段：unlocked -> completed，持续 300ms
+      const transformDuration = anim.transformDuration || 300;
+      anim.transformProgress = Math.min(1, anim.transformProgress + deltaTime / transformDuration);
+      
+      // 变形完成
+      if (anim.transformProgress >= 1) {
+        // 更新关卡状态为 completed
+        level.status = 'completed';
+        level.displayStatus = null; // 清除显示状态，使用实际状态
+        
+        // 更新全局缓存
+        GlobalLevelStateCache.save(this.currentStage, anim.levelId, 'completed', level.stars);
+        
+        // 解锁下一关
+        const nextLevelId = anim.levelId + 1;
+        if (nextLevelId <= 10) {
+          const nextLevel = this.levels.find(l => l.id === nextLevelId);
+          if (nextLevel && nextLevel.status === 'locked') {
+            nextLevel.status = 'unlocked';
+            GlobalLevelStateCache.save(this.currentStage, nextLevelId, 'unlocked', 0);
+            console.log(`[HomeScene] 解锁下一关: ${nextLevelId}`);
+          }
+        }
+        
+        // 结束动画
+        anim.active = false;
+        anim.phase = 'none';
+        console.log(`[HomeScene] 关卡 ${anim.levelId} 通关动画完成`);
+        
+        // 预加载下一关的预览图（如果还没加载）
+        this._preloadNextLevelPreview(anim.levelId);
+      }
+    }
+  }
+
+  /**
+   * 预加载下一关的预览图（动画完成后调用）
+   * 使用 LevelConfig.homeImagePath 获取完整的云存储路径
+   */
+  async _preloadNextLevelPreview(currentLevelId) {
+    const nextLevelId = currentLevelId + 1;
+    if (nextLevelId > 10) return; // 超过本stage最后一关
+    
+    console.log(`[HomeScene] 动画完成后预加载下一关预览图: ${nextLevelId}`);
+    
+    try {
+      // 首先检查全局缓存是否已有
+      const previewKey = `preview_${this.currentStage}_${nextLevelId}`;
+      const globalCached = GlobalPreviewCache.get(previewKey);
+      if (globalCached && globalCached.loaded && globalCached.img) {
+        console.log(`[HomeScene] 下一关预览图已在全局缓存中`);
+        this._previewImages[previewKey] = globalCached;
+        return;
+      }
+      
+      // 从 LevelConfig 获取 homeImagePath
+      const { getLevel } = require('../config/LevelConfig');
+      const nextLevelConfig = getLevel(this.currentStage, nextLevelId);
+      
+      if (!nextLevelConfig || !nextLevelConfig.homeImagePath) {
+        console.log('[HomeScene] 下一关未配置 homeImagePath');
+        return;
+      }
+      
+      // 从云存储加载
+      const fileID = nextLevelConfig.homeImagePath;
+      console.log(`[HomeScene] 从云存储加载下一关预览图: ${fileID}`);
+      
+      const tempURL = await this.cloudStorage.getTempFileURL(fileID);
+      if (tempURL) {
+        const img = await this._downloadImage(tempURL);
+        this._previewImages[previewKey] = { loaded: true, img };
+        GlobalPreviewCache.save(previewKey, img);
+        console.log(`[HomeScene] 下一关预览图加载完成: ${previewKey}`);
+      }
+    } catch (e) {
+      console.log(`[HomeScene] 预加载下一关预览图失败:`, e.message);
+    }
+  }
+
+  /**
+   * 获取关卡图标的动画偏移
+   */
+  _getLevelIconOffset(levelId) {
+    const anim = this._levelCompleteAnim;
+    if (!anim.active || anim.levelId !== levelId || anim.phase !== 'jumping') {
+      return { x: 0, y: 0, scale: 1, glow: 0 };
+    }
+    
+    // 跳跃动画：正弦波，每次跳跃高度递减（幅度减小：30px -> 24px -> 18px）
+    const progress = anim.jumpProgress;
+    const jumpHeight = 30 * (1 - anim.jumpCount * 0.2); // 减小基础高度：60 -> 30
+    
+    // 使用正弦波计算Y偏移 (0 -> -height -> 0)
+    const yOffset = -Math.sin(progress * Math.PI) * jumpHeight;
+    
+    // 轻微压缩（形变效果减小）
+    const scaleY = 1 - Math.sin(progress * Math.PI) * 0.05; // 减小形变：0.1 -> 0.05
+    const scaleX = 1 + Math.sin(progress * Math.PI) * 0.03; // 减小形变：0.05 -> 0.03
+    
+    // 绿色光芒强度（跳跃最高点时最亮）
+    const glow = Math.sin(progress * Math.PI);
+    
+    return { x: 0, y: yOffset, scaleX, scaleY, glow };
   }
 
   _onLevelClick(level) {
@@ -699,6 +929,9 @@ class HomeScene extends Scene {
     if (this.shopBtn) this.shopBtn.update(deltaTime);
     if (this.toolBtn) this.toolBtn.update(deltaTime);
     if (this.settingBtn) this.settingBtn.update(deltaTime);
+    
+    // 更新通关动画
+    this._updateLevelCompleteAnimation(deltaTime);
   }
 
   onRender(ctx) {
@@ -813,21 +1046,89 @@ class HomeScene extends Scene {
     
     // 第一步：绘制所有关卡图标（确保在最底层）
     this.levels.forEach(level => {
+      // 判断是否是动画中的关卡
+      const isAnimating = this._levelCompleteAnim.active && 
+                          this._levelCompleteAnim.levelId === level.id;
+      
+      // 确定要显示的图标
+      let displayStatus = level.status;
+      if (isAnimating) {
+        const anim = this._levelCompleteAnim;
+        if (anim.phase === 'jumping') {
+          // 跳跃阶段显示 unlocked 图标
+          displayStatus = 'unlocked';
+        } else if (anim.phase === 'transforming') {
+          // 变形阶段：根据进度混合
+          displayStatus = anim.transformProgress < 0.5 ? 'unlocked' : 'completed';
+        }
+      }
+      
       // 状态到图标的映射: completed -> pass
-      const iconName = level.status === 'completed' ? 'pass' : level.status;
+      const iconName = displayStatus === 'completed' ? 'pass' : displayStatus;
       let iconImg = this.iconImages[iconName] || this.iconImages.locked;
       if (!iconImg) return;
       
-      const x = level.x * s;
-      const y = level.y * s;
+      let x = level.x * s;
+      let y = level.y * s;
+      let drawSize = iconSize;
       
-      ctx.drawImage(iconImg, x - iconSize/2, y - iconSize/2, iconSize, iconSize);
+      // 应用动画偏移和缩放
+      let offset = { x: 0, y: 0, scaleX: 1, scaleY: 1, glow: 0 };
+      if (isAnimating) {
+        offset = this._getLevelIconOffset(level.id);
+        x += offset.x;
+        y += offset.y;
+        
+        // 应用形变缩放
+        if (offset.scaleX && offset.scaleY) {
+          drawSize = iconSize * Math.max(offset.scaleX, offset.scaleY);
+        }
+      }
       
+      ctx.save();
+      
+      // 如果是动画中的关卡且处于跳跃阶段，绘制绿色光芒
+      if (isAnimating && this._levelCompleteAnim.phase === 'jumping' && offset.glow > 0) {
+        // 绘制绿色光芒（在图标后面）
+        const glowRadius = drawSize * (0.8 + offset.glow * 0.4); // 光芒大小随跳跃变化
+        const glowAlpha = offset.glow * 0.6; // 透明度随跳跃变化，最大0.6
+        
+        // 外圈光芒
+        ctx.beginPath();
+        ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(76, 175, 80, ${glowAlpha * 0.3})`; // 淡绿色
+        ctx.fill();
+        
+        // 内圈光芒
+        ctx.beginPath();
+        ctx.arc(x, y, glowRadius * 0.7, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(76, 175, 80, ${glowAlpha * 0.5})`; // 稍深一点的绿色
+        ctx.fill();
+        
+        // 核心光芒
+        ctx.beginPath();
+        ctx.arc(x, y, glowRadius * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(129, 199, 132, ${glowAlpha * 0.8})`; // 亮绿色
+        ctx.fill();
+      }
+      
+      // 如果是动画中的关卡，应用形变变换
+      if (isAnimating && this._levelCompleteAnim.phase === 'jumping') {
+        ctx.translate(x, y);
+        ctx.scale(offset.scaleX || 1, offset.scaleY || 1);
+        ctx.drawImage(iconImg, -drawSize/2, -drawSize/2, drawSize, drawSize);
+      } else {
+        ctx.drawImage(iconImg, x - drawSize/2, y - drawSize/2, drawSize, drawSize);
+      }
+      
+      ctx.restore();
+      
+      // 绘制关卡数字
       ctx.fillStyle = '#FFFFFF';
       ctx.font = `bold ${18 * s}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(level.id.toString(), x, y + iconSize/2 + 16 * s);
+      ctx.fillText(level.id.toString(), x, y + drawSize/2 + 16 * s);
     });
     
     // 第二步：在所有图标绘制完成后，再绘制预览卡片（确保在最上层）
@@ -868,9 +1169,20 @@ class HomeScene extends Scene {
     ctx.stroke();
     ctx.restore();
     
-    // 预览图片
+    // 预览图片 - 优先从全局缓存获取
     const previewImgKey = `preview_${this.currentStage}_${level.id}`;
-    const previewImg = this._previewImages[previewImgKey];
+    let previewImg = this._previewImages[previewImgKey];
+    
+    // 如果实例缓存没有，尝试从全局缓存获取
+    if (!previewImg || !previewImg.loaded) {
+      const globalCached = GlobalPreviewCache.get(previewImgKey);
+      if (globalCached && globalCached.loaded && globalCached.img) {
+        previewImg = globalCached;
+        // 同步到实例缓存
+        this._previewImages[previewImgKey] = globalCached;
+      }
+    }
+    
     const contentPadding = cardWidth * 0.08;
     const previewImgX = cardX + contentPadding;
     const previewImgY = cardY + sphereRadius + contentPadding;

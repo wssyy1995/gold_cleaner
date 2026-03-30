@@ -173,13 +173,8 @@ class Text extends Component {
       ctx.shadowOffsetY = this.shadowOffsetY;
     }
 
-    // 计算起始X坐标（根据对齐方式）
-    let x = this.x;
-    if (this.align === 'center') {
-      x = this.x + (this._width || 0) / 2;
-    } else if (this.align === 'right') {
-      x = this.x + (this._width || 0);
-    }
+    // Canvas 的 textAlign 已经处理了对齐，x 直接使用 this.x 即可
+    const x = this.x;
 
     // 绘制每行
     for (let i = 0; i < this._lines.length; i++) {

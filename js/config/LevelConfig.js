@@ -7,14 +7,16 @@ import { DIRT_TYPES } from './dirtyConfig';
 
 export { DIRT_TYPES } from './dirtyConfig';
 
+// 云存储环境配置
+const CLOUD_ENV = 'cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846';
+
 // 阶段1：新手村 - 温馨小屋（简单，主要是灰尘和少量污渍）
 const STAGE_1_LEVELS = [
   {
     id: 1,
     stage: 1,
     name: '老年人卧室',
-    background: 'images/game/stage1_level1.png',
-    preview: 'images/game/stage1_l1_home.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l1_home.png`,
     dirts: [
       { type: 'paper', x: 300, y: 400 },
       { type: 'socks', x: 500, y: 600 },
@@ -34,8 +36,7 @@ const STAGE_1_LEVELS = [
     id: 2,
     stage: 1,
     name: '卫生间',
-    background: 'images/game/stage1_level2.png',
-    preview: 'images/game/stage1_l2_home.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l2_home.png`,
     dirts: [
       { type: 'paper', x: 200, y: 350 },
       { type: 'socks', x: 400, y: 500 },
@@ -49,8 +50,7 @@ const STAGE_1_LEVELS = [
     id: 3,
     stage: 1,
     name: '厨房初体验',
-    background: 'images/game/stage1_level3.png',
-    preview: 'images/game/stage1_l3_home.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l3_home.png`,
     dirts: [
       { type: 'dust', x: 250, y: 300 },
       { type: 'stain', x: 450, y: 450 },
@@ -64,7 +64,7 @@ const STAGE_1_LEVELS = [
     id: 4,
     stage: 1,
     name: '卧室整理',
-    background: 'images/game/stage1_level4.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l4_home.png`,
     dirts: [
       { type: 'dust', x: 200, y: 400 },
       { type: 'dust', x: 350, y: 550 },
@@ -79,7 +79,7 @@ const STAGE_1_LEVELS = [
     id: 5,
     stage: 1,
     name: '浴室挑战',
-    background: 'images/game/stage1_level5.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l5_home.png`,
     dirts: [
       { type: 'stain', x: 300, y: 400 },
       { type: 'stain', x: 500, y: 500 },
@@ -94,7 +94,7 @@ const STAGE_1_LEVELS = [
     id: 6,
     stage: 1,
     name: '阳台打扫',
-    background: 'images/game/stage1_level6.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l6_home.png`,
     dirts: [
       { type: 'dust', x: 200, y: 350 },
       { type: 'stain', x: 400, y: 500 },
@@ -109,7 +109,7 @@ const STAGE_1_LEVELS = [
     id: 7,
     stage: 1,
     name: '全屋大扫除',
-    background: 'images/game/stage1_level7.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l7_home.png`,
     dirts: [
       { type: 'dust', x: 150, y: 300 },
       { type: 'stain', x: 350, y: 450 },
@@ -125,7 +125,7 @@ const STAGE_1_LEVELS = [
     id: 8,
     stage: 1,
     name: '油污处理',
-    background: 'images/game/stage1_level8.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l8_home.png`,
     dirts: [
       { type: 'grime', x: 300, y: 400 },
       { type: 'dust', x: 200, y: 300 },
@@ -140,7 +140,7 @@ const STAGE_1_LEVELS = [
     id: 9,
     stage: 1,
     name: '困难清洁',
-    background: 'images/game/stage1_level9.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l9_home.png`,
     dirts: [
       { type: 'grime', x: 250, y: 350 },
       { type: 'grime', x: 450, y: 500 },
@@ -155,7 +155,7 @@ const STAGE_1_LEVELS = [
     id: 10,
     stage: 1,
     name: '阶段BOSS',
-    background: 'images/game/stage1_level10.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l10_home.png`,
     dirts: [
       { type: 'grime', x: 250, y: 350, size: 1.5 },
       { type: 'grime', x: 550, y: 450, size: 1.5 },
@@ -176,8 +176,7 @@ const STAGE_2_LEVELS = [
     id: 1,
     stage: 2,
     name: '新阶段开始',
-    background: 'images/game/stage2_level1.png',
-    preview: 'images/game/stage2_l1_home.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage2_l1_home.png`,
     dirts: [
       { type: 'dust', x: 300, y: 400 },
       { type: 'stain', x: 500, y: 500 },
@@ -192,8 +191,7 @@ const STAGE_2_LEVELS = [
     id: 10,
     stage: 2,
     name: '公寓管理员',
-    background: 'images/game/stage2_level10.png',
-    preview: 'images/game/stage2_l10_home.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage2_l10_home.png`,
     dirts: [
       { type: 'mold', x: 300, y: 400, size: 2 },
       { type: 'mold', x: 500, y: 500, size: 2 },
@@ -213,8 +211,7 @@ const STAGE_3_LEVELS = [
     id: 1,
     stage: 3,
     name: '别墅大厅',
-    background: 'images/game/stage3_level1.png',
-    preview: 'images/game/stage3_l1_home.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage3_l1_home.png`,
     dirts: [
       { type: 'rust', x: 300, y: 400 },
       { type: 'mold', x: 500, y: 500 },
@@ -229,8 +226,7 @@ const STAGE_3_LEVELS = [
     id: 10,
     stage: 3,
     name: '庄园主人',
-    background: 'images/game/stage3_level10.png',
-    preview: 'images/game/stage3_l10_home.png',
+    homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage3_l10_home.png`,
     dirts: [
       { type: 'rust', x: 250, y: 350, size: 2 },
       { type: 'rust', x: 550, y: 450, size: 2 },

@@ -103,20 +103,13 @@ class GameplayScene extends Scene {
   }
 
   /**
-   * 加载关卡背景图（使用 LevelConfig 配置）
+   * 加载关卡背景图
+   * 优先从 LevelConfig.homeImagePath 获取完整的云存储路径
    */
   async _loadBackground() {
     if (typeof wx === 'undefined') return;
     
-    // 从 LevelConfig 获取背景图路径
-    const bgPath = this.levelConfig.background;
-    if (!bgPath) {
-      console.warn('[GameplayScene] 关卡未配置背景图');
-      return;
-    }
-    
     const previewKey = `preview_${this.stage}_${this.levelId}`;
-    const cacheKey = `game_stage${this.stage}_l${this.levelId}`;
     
     // 1. 优先复用内存中的预览图缓存（HomeScene 已加载）
     if (GlobalPreviewCache) {
@@ -129,35 +122,29 @@ class GameplayScene extends Scene {
       }
     }
     
-    // 2. 尝试从本地加载（使用 LevelConfig 配置的路径）
-    try {
-      const img = await this._downloadLocalImage(bgPath);
-      this.bgImage = img;
-      this.bgLoaded = true;
-      console.log(`[GameplayScene] 背景从本地加载: ${bgPath}`);
-      return;
-    } catch (e) {
-      console.log(`[GameplayScene] 本地背景加载失败: ${bgPath}`);
-    }
-    
-    // 3. 从云存储缓存加载（后备）
-    try {
-      const cacheRecord = wx.getStorageSync('cloud_image_cache') || {};
-      const cacheInfo = cacheRecord[cacheKey];
-      
-      if (cacheInfo && cacheInfo.fileID) {
-        const tempURL = await this.cloudStorage.getTempFileURL(cacheInfo.fileID);
+    // 2. 使用 LevelConfig 中的 homeImagePath（完整的云存储 fileID）
+    if (this.levelConfig && this.levelConfig.homeImagePath) {
+      try {
+        const fileID = this.levelConfig.homeImagePath;
+        console.log(`[GameplayScene] 从云存储加载背景: ${fileID}`);
+        
+        const tempURL = await this.cloudStorage.getTempFileURL(fileID);
         if (tempURL) {
           const img = await this._downloadImage(tempURL);
           this.bgImage = img;
           this.bgLoaded = true;
-          console.log(`[GameplayScene] 背景从云存储加载: ${cacheKey}`);
+          console.log(`[GameplayScene] 背景从云存储加载成功`);
+          
+          // 保存到全局缓存
+          GlobalPreviewCache.save(previewKey, img);
           return;
         }
+      } catch (e) {
+        console.log(`[GameplayScene] 云存储背景加载失败:`, e.message);
       }
-    } catch (e) {
-      console.log(`[GameplayScene] 云存储背景加载失败: ${cacheKey}`);
     }
+    
+    console.warn('[GameplayScene] 关卡未配置 homeImagePath 或加载失败');
   }
   
   /**
@@ -516,12 +503,72 @@ class GameplayScene extends Scene {
           dataManager.addCoins(coins);
           dataManager.save();
         }
-        globalEvent.emit('scene:switch', 'HomeScene');
+        
+        // 先更新全局关卡状态缓存（用于首页恢复）
+        const { GlobalLevelStateCache } = require('./HomeScene');
+        GlobalLevelStateCache.save(this.stage, this.levelId, 'unlocked', stars);
+        
+        // 切换到首页，并传递通关动画标记
+        globalEvent.emit('scene:switch', 'HomeScene', {
+          justCompletedLevel: this.levelId,  // 刚通关的关卡ID
+          completedStage: this.stage,         // 通关的stage
+          completedStars: stars               // 获得的星级
+        });
       }
     });
     
     // 显示弹窗（设置 visible=true，触发动画）
     this.settlementDialog.show();
+    
+    // 立即异步预加载下一关的背景图（弹窗弹出时就开始加载）
+    this._preloadNextLevelBackground();
+  }
+
+  /**
+   * 立即异步预加载下一关的背景图
+   * 使用 LevelConfig.homeImagePath 获取完整的云存储路径
+   */
+  async _preloadNextLevelBackground() {
+    const nextLevelId = this.levelId + 1;
+    if (nextLevelId > 10) {
+      console.log('[GameplayScene] 已是本stage最后一关，无需预加载');
+      return;
+    }
+    
+    console.log(`[GameplayScene] 弹窗显示，立即异步预加载下一关背景图: stage${this.stage}_level${nextLevelId}`);
+    
+    try {
+      // 1. 首先检查全局预览缓存
+      const { GlobalPreviewCache } = require('./HomeScene');
+      const previewKey = `preview_${this.stage}_${nextLevelId}`;
+      const cached = GlobalPreviewCache.get(previewKey);
+      if (cached && cached.img) {
+        console.log(`[GameplayScene] 下一关背景图已在全局缓存中`);
+        return;
+      }
+      
+      // 2. 从 LevelConfig 获取下一关的 homeImagePath
+      const { getLevel } = require('../config/LevelConfig');
+      const nextLevelConfig = getLevel(this.stage, nextLevelId);
+      
+      if (!nextLevelConfig || !nextLevelConfig.homeImagePath) {
+        console.log('[GameplayScene] 下一关未配置 homeImagePath');
+        return;
+      }
+      
+      // 3. 从云存储加载
+      const fileID = nextLevelConfig.homeImagePath;
+      console.log(`[GameplayScene] 从云存储预加载下一关: ${fileID}`);
+      
+      const tempURL = await this.cloudStorage.getTempFileURL(fileID);
+      if (tempURL) {
+        const img = await this._downloadImage(tempURL);
+        GlobalPreviewCache.save(previewKey, img);
+        console.log(`[GameplayScene] 下一关背景图已缓存到全局: ${previewKey}`);
+      }
+    } catch (e) {
+      console.log(`[GameplayScene] 预加载下一关背景图失败:`, e.message);
+    }
   }
   
   /**

@@ -21,6 +21,11 @@ class SettlementDialog extends Dialog {
     this.stars = options.stars || 3;
     this.coins = options.coins || 0;
     this.newItems = options.newItems || [];
+    
+    // 保存回调函数
+    this.onReplay = options.onReplay || null;
+    this.onNext = options.onNext || null;
+    this.onHome = options.onHome || null;
 
     this._initUI();
   }
@@ -35,10 +40,43 @@ class SettlementDialog extends Dialog {
     // 金币奖励
     this.coinText = new Text({ x: this.x + 300, y: this.y + 250, text: `获得金币: ${this.coins}`, fontSize: 32, color: '#FF9500', align: 'center' });
 
-    // 按钮
-    this.replayBtn = new Button({ x: this.x + 50, y: this.y + 500, width: 150, height: 70, text: '重玩', fontSize: 24, bgColor: '#E0E0E0', textColor: '#333333', borderRadius: 8, onClick: () => { this.close(); globalEvent.emit('game:replay'); } });
-    this.nextBtn = new Button({ x: this.x + 225, y: this.y + 500, width: 150, height: 70, text: '下一关', fontSize: 24, bgColor: '#4CAF50', borderRadius: 8, onClick: () => { this.close(); globalEvent.emit('game:nextLevel'); } });
-    this.homeBtn = new Button({ x: this.x + 400, y: this.y + 500, width: 150, height: 70, text: '首页', fontSize: 24, bgColor: '#4A90D9', borderRadius: 8, onClick: () => { this.close(); globalEvent.emit('scene:switch', 'HomeScene'); } });
+    // 按钮 - 优先使用传入的回调
+    this.replayBtn = new Button({ 
+      x: this.x + 50, y: this.y + 500, width: 150, height: 70, 
+      text: '重玩', fontSize: 24, bgColor: '#E0E0E0', textColor: '#333333', borderRadius: 8, 
+      onClick: () => { 
+        this.close(); 
+        if (this.onReplay) {
+          this.onReplay();
+        } else {
+          globalEvent.emit('game:replay');
+        }
+      } 
+    });
+    this.nextBtn = new Button({ 
+      x: this.x + 225, y: this.y + 500, width: 150, height: 70, 
+      text: '下一关', fontSize: 24, bgColor: '#4CAF50', borderRadius: 8, 
+      onClick: () => { 
+        this.close(); 
+        if (this.onNext) {
+          this.onNext();
+        } else {
+          globalEvent.emit('game:nextLevel');
+        }
+      } 
+    });
+    this.homeBtn = new Button({ 
+      x: this.x + 400, y: this.y + 500, width: 150, height: 70, 
+      text: '首页', fontSize: 24, bgColor: '#4A90D9', borderRadius: 8, 
+      onClick: () => { 
+        this.close(); 
+        if (this.onHome) {
+          this.onHome();
+        } else {
+          globalEvent.emit('scene:switch', 'HomeScene');
+        }
+      } 
+    });
 
     this.addChild(this.titleText);
     this.addChild(this.starText);

@@ -1,430 +1,496 @@
+
+```html
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Canvas 工具槽绘制</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            background: #f0f0f0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            font-family: sans-serif;
-        }
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h2 {
-            margin-top: 0;
-            color: #333;
-        }
-        canvas {
-            border: 1px solid #ddd;
-            display: block;
-            margin: 20px 0;
-            background: #fff;
-        }
-        .controls {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        button {
-            padding: 8px 16px;
-            background: #4da0ff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        button:hover {
-            background: #2a7ec9;
-        }
-        .info {
-            margin-top: 15px;
-            padding: 15px;
-            background: #f9f9f9;
-            border-left: 4px solid #4da0ff;
-            font-size: 13px;
-            color: #555;
-            line-height: 1.6;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>获得新工具弹窗</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .game-scene {
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 40px;
+      padding: 20px;
+    }
+    
+    .game-title {
+      color: white;
+      font-size: 32px;
+      font-weight: bold;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      text-align: center;
+      background: linear-gradient(to right, #ffd700, #ff8c00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 2px;
+    }
+    
+    .game-desc {
+      color: rgba(255,255,255,0.8);
+      font-size: 16px;
+      text-align: center;
+      max-width: 600px;
+      line-height: 1.6;
+    }
+    
+    .trigger-btn {
+      background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
+      border: none;
+      padding: 16px 40px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #8b4513;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 
+        0 6px 20px rgba(255, 165, 0, 0.6),
+        inset 0 2px 0 rgba(255,255,255,0.4);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .trigger-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 
+        0 8px 25px rgba(255, 165, 0, 0.8),
+        inset 0 2px 0 rgba(255,255,255,0.4);
+    }
+    
+    .trigger-btn:active {
+      transform: translateY(1px);
+      box-shadow: 
+        0 4px 15px rgba(255, 165, 0, 0.6),
+        inset 0 2px 0 rgba(255,255,255,0.4);
+    }
+    
+    .popup-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.85);
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    
+    .popup-container.show {
+      opacity: 1;
+      pointer-events: all;
+    }
+    
+    #popupCanvas {
+      display: block;
+      max-width: 90%;
+      max-height: 90%;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Canvas 工具槽绘制</h2>
-        <canvas id="canvas"></canvas>
+  <div class="game-scene">
+    <h1 class="game-title">✨ 清洁大师游戏</h1>
+    <p class="game-desc">点击下方按钮，体验获得新工具的惊喜时刻！这个弹窗完全使用 Canvas + JavaScript 实现，包含动画星星效果和交互式按钮。</p>
+    <button class="trigger-btn" id="showPopup">获得新工具！</button>
+  </div>
+
+  <div class="popup-container" id="popupContainer">
+    <canvas id="popupCanvas"></canvas>
+  </div>
+
+  <script>
+    class StarParticle {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = Math.random() * 3 + 1;
+        this.speedX = (Math.random() - 0.5) * 4;
+        this.speedY = (Math.random() - 0.5) * 2 - 2; // 向上飘
+        this.alpha = 1;
+        this.decay = Math.random() * 0.02 + 0.01;
+        this.color = `hsl(${Math.random() * 60 + 40}, 100%, ${Math.random() * 30 + 70}%)`;
+      }
+      
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        this.alpha -= this.decay;
+        this.size *= 0.98;
+      }
+      
+      draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = this.color;
         
-        <div class="controls">
-            <button onclick="toggleSlot(0)">切换槽 0 选中</button>
-            <button onclick="toggleSlot(1)">切换槽 1 禁用</button>
-            <button onclick="toggleSlot(2)">切换槽 2 选中</button>
-            <button onclick="redraw()">重绘</button>
-        </div>
-
-        <div class="info">
-            <strong>说明：</strong><br>
-            • 长按点击画布可检测槽位（demo 用）<br>
-            • 支持自定义槽位数、大小、颜色、图标<br>
-            • 可扩展为：禁用状态、数量提示、拖拽等功能
-        </div>
-    </div>
-
-    <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-
-        // ========== 配置 ==========
-        const config = {
-            canvasWidth: 600,
-            canvasHeight: 150,
-            slotCount: 5,
-            slotSize: 80,
-            slotGap: 15,
-            padding: 20,
-            // 状态追踪
-            selectedSlots: new Set(),
-            disabledSlots: new Set(),
-        };
-
-        // 物品数据（演示）
-        const items = [
-            { name: '金块', color: '#ffd700', icon: 'drawGoldBar' },
-            { name: '扫帚', color: '#d4882d', icon: 'drawBrush' },
-            { name: '喷雾', color: '#5b9bff', icon: 'drawSpray' },
-            { name: '炸弹', color: '#6b7b9f', icon: 'drawBomb' },
-            { name: '箱子', color: '#c9a95c', icon: 'drawBox' },
-        ];
-
-        // ========== 初始化 Canvas ==========
-        function initCanvas() {
-            canvas.width = config.canvasWidth;
-            canvas.height = config.canvasHeight;
-            canvas.style.cursor = 'pointer';
-            redraw();
-            canvas.addEventListener('click', handleCanvasClick);
+        // 绘制星星形状
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const angle = (i * Math.PI * 2) / 5 - Math.PI / 2;
+          const radius = this.size;
+          const x = this.x + Math.cos(angle) * radius;
+          const y = this.y + Math.sin(angle) * radius;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+          
+          const innerAngle = angle + Math.PI / 5;
+          const innerX = this.x + Math.cos(innerAngle) * (radius * 0.4);
+          const innerY = this.y + Math.sin(innerAngle) * (radius * 0.4);
+          ctx.lineTo(innerX, innerY);
         }
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.restore();
+      }
+      
+      isOffScreen(canvasHeight) {
+        return this.alpha <= 0 || this.y < -50;
+      }
+    }
 
-        // ========== 主绘制函数 ==========
-        function redraw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawContainerBackground();
-            drawSlots();
+    class Popup {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.width = 0;
+        this.height = 0;
+        this.stars = [];
+        this.lastTime = 0;
+        this.buttonHover = false;
+        this.buttonActive = false;
+        this.animationFrame = null;
+        this.scale = 0;
+        this.init();
+      }
+      
+      init() {
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        this.canvas.addEventListener('click', (e) => this.handleClick(e));
+        this.canvas.addEventListener('mousedown', () => this.buttonActive = true);
+        this.canvas.addEventListener('mouseup', () => this.buttonActive = false);
+        this.canvas.addEventListener('mouseout', () => {
+          this.buttonHover = false;
+          this.buttonActive = false;
+        });
+        
+        // 初始星星
+        for (let i = 0; i < 30; i++) {
+          this.createStar();
         }
-
-        // ========== 1) 容器背景 ==========
-        function drawContainerBackground() {
-            const { canvasWidth, canvasHeight, slotCount, slotSize, slotGap, padding } = config;
-
-            // 计算容器宽度
-            const innerW = slotCount * slotSize + (slotCount - 1) * slotGap;
-            const containerW = innerW + padding * 2;
-            const containerH = slotSize + padding * 2;
-            const containerX = (canvasWidth - containerW) / 2;
-            const containerY = (canvasHeight - containerH) / 2;
-
-            // 圆角矩形背景
-            const radius = 15;
-            drawRoundRect(ctx, containerX, containerY, containerW, containerH, radius);
-            
-            // 主背景色（棕色/金色）
-            const bgGrad = ctx.createLinearGradient(containerX, containerY, containerX, containerY + containerH);
-            bgGrad.addColorStop(0, '#c9905f');
-            bgGrad.addColorStop(0.5, '#a86f38');
-            bgGrad.addColorStop(1, '#8b5a2b');
-            ctx.fillStyle = bgGrad;
-            ctx.fill();
-
-            // 外边框（深色）
-            ctx.strokeStyle = 'rgba(60, 30, 10, 0.6)';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-
-            // 内高光（可选）
-            ctx.save();
-            ctx.globalAlpha = 0.25;
-            const highlightGrad = ctx.createLinearGradient(containerX, containerY, containerX, containerY + containerH * 0.3);
-            highlightGrad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-            highlightGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            drawRoundRect(ctx, containerX + 2, containerY + 2, containerW - 4, containerH * 0.25, radius - 1);
-            ctx.fillStyle = highlightGrad;
-            ctx.fill();
-            ctx.restore();
-
-            // 存储容器位置（供槽位使用）
-            config.containerX = containerX;
-            config.containerY = containerY;
-            config.containerW = containerW;
-            config.containerH = containerH;
+      }
+      
+      resize() {
+        const maxWidth = Math.min(500, window.innerWidth * 0.9);
+        const maxHeight = Math.min(400, window.innerHeight * 0.8);
+        
+        this.width = maxWidth;
+        this.height = maxHeight;
+        this.canvas.width = maxWidth;
+        this.canvas.height = maxHeight;
+        
+        // 重新定位弹窗
+        this.canvas.style.width = `${maxWidth}px`;
+        this.canvas.style.height = `${maxHeight}px`;
+      }
+      
+      createStar() {
+        const x = Math.random() * this.width;
+        const y = this.height * 0.3 + Math.random() * this.height * 0.2;
+        this.stars.push(new StarParticle(x, y));
+      }
+      
+      handleMouseMove(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        // 检测是否在按钮上
+        const buttonY = this.height * 0.85;
+        const buttonWidth = this.width * 0.8;
+        const buttonHeight = this.height * 0.12;
+        const buttonX = (this.width - buttonWidth) / 2;
+        
+        this.buttonHover = (
+          x >= buttonX && 
+          x <= buttonX + buttonWidth && 
+          y >= buttonY && 
+          y <= buttonY + buttonHeight
+        );
+      }
+      
+      handleClick(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        // 检测按钮点击
+        const buttonY = this.height * 0.85;
+        const buttonWidth = this.width * 0.8;
+        const buttonHeight = this.height * 0.12;
+        const buttonX = (this.width - buttonWidth) / 2;
+        
+        if (this.buttonHover && x >= buttonX && x <= buttonX + buttonWidth && y >= buttonY && y <= buttonY + buttonHeight) {
+          this.closePopup();
         }
-
-        // ========== 2) 绘制所有槽位 ==========
-        function drawSlots() {
-            const { canvasWidth, canvasHeight, slotCount, slotSize, slotGap, padding } = config;
-            const { containerX, containerY } = config;
-
-            const innerW = slotCount * slotSize + (slotCount - 1) * slotGap;
-            const startX = containerX + padding + (config.containerW - padding * 2 - innerW) / 2;
-            const startY = containerY + padding;
-
-            for (let i = 0; i < slotCount; i++) {
-                const x = startX + i * (slotSize + slotGap);
-                const y = startY;
-
-                drawSlot(x, y, slotSize, i);
-            }
+      }
+      
+      closePopup() {
+        const popupContainer = document.getElementById('popupContainer');
+        popupContainer.classList.remove('show');
+        
+        // 2秒后重置
+        setTimeout(() => {
+          if (this.animationFrame) {
+            cancelAnimationFrame(this.animationFrame);
+          }
+          this.stars = [];
+          for (let i = 0; i < 30; i++) {
+            this.createStar();
+          }
+          this.scale = 0;
+        }, 300);
+      }
+      
+      update(timestamp) {
+        if (!this.lastTime) this.lastTime = timestamp;
+        const deltaTime = timestamp - this.lastTime;
+        this.lastTime = timestamp;
+        
+        // 创建新星星
+        if (Math.random() > 0.8) {
+          this.createStar();
         }
-
-        // ========== 3) 绘制单个槽位 ==========
-        function drawSlot(x, y, size, index) {
-            const isSelected = config.selectedSlots.has(index);
-            const isDisabled = config.disabledSlots.has(index);
-
-            // 槽位背景
-            const slotGrad = ctx.createLinearGradient(x, y, x, y + size);
-            slotGrad.addColorStop(0, isDisabled ? '#7a7a7a' : '#e8d4b8');
-            slotGrad.addColorStop(0.5, isDisabled ? '#5a5a5a' : '#d9c399');
-            slotGrad.addColorStop(1, isDisabled ? '#3a3a3a' : '#b8956b');
-
-            ctx.save();
-
-            // 选中状态：添加发光边框
-            if (isSelected) {
-                ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
-                ctx.shadowBlur = 15;
-                ctx.shadowOffsetX = 0;
-                ctx.shadowOffsetY = 0;
-            }
-
-            drawRoundRect(ctx, x, y, size, size, 8);
-            ctx.fillStyle = slotGrad;
-            ctx.fill();
-
-            // 槽位边框
-            const borderColor = isSelected ? '#ffd700' : isDisabled ? '#555' : '#8b7355';
-            ctx.strokeStyle = borderColor;
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // 槽位内阴影
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-            ctx.shadowBlur = 3;
-            ctx.shadowInset = true;
-            drawRoundRect(ctx, x + 2, y + 2, size - 4, size - 4, 6);
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            ctx.restore();
-
-            // 禁用时添加斜纹
-            if (isDisabled) {
-                drawDisabledPattern(x, y, size);
-            }
-
-            // 绘制物品图标
-            const item = items[index];
-            if (item) {
-                drawItemIcon(x, y, size, item, isDisabled);
-            }
-
-            // 存储槽位位置（供点击检测）
-            if (!config.slotPositions) config.slotPositions = [];
-            config.slotPositions[index] = { x, y, size };
+        
+        // 更新星星
+        for (let i = this.stars.length - 1; i >= 0; i--) {
+          this.stars[i].update();
+          if (this.stars[i].isOffScreen(this.height)) {
+            this.stars.splice(i, 1);
+          }
         }
-
-        // ========== 4) 禁用状态斜纹 ==========
-        function drawDisabledPattern(x, y, size) {
-            ctx.save();
-            ctx.globalAlpha = 0.2;
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 2;
-
-            for (let i = -size; i < size * 2; i += 8) {
-                ctx.beginPath();
-                ctx.moveTo(x + i, y);
-                ctx.lineTo(x + i + size, y + size);
-                ctx.stroke();
-            }
-
-            ctx.restore();
+        
+        // 动画缩放效果
+        if (this.scale < 1) {
+          this.scale += 0.05;
         }
-
-        // ========== 5) 绘制物品图标 ==========
-        function drawItemIcon(x, y, size, item, isDisabled) {
-            const iconX = x + size / 2;
-            const iconY = y + size / 2;
-            const iconSize = size * 0.55;
-
-            ctx.save();
-            if (isDisabled) ctx.globalAlpha = 0.4;
-
-            // 根据物品类型调用对应绘制函数
-            if (typeof window[item.icon] === 'function') {
-                window[item.icon](iconX, iconY, iconSize, item.color);
-            }
-
-            ctx.restore();
+        
+        this.draw();
+        this.animationFrame = requestAnimationFrame((time) => this.update(time));
+      }
+      
+      draw() {
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.width, this.height);
+        
+        // 整体缩放动画
+        ctx.save();
+        ctx.translate(this.width / 2, this.height / 2);
+        ctx.scale(this.scale, this.scale);
+        ctx.translate(-this.width / 2, -this.height / 2);
+        
+        // 1. 绘制弹窗背景
+        const popupPadding = this.width * 0.08;
+        const popupWidth = this.width - popupPadding * 2;
+        const popupHeight = this.height - popupPadding * 2;
+        const popupX = popupPadding;
+        const popupY = popupPadding;
+        const popupRadius = 24;
+        
+        // 阴影
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+        ctx.shadowBlur = 30;
+        ctx.shadowOffsetY = 10;
+        
+        // 弹窗背景
+        ctx.fillStyle = 'white';
+        this.drawRoundedRect(ctx, popupX, popupY, popupWidth, popupHeight, popupRadius);
+        ctx.fill();
+        
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        
+        // 2. 顶部星星装饰区域
+        const headerHeight = this.height * 0.25;
+        const headerY = popupY;
+        
+        // 顶部渐变背景
+        const headerGrad = ctx.createLinearGradient(popupX, headerY, popupX, headerY + headerHeight);
+        headerGrad.addColorStop(0, '#ff9a9e');
+        headerGrad.addColorStop(0.5, '#fad0c4');
+        headerGrad.addColorStop(1, '#fbc2eb');
+        
+        ctx.fillStyle = headerGrad;
+        this.drawRoundedRect(ctx, popupX, headerY, popupWidth, headerHeight, popupRadius);
+        ctx.fill();
+        
+        // 3. 标题
+        ctx.fillStyle = '#8b4513';
+        ctx.font = `bold ${Math.floor(this.width * 0.08)}px 'Arial', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🎉 获得新工具！', this.width / 2, headerY + headerHeight / 2);
+        
+        // 4. 工具卡片
+        const cardWidth = popupWidth * 0.7;
+        const cardHeight = popupHeight * 0.4;
+        const cardX = popupX + (popupWidth - cardWidth) / 2;
+        const cardY = headerY + headerHeight + popupPadding * 0.5;
+        
+        // 卡片背景
+        ctx.fillStyle = '#fff8dc';
+        ctx.strokeStyle = '#d4af37';
+        ctx.lineWidth = 3;
+        this.drawRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 16);
+        ctx.fill();
+        ctx.stroke();
+        
+        // 卡片阴影
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 5;
+        ctx.fillStyle = 'rgba(0,0,0,0.05)';
+        this.drawRoundedRect(ctx, cardX + 5, cardY + 5, cardWidth - 10, cardHeight - 10, 12);
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        
+        // 绘制工具图标（海绵）
+        const toolSize = Math.min(cardWidth * 0.6, cardHeight * 0.6);
+        const toolX = cardX + cardWidth / 2;
+        const toolY = cardY + cardHeight / 2;
+        
+        // 海绵主体
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.ellipse(toolX, toolY, toolSize * 0.6, toolSize * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 海绵细节
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath();
+        ctx.ellipse(toolX - toolSize * 0.15, toolY - toolSize * 0.05, toolSize * 0.2, toolSize * 0.15, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#ffaa00';
+        ctx.beginPath();
+        ctx.ellipse(toolX + toolSize * 0.15, toolY + toolSize * 0.05, toolSize * 0.15, toolSize * 0.12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 5. 按钮
+        const buttonWidth = popupWidth * 0.8;
+        const buttonHeight = this.height * 0.12;
+        const buttonX = popupX + (popupWidth - buttonWidth) / 2;
+        const buttonY = popupY + popupHeight - buttonHeight - popupPadding * 0.5;
+        
+        // 按钮状态
+        const buttonColor = this.buttonActive ? '#e0b34a' : (this.buttonHover ? '#f5c542' : '#ffd700');
+        const buttonShadow = this.buttonActive ? 2 : 4;
+        
+        // 按钮阴影
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+        ctx.shadowBlur = 15;
+        ctx.shadowOffsetY = buttonShadow;
+        
+        // 按钮背景
+        ctx.fillStyle = buttonColor;
+        this.drawRoundedRect(ctx, buttonX, buttonY, buttonWidth, buttonHeight, 18);
+        ctx.fill();
+        
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        
+        // 按钮边框
+        ctx.strokeStyle = '#8b4513';
+        ctx.lineWidth = 3;
+        this.drawRoundedRect(ctx, buttonX, buttonY, buttonWidth, buttonHeight, 18);
+        ctx.stroke();
+        
+        // 按钮文字
+        ctx.fillStyle = '#8b4513';
+        ctx.font = `bold ${Math.floor(this.width * 0.06)}px 'Arial', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('✨ 收 取 ✨', buttonX + buttonWidth / 2, buttonY + buttonHeight / 2);
+        
+        // 6. 绘制所有星星
+        for (const star of this.stars) {
+          star.draw(ctx);
         }
+        
+        ctx.restore();
+      }
+      
+      drawRoundedRect(ctx, x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.arcTo(x + width, y, x + width, y + height, radius);
+        ctx.arcTo(x + width, y + height, x, y + height, radius);
+        ctx.arcTo(x, y + height, x, y, radius);
+        ctx.arcTo(x, y, x + width, y, radius);
+        ctx.closePath();
+      }
+      
+      show() {
+        this.scale = 0;
+        this.animationFrame = requestAnimationFrame((time) => this.update(time));
+      }
+    }
 
-        // ========== 图标绘制函数（可扩展）==========
-        function drawGoldBar(cx, cy, size, color) {
-            ctx.save();
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.rect(cx - size * 0.4, cy - size * 0.5, size * 0.8, size);
-            ctx.fill();
-
-            // 高光
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.beginPath();
-            ctx.rect(cx - size * 0.35, cy - size * 0.45, size * 0.2, size * 0.4);
-            ctx.fill();
-
-            ctx.restore();
+    // 初始化
+    document.addEventListener('DOMContentLoaded', () => {
+      const popupContainer = document.getElementById('popupContainer');
+      const popupCanvas = document.getElementById('popupCanvas');
+      const showPopupBtn = document.getElementById('showPopup');
+      
+      // 创建弹窗实例
+      const popup = new Popup(popupCanvas);
+      
+      // 显示弹窗
+      showPopupBtn.addEventListener('click', () => {
+        popupContainer.classList.add('show');
+        setTimeout(() => {
+          popup.show();
+        }, 100);
+      });
+      
+      // 点击遮罩关闭
+      popupContainer.addEventListener('click', (e) => {
+        if (e.target === popupContainer) {
+          popup.closePopup();
         }
-
-        function drawBrush(cx, cy, size, color) {
-            ctx.save();
-            // 刷毛
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy - size * 0.2, size * 0.35, size * 0.3, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            // 手柄
-            ctx.fillStyle = '#8b5a2b';
-            ctx.beginPath();
-            ctx.rect(cx - size * 0.15, cy - size * 0.15, size * 0.3, size * 0.5);
-            ctx.fill();
-
-            ctx.restore();
-        }
-
-        function drawSpray(cx, cy, size, color) {
-            ctx.save();
-            // 瓶身
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.rect(cx - size * 0.25, cy - size * 0.15, size * 0.5, size * 0.5);
-            ctx.fill();
-
-            // 喷嘴
-            ctx.fillStyle = '#333';
-            ctx.beginPath();
-            ctx.rect(cx - size * 0.2, cy - size * 0.35, size * 0.4, size * 0.25);
-            ctx.fill();
-
-            // 高光
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-            ctx.beginPath();
-            ctx.rect(cx - size * 0.2, cy - size * 0.1, size * 0.15, size * 0.3);
-            ctx.fill();
-
-            ctx.restore();
-        }
-
-        function drawBomb(cx, cy, size, color) {
-            ctx.save();
-            // 球体
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(cx, cy, size * 0.35, 0, Math.PI * 2);
-            ctx.fill();
-
-            // 引信
-            ctx.strokeStyle = '#d4a574';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(cx, cy - size * 0.35);
-            ctx.quadraticCurveTo(cx - size * 0.15, cy - size * 0.55, cx - size * 0.05, cy - size * 0.65);
-            ctx.stroke();
-
-            ctx.restore();
-        }
-
-        function drawBox(cx, cy, size, color) {
-            ctx.save();
-            ctx.fillStyle = color;
-
-            // 前面
-            ctx.beginPath();
-            ctx.rect(cx - size * 0.35, cy - size * 0.2, size * 0.7, size * 0.5);
-            ctx.fill();
-
-            // 顶部
-            ctx.fillStyle = '#daa02a';
-            ctx.beginPath();
-            ctx.moveTo(cx - size * 0.35, cy - size * 0.2);
-            ctx.lineTo(cx - size * 0.25, cy - size * 0.35);
-            ctx.lineTo(cx + size * 0.45, cy - size * 0.35);
-            ctx.lineTo(cx + size * 0.35, cy - size * 0.2);
-            ctx.closePath();
-            ctx.fill();
-
-            // 边框
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            ctx.restore();
-        }
-
-        // ========== 工具函数 ==========
-        function drawRoundRect(ctx, x, y, w, h, r) {
-            const radius = Math.min(r, w / 2, h / 2);
-            ctx.beginPath();
-            ctx.moveTo(x + radius, y);
-            ctx.arcTo(x + w, y, x + w, y + h, radius);
-            ctx.arcTo(x + w, y + h, x, y + h, radius);
-            ctx.arcTo(x, y + h, x, y, radius);
-            ctx.arcTo(x, y, x + w, y, radius);
-            ctx.closePath();
-        }
-
-        // ========== 交互 ==========
-        function handleCanvasClick(e) {
-            const rect = canvas.getBoundingClientRect();
-            const clickX = e.clientX - rect.left;
-            const clickY = e.clientY - rect.top;
-
-            // 检测点击的槽位
-            for (let i = 0; i < config.slotCount; i++) {
-                const slot = config.slotPositions[i];
-                if (clickX >= slot.x && clickX <= slot.x + slot.size &&
-                    clickY >= slot.y && clickY <= slot.y + slot.size) {
-                    // 点击相同槽位不取消，点击不同槽位则切换
-                    if (!config.selectedSlots.has(i)) {
-                        config.selectedSlots.clear();
-                        config.selectedSlots.add(i);
-                        console.log(`选中槽位: ${i} (${items[i].name})`);
-                        redraw();
-                    }
-                    break;
-                }
-            }
-        }
-
-        function toggleSlot(index) {
-            // 单选模式：清空所有选中，然后选中这个
-            config.selectedSlots.clear();
-            config.selectedSlots.add(index);
-            console.log(`选中槽位: ${index} (${items[index].name})`);
-            redraw();
-        }
-
-        // ========== 初始化 ==========
-        initCanvas();
-    </script>
+      });
+    });
+  </script>
 </body>
 </html>
+```

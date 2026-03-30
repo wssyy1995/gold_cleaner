@@ -21,6 +21,7 @@ import CloudStorage from '../cloud/CloudStorage';
 import PauseMenu from '../ui/dialogs/PauseMenu';
 import LevelCompleteDialog from '../ui/dialogs/LevelCompleteDialog';
 import SettlementDialog from '../ui/dialogs/SettlementDialog';
+import ToolUnlockDialog from '../ui/dialogs/ToolUnlockDialog';
 import haptic from '../utils/HapticFeedback';
 
 class GameplayScene extends Scene {
@@ -88,6 +89,12 @@ class GameplayScene extends Scene {
     // 结算弹窗（新方式：独立弹窗，不依赖 DialogManager）
     this.settlementDialog = null;
     
+    // 工具解锁弹窗
+    this.toolUnlockDialog = null;
+    
+    // 本关新解锁的工具列表
+    this.newUnlockedTools = [];
+    
     // 云存储
     this.cloudStorage = new CloudStorage();
   }
@@ -114,9 +121,17 @@ class GameplayScene extends Scene {
     // 初始化云存储
     await this.cloudStorage.init();
     
+    // 检查当前关卡解锁的新工具（unlockLevel === 当前关卡ID）
+    this._checkNewUnlockedTools();
+    
     this._initUI();
     this._generateDirts();
     await this._loadBackground();
+    
+    // 如果有新解锁的工具，显示解锁弹窗
+    if (this.newUnlockedTools && this.newUnlockedTools.length > 0) {
+      this._showToolUnlockDialog();
+    }
   }
 
   /**
@@ -176,6 +191,83 @@ class GameplayScene extends Scene {
     });
   }
 
+  /**
+   * 检查当前关卡新解锁的工具
+   * unlockLevel === 当前关卡ID 的工具
+   * 注意：关卡1不弹出（初始工具已在工具槽中）
+   */
+  _checkNewUnlockedTools() {
+    // 关卡1不弹出解锁弹窗（初始工具已在工具槽中）
+    if (this.levelId === 1) {
+      this.newUnlockedTools = [];
+      return;
+    }
+    
+    // 筛选出本关解锁的工具（unlockLevel 等于当前关卡ID）
+    this.newUnlockedTools = BASE_TOOLS.filter(t => t.unlockLevel === this.levelId);
+    
+    if (this.newUnlockedTools.length > 0) {
+      console.log('[GameplayScene] 本关解锁新工具:', this.newUnlockedTools.map(t => t.name).join(', '));
+    }
+  }
+  
+  /**
+   * 显示工具解锁弹窗
+   */
+  _showToolUnlockDialog() {
+    // 准备弹窗需要的工具数据（包含图片）
+    const toolsWithImages = this.newUnlockedTools.map(tool => {
+      const toolImage = GlobalToolImageCache.get(tool.id);
+      return {
+        ...tool,
+        image: toolImage
+      };
+    });
+    
+    // 创建解锁弹窗
+    this.toolUnlockDialog = new ToolUnlockDialog({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight,
+      unlockedTools: toolsWithImages,
+      onCollect: () => {
+        // 点击收取后将工具添加到工具槽
+        this._addUnlockedToolsToSlot();
+      }
+    });
+    
+    // 显示弹窗
+    this.toolUnlockDialog.show();
+    console.log('[GameplayScene] 显示工具解锁弹窗');
+  }
+  
+  /**
+   * 将解锁的工具添加到工具槽第一位
+   */
+  _addUnlockedToolsToSlot() {
+    if (!this.newUnlockedTools || this.newUnlockedTools.length === 0) return;
+    
+    // 将新工具插入到工具列表开头
+    const newTools = [...this.newUnlockedTools, ...this.tools];
+    this.tools = newTools;
+    
+    // 更新 ToolSlot 组件
+    if (this.toolSlot) {
+      // 使用 updateData 方法更新工具，确保槽位位置正确更新
+      this.toolSlot.updateData({
+        tools: this.tools,
+        selectedIndex: 0  // 选中新添加的第一个工具
+      });
+    }
+    
+    // 设置当前工具索引为0（新工具）
+    this.currentToolIndex = 0;
+    
+    console.log('[GameplayScene] 新工具已添加到工具槽:', this.newUnlockedTools.map(t => t.name).join(', '));
+    
+    // 清空新解锁工具列表（避免重复添加）
+    this.newUnlockedTools = [];
+  }
+
   _initUI() {
     const s = this.screenWidth / 750;
     
@@ -184,7 +276,9 @@ class GameplayScene extends Scene {
     this.remainingTime = this.timeLimit;
     
     // 工具槽显示已解锁的基础工具（根据 unlockLevel 过滤）
-    this.tools = BASE_TOOLS.filter(t => t.unlockLevel <= this.levelId);
+    // 如果有新解锁的工具，先不包含它们，等点击收取后再添加
+    const unlockedToolIds = (this.newUnlockedTools || []).map(t => t.id);
+    this.tools = BASE_TOOLS.filter(t => t.unlockLevel <= this.levelId && !unlockedToolIds.includes(t.id));
     this.currentToolIndex = 0;
     
     // 新的 TopBar 组件（替换原有顶部 UI）
@@ -606,11 +700,29 @@ class GameplayScene extends Scene {
   }
   
   /**
+   * 更新工具解锁弹窗
+   */
+  _updateToolUnlockDialog(dt) {
+    if (this.toolUnlockDialog && this.toolUnlockDialog.update) {
+      this.toolUnlockDialog.update(dt);
+    }
+  }
+  
+  /**
    * 渲染结算弹窗
    */
   _renderSettlementDialog(ctx) {
     if (this.settlementDialog && this.settlementDialog.render) {
       this.settlementDialog.render(ctx);
+    }
+  }
+  
+  /**
+   * 渲染工具解锁弹窗
+   */
+  _renderToolUnlockDialog(ctx) {
+    if (this.toolUnlockDialog && this.toolUnlockDialog.render) {
+      this.toolUnlockDialog.render(ctx);
     }
   }
 
@@ -901,6 +1013,9 @@ class GameplayScene extends Scene {
       setTimeout(() => this._showSettlement(), 500);
     }
     
+    // 更新工具解锁弹窗
+    this._updateToolUnlockDialog(deltaTime);
+    
     // 更新结算弹窗
     this._updateSettlementDialog(deltaTime);
   }
@@ -923,6 +1038,9 @@ class GameplayScene extends Scene {
     
     // 绘制亮晶晶特效（清洁完成后的闪烁效果）
     this._renderShineEffects(ctx);
+    
+    // 渲染工具解锁弹窗
+    this._renderToolUnlockDialog(ctx);
     
     // 渲染结算弹窗（在最上层）
     this._renderSettlementDialog(ctx);
@@ -1595,7 +1713,16 @@ class GameplayScene extends Scene {
   }
 
   onTouchStart(x, y) {
-    // 优先检查结算弹窗（最上层）
+    // 优先检查工具解锁弹窗（最上层，游戏开始时显示）
+    if (this.toolUnlockDialog && this.toolUnlockDialog.visible) {
+      if (this.toolUnlockDialog.onTouchStart && this.toolUnlockDialog.onTouchStart(x, y)) {
+        return true;
+      }
+      // 弹窗显示时阻挡下方所有触摸
+      return true;
+    }
+    
+    // 检查结算弹窗（游戏结束时显示）
     if (this.settlementDialog && this.settlementDialog.visible) {
       if (this.settlementDialog.onTouchStart && this.settlementDialog.onTouchStart(x, y)) {
         return true;
@@ -1659,6 +1786,11 @@ class GameplayScene extends Scene {
   }
 
   onTouchMove(x, y) {
+    // 工具解锁弹窗显示时阻止下方触摸
+    if (this.toolUnlockDialog && this.toolUnlockDialog.visible) {
+      return false;
+    }
+    
     // 结算弹窗显示时阻止下方触摸
     if (this.settlementDialog && this.settlementDialog.visible) {
       return false;
@@ -1709,7 +1841,15 @@ class GameplayScene extends Scene {
   }
 
   onTouchEnd(x, y) {
-    // 优先检查结算弹窗（最上层）
+    // 优先检查工具解锁弹窗（最上层，游戏开始时显示）
+    if (this.toolUnlockDialog && this.toolUnlockDialog.visible) {
+      if (this.toolUnlockDialog.onTouchEnd && this.toolUnlockDialog.onTouchEnd(x, y)) {
+        return true;
+      }
+      return true;
+    }
+    
+    // 检查结算弹窗（游戏结束时显示）
     if (this.settlementDialog && this.settlementDialog.visible) {
       if (this.settlementDialog.onTouchEnd && this.settlementDialog.onTouchEnd(x, y)) {
         return true;

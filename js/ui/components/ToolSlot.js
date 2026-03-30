@@ -132,6 +132,8 @@ class ToolSlot {
     if (data.tools !== undefined) {
       this.tools = data.tools;
       this._calculateDimensions();
+      // 工具变化时更新槽位位置
+      this._updateSlotPositions();
       // 工具变化时清空空槽位记录
       this.emptySlots.clear();
     }

@@ -456,12 +456,10 @@ class ToolSlot {
     // 优先使用缓存的工具图片
     const toolImage = GlobalToolImageCache.get(tool.id);
     if (toolImage) {
-      // 计算图片绘制尺寸（保持比例，适应槽位）
-      const padding = size * 0.15;
-      const availableSize = size - padding * 2;
+      // 计算图片绘制尺寸（保持比例，原大小）
       const scale = Math.min(
-        availableSize / toolImage.width,
-        availableSize / toolImage.height
+        size / toolImage.width,
+        size / toolImage.height
       );
       const drawWidth = toolImage.width * scale;
       const drawHeight = toolImage.height * scale;

@@ -43,7 +43,7 @@ const GlobalBgCache = {
 // 全局关卡预览图缓存 - 避免重复加载
 // 导出供其他场景复用（如 GameplayScene）
 export const GlobalPreviewCache = {
-  // key: "preview_1_1" -> { img, loaded }
+  // key: "game_stage1_l1_home" -> { img, loaded }
   _cache: {},
   
   // 保存预览图
@@ -199,14 +199,87 @@ class HomeScene extends Scene {
     
     this._initUI();
     
-    // 从缓存加载图片（如果背景图未缓存）
-    this._loadCachedImages();
+    // 串行加载图片，避免并发请求云存储导致临时 URL 获取失败
+    await this._loadCachedImages();
+    await this._preloadCurrentLevelPreview();
+    await this._loadTitleImages();
+  }
+
+  /**
+   * 从其他场景返回时触发
+   * 恢复全局缓存中的图片数据
+   */
+  onEnter(data = {}) {
+    console.log('[HomeScene] 进入场景，恢复缓存数据');
     
-    // 预加载当前关卡预览图
-    this._preloadCurrentLevelPreview();
+    // 恢复关卡图标
+    this._restoreIconsFromCache();
     
-    // 加载主页面标题和阶段标签图
-    this._loadTitleImages();
+    // 恢复背景图
+    this._restoreBackgroundFromCache();
+    
+    // 恢复预览图
+    this._restorePreviewImagesFromCache();
+    
+    // 恢复标题和标签图
+    this._restoreTitleImagesFromCache();
+  }
+  
+  /**
+   * 从全局缓存恢复标题和标签图
+   */
+  _restoreTitleImagesFromCache() {
+    // 恢复游戏标题
+    const titleCached = GlobalTitleCache.get('bg_game_title');
+    if (titleCached && titleCached.img) {
+      this._bg_game_titleImage = titleCached.img;
+      this._bg_game_titleLoaded = true;
+      console.log('[HomeScene] 游戏标题从全局缓存恢复');
+    }
+    
+    // 恢复阶段标签
+    const tagCached = GlobalTitleCache.get('bg_stage1_tag');
+    if (tagCached && tagCached.img) {
+      this._bg_stage1_tagImage = tagCached.img;
+      this._bg_stage1_tagLoaded = true;
+      console.log('[HomeScene] 阶段标签从全局缓存恢复');
+    }
+  }
+  
+  /**
+   * 从全局缓存恢复图标
+   */
+  _restoreIconsFromCache() {
+    // 图标已经在 _loadCachedImages 中加载，这里不需要额外处理
+    // 因为图标是通用的，已经缓存在 iconImages 中
+  }
+  
+  /**
+   * 从全局缓存恢复背景图
+   */
+  _restoreBackgroundFromCache() {
+    const cachedBg = GlobalBgCache.get(this.currentStage);
+    if (cachedBg && cachedBg.bgImage) {
+      this.bgImage = cachedBg.bgImage;
+      this.bgLoaded = true;
+      console.log('[HomeScene] 背景图从全局缓存恢复');
+    }
+  }
+  
+  /**
+   * 从全局缓存恢复预览图
+   */
+  _restorePreviewImagesFromCache() {
+    if (!this.levels) return;
+    
+    this.levels.forEach(level => {
+      const key = `game_stage${this.currentStage}_l${level.id}_home`;
+      const cached = GlobalPreviewCache.get(key);
+      if (cached && cached.img) {
+        this._previewImages[key] = cached;
+        console.log(`[HomeScene] 预览图从全局缓存恢复: ${key}`);
+      }
+    });
   }
 
   /**
@@ -621,7 +694,7 @@ class HomeScene extends Scene {
    * 加载预览图片（混合方案：优先全局缓存，其次云存储缓存，否则本地）
    */
   async _loadPreviewImage(stage, levelId) {
-    const key = `preview_${stage}_${levelId}`;
+    const key = `game_stage${stage}_l${levelId}_home`;
     
     // 0. 检查实例缓存
     if (this._previewImages[key]) return;
@@ -649,8 +722,8 @@ class HomeScene extends Scene {
       
       const tempURL = await this.cloudStorage.getTempFileURL(fileID);
       if (!tempURL) {
-        console.log(`[HomeScene] 获取临时URL失败: ${key}`);
-        return;
+        console.log(`[HomeScene] 获取临时URL失败，尝试本地加载: ${key}`);
+        throw new Error('getTempFileURL failed');
       }
       
       const img = await this._downloadImage(tempURL);
@@ -662,7 +735,19 @@ class HomeScene extends Scene {
       console.log(`[HomeScene] 预览图加载成功: ${key}`);
       
     } catch (e) {
-      console.log(`[HomeScene] 预览图加载失败: ${key}`, e.message);
+      console.log(`[HomeScene] 云存储加载失败，尝试本地: ${key}`, e.message);
+      
+      // 尝试从本地加载降级
+      try {
+        const localPath = `images/game/${key}.png`;
+        const img = await this._downloadLocalImage(localPath);
+        const cacheEntry = { loaded: true, img };
+        this._previewImages[key] = cacheEntry;
+        GlobalPreviewCache.save(key, img);
+        console.log(`[HomeScene] 预览图从本地加载成功: ${key}`);
+      } catch (localErr) {
+        console.log(`[HomeScene] 预览图本地加载也失败: ${key}`, localErr.message);
+      }
     }
   }
   
@@ -856,7 +941,7 @@ class HomeScene extends Scene {
     
     try {
       // 首先检查全局缓存是否已有
-      const previewKey = `preview_${this.currentStage}_${nextLevelId}`;
+      const previewKey = `game_stage${this.currentStage}_l${nextLevelId}_home`;
       const globalCached = GlobalPreviewCache.get(previewKey);
       if (globalCached && globalCached.loaded && globalCached.img) {
         console.log(`[HomeScene] 下一关预览图已在全局缓存中`);
@@ -1170,7 +1255,7 @@ class HomeScene extends Scene {
     ctx.restore();
     
     // 预览图片 - 优先从全局缓存获取
-    const previewImgKey = `preview_${this.currentStage}_${level.id}`;
+    const previewImgKey = `game_stage${this.currentStage}_l${level.id}_home`;
     let previewImg = this._previewImages[previewImgKey];
     
     // 如果实例缓存没有，尝试从全局缓存获取

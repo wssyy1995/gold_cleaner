@@ -295,12 +295,13 @@ class CloudStorage {
   }
 
   /**
-   * 获取临时访问链接
+   * 获取临时访问链接（带重试机制）
    * @param {string} fileID - 云文件ID
    * @param {number} expires - 过期时间（秒）
+   * @param {number} retries - 重试次数
    * @returns {Promise<string|null>}
    */
-  async getTempFileURL(fileID, expires = 7200) {
+  async getTempFileURL(fileID, expires = 7200, retries = 2) {
     if (!this._initialized) {
       await this.init();
     }
@@ -310,33 +311,50 @@ class CloudStorage {
       return null;
     }
 
-    try {
-      console.log(`[CloudStorage] 获取临时URL: ${fileID}`);
-      
-      const result = await this.cloud.getTempFileURL({
-        fileList: [{
-          fileID: fileID,
-          maxAge: expires
-        }]
-      });
-
-      console.log('[CloudStorage] getTempFileURL 结果:', result);
-
-      if (result.fileList && result.fileList.length > 0) {
-        const file = result.fileList[0];
-        if (file.status === 0) {
-          console.log(`[CloudStorage] 获取成功: ${file.tempFileURL}`);
-          return file.tempFileURL;
+    let lastError = null;
+    
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`[CloudStorage] 获取临时URL重试第${attempt}次: ${fileID}`);
+          // 延迟重试，指数退避
+          await this._delay(100 * Math.pow(2, attempt - 1));
         } else {
-          console.error(`[CloudStorage] 获取失败: status=${file.status}, errMsg=${file.errMsg}`);
-          return null;
+          console.log(`[CloudStorage] 获取临时URL: ${fileID}`);
         }
+        
+        const result = await this.cloud.getTempFileURL({
+          fileList: [{
+            fileID: fileID,
+            maxAge: expires
+          }]
+        });
+
+        if (result.fileList && result.fileList.length > 0) {
+          const file = result.fileList[0];
+          if (file.status === 0) {
+            console.log(`[CloudStorage] 获取成功: ${file.tempFileURL.substring(0, 60)}...`);
+            return file.tempFileURL;
+          } else {
+            console.error(`[CloudStorage] 获取失败: status=${file.status}, errMsg=${file.errMsg}`);
+            lastError = new Error(file.errMsg || `status_${file.status}`);
+          }
+        }
+      } catch (error) {
+        console.error(`[CloudStorage] 获取临时链接异常(尝试${attempt + 1}/${retries + 1}):`, error.message || error);
+        lastError = error;
       }
-      return null;
-    } catch (error) {
-      console.error('[CloudStorage] 获取临时链接异常:', error);
-      return null;
     }
+    
+    console.error(`[CloudStorage] 获取临时链接最终失败，已重试${retries}次:`, lastError?.message);
+    return null;
+  }
+  
+  /**
+   * 延迟辅助函数
+   */
+  _delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**

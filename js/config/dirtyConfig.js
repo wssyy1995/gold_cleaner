@@ -40,10 +40,10 @@ export const DIRT_TYPES = {
     operate_type: 'wipe'
   },
   grime: { 
-    name: '油垢', 
+    name: '油渍', 
     color: '#3E2723', 
     difficulty: 3,
-    recipes: [['spray', 'brush'], ['sponge', 'sponge', 'sponge']],
+    recipes: [['common_spray', 'brush','cloth']],
     scale: 1
   },
   mold: {

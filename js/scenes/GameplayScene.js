@@ -21,6 +21,7 @@ import CloudStorage from '../cloud/CloudStorage';
 import PauseMenu from '../ui/dialogs/PauseMenu';
 import LevelCompleteDialog from '../ui/dialogs/LevelCompleteDialog';
 import SettlementDialog from '../ui/dialogs/SettlementDialog';
+import haptic from '../utils/HapticFeedback';
 
 class GameplayScene extends Scene {
   constructor() {
@@ -109,7 +110,7 @@ class GameplayScene extends Scene {
   async _loadBackground() {
     if (typeof wx === 'undefined') return;
     
-    const previewKey = `preview_${this.stage}_${this.levelId}`;
+    const previewKey = `game_stage${this.stage}_l${this.levelId}_home`;
     
     // 1. 优先复用内存中的预览图缓存（HomeScene 已加载）
     if (GlobalPreviewCache) {
@@ -548,7 +549,7 @@ class GameplayScene extends Scene {
     try {
       // 1. 首先检查全局预览缓存
       const { GlobalPreviewCache } = require('./HomeScene');
-      const previewKey = `preview_${this.stage}_${nextLevelId}`;
+      const previewKey = `game_stage${this.stage}_l${nextLevelId}_home`;
       const cached = GlobalPreviewCache.get(previewKey);
       if (cached && cached.img) {
         console.log(`[GameplayScene] 下一关背景图已在全局缓存中`);
@@ -1176,10 +1177,14 @@ class GameplayScene extends Scene {
     const tool = this.activeTool;
     const x = this.toolPosition.x;
     const y = this.toolPosition.y;
-    const baseSize = 120 * s; // 基础大小
-    // 拖动时保持正常大小，只有弹出动画时才有缩放
+    
+    // 获取工具槽大小
+    const slotSize = this.toolSlot ? this.toolSlot.slotSize : 80;
+    
+    // 拖动时是工具槽的1.2倍，静止时是工具槽的1.5倍
+    const dragScale = this.isDraggingTool ? 1.2 : 1.5;
     const animScale = (this.toolAnim.active || this.toolAnim.scale === undefined) ? (this.toolAnim.scale || 1) : 1;
-    const size = baseSize * animScale;
+    const size = slotSize * dragScale * animScale;
     const alpha = this.toolAnim.alpha !== undefined ? this.toolAnim.alpha : 1;
     
     ctx.save();
@@ -1704,6 +1709,9 @@ class GameplayScene extends Scene {
       
       console.log(`[GameplayScene] 擦拭进度: ${dirt.wipeCount}/5, ${dirt.name}`);
       
+      // 轻微震动反馈（仅在 iOS/Android 平台）
+      haptic.light();
+      
       // 播放擦拭音效（如果有）
       // this._playWipeSound();
       
@@ -1903,8 +1911,8 @@ class GameplayScene extends Scene {
     const toolSlotHeight = this.screenHeight * 0.12;
     const toolSlotBottomY = toolSlotTopY + toolSlotHeight;
     
-    // 目标位置：工具槽上方居中（离工具槽更近）
-    const targetY = toolSlotTopY - 40; // 工具槽上方40px
+    // 目标位置：工具槽上方居中（静止时再往上10px）
+    const targetY = toolSlotTopY - 50; // 工具槽上方50px
     
     if (slotPos) {
       // 从槽位位置开始动画

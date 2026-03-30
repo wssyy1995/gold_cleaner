@@ -12,6 +12,7 @@ import { globalEvent } from '../core/EventEmitter';
 import { getGame } from '../../app';
 import { getAllDirtTypes, GlobalDirtImageCache } from '../config/dirtyConfig';
 import { ALL_TOOLS, GlobalToolImageCache } from '../config/ToolConfig';
+import { GlobalPreviewCache } from './HomeScene';
 
 class LoadingScene extends Scene {
   constructor() {
@@ -684,6 +685,9 @@ class LoadingScene extends Scene {
       if (this.percentText) this.percentText.setText('100%');
       if (this.tipText) this.tipText.setText('准备就绪！');
 
+      // 同步缓存的图片到全局缓存，供其他场景使用
+      this._syncToGlobalCache();
+
       // 切换到首页
       this._switchToHome();
     }, remaining);
@@ -709,6 +713,21 @@ class LoadingScene extends Scene {
    */
   getCachedImage(key) {
     return this.cachedImages[key] || null;
+  }
+
+  /**
+   * 同步缓存的图片到全局缓存
+   * 供 HomeScene 和 GameplayScene 使用
+   */
+  _syncToGlobalCache() {
+    // 同步关卡预览图（使用统一的 game_stage1_l1_home 格式）
+    Object.keys(this.cachedImages).forEach(key => {
+      const img = this.cachedImages[key];
+      if (img && key.startsWith('game_stage') && key.endsWith('_home')) {
+        GlobalPreviewCache.save(key, img);
+        console.log(`[LoadingScene] 同步预览图到全局缓存: ${key}`);
+      }
+    });
   }
 
   /**

@@ -18,8 +18,8 @@ const STAGE_1_LEVELS = [
     name: '老年人卧室',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l1_home.png`,
     dirts: [
-      { type: 'paper', x: 300, y: 400 },
-      { type: 'socks', x: 500, y: 600 },
+      { type: 'paper', x: 300, y: 420 },
+      { type: 'socks', x: 500, y: 800 },
       { type: 'stain', x: 500, y: 1100 },
       { type: 'shred_paper', x: 200, y: 1000 },{ type: 'stain', x: 100, y: 1100 }
     ],
@@ -39,8 +39,12 @@ const STAGE_1_LEVELS = [
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l2_home.png`,
     dirts: [
       { type: 'paper', x: 200, y: 350 },
-      { type: 'shred_paper', x: 400, y: 900 },
-      { type: 'shred_paper', x: 600, y: 900 },
+      { type: 'shred_paper', x: 400, y: 1100 },
+      { type: 'shred_paper', x: 600, y: 1200 },
+      { type: 'paper', x: 300, y: 420 },
+      { type: 'socks', x: 500, y: 800 },
+      { type: 'stain', x: 500, y: 1100 },
+      { type: 'shred_paper', x: 200, y: 1000 },{ type: 'stain', x: 100, y: 1100 }
     ],
     timeLimit: 100,
     targetScore: 150,

@@ -69,10 +69,21 @@ class GameplayScene extends Scene {
       alpha: 0              // 当前透明度
     };
     
+    // 活动工具摇晃动画（不倒翁效果，用于垃圾桶接垃圾时）
+    this.toolShakeAnim = {
+      active: false,
+      angle: 0,           // 当前旋转角度
+      velocity: 0,        // 角速度
+      targetToolId: null  // 触发摇晃的工具ID
+    };
+    
     // 动画效果
     this.sparkles = [];
     this.toolShake = 0;
     this.pulseTime = 0;                 // 闪烁动画时间
+    
+    // 清洁完成后的亮晶晶特效
+    this.shineEffects = [];             // 存储亮晶晶特效
     
     // 结算弹窗（新方式：独立弹窗，不依赖 DialogManager）
     this.settlementDialog = null;
@@ -816,6 +827,16 @@ class GameplayScene extends Scene {
       if (p.life <= 0) this.sparkles.splice(i, 1);
     });
     
+    // 更新亮晶晶特效
+    this.shineEffects.forEach((effect, i) => {
+      effect.life -= deltaTime * 0.001;
+      effect.particles.forEach(p => {
+        p.phase += deltaTime * 0.005;
+        p.y -= deltaTime * 0.02; // 轻微上浮
+      });
+      if (effect.life <= 0) this.shineEffects.splice(i, 1);
+    });
+    
     // 震动效果衰减
     if (this.toolShake > 0) {
       this.toolShake -= deltaTime * 0.002;
@@ -832,6 +853,26 @@ class GameplayScene extends Scene {
       // 不拖动时重置翻滚状态
       this.broomFlipTimer = 0;
       this.broomFlipDirection = 1;
+    }
+    
+    // 更新活动工具摇晃动画（不倒翁效果）
+    if (this.toolShakeAnim.active) {
+      // 模拟不倒翁物理：弹簧阻尼系统
+      const springStrength = 0.15;  // 弹簧强度
+      const damping = 0.92;         // 阻尼系数
+      
+      // 恢复力（向中心拉）
+      const restoreForce = -springStrength * this.toolShakeAnim.angle;
+      this.toolShakeAnim.velocity += restoreForce;
+      this.toolShakeAnim.velocity *= damping;
+      this.toolShakeAnim.angle += this.toolShakeAnim.velocity * deltaTime * 0.05;
+      
+      // 当角度和速度都很小时停止动画
+      if (Math.abs(this.toolShakeAnim.angle) < 0.01 && Math.abs(this.toolShakeAnim.velocity) < 0.001) {
+        this.toolShakeAnim.active = false;
+        this.toolShakeAnim.angle = 0;
+        this.toolShakeAnim.velocity = 0;
+      }
     }
     
     // 更新工具弹出动画
@@ -879,6 +920,9 @@ class GameplayScene extends Scene {
     
     // 绘制闪光粒子
     this._renderSparkles(ctx);
+    
+    // 绘制亮晶晶特效（清洁完成后的闪烁效果）
+    this._renderShineEffects(ctx);
     
     // 渲染结算弹窗（在最上层）
     this._renderSettlementDialog(ctx);
@@ -1207,6 +1251,14 @@ class GameplayScene extends Scene {
     ctx.save();
     ctx.globalAlpha = alpha;
     
+    // 应用摇晃动画（不倒翁效果）
+    if (this.toolShakeAnim.active && this.activeTool && this.activeTool.id === this.toolShakeAnim.targetToolId) {
+      // 以工具底部中心为旋转中心（像不倒翁一样）
+      ctx.translate(x, y + size / 2);
+      ctx.rotate(this.toolShakeAnim.angle);
+      ctx.translate(-x, -(y + size / 2));
+    }
+    
     // 拖动时光效消失，静止时显示光效
     if (!this.isDraggingTool) {
       // 绘制淡发光效果（纯白色柔和光晕，更淡）
@@ -1429,6 +1481,86 @@ class GameplayScene extends Scene {
       
       if (p.life <= 0) {
         this.sparkles.splice(i, 1);
+      }
+    }
+  }
+
+  /**
+   * 添加亮晶晶特效（清洁完成后）
+   * @param {number} x - 中心X坐标
+   * @param {number} y - 中心Y坐标
+   * @param {number} s - 屏幕缩放比例
+   */
+  _addShineEffect(x, y, s) {
+    const particles = [];
+    const particleCount = 8 + Math.floor(Math.random() * 4); // 8-12个闪光点
+    
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount + Math.random() * 0.5;
+      const distance = (30 + Math.random() * 40) * s; // 分布范围更大
+      particles.push({
+        x: x + Math.cos(angle) * distance,
+        y: y + Math.sin(angle) * distance,
+        size: (6 + Math.random() * 6) * s, // 星星大小加倍
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.5 + Math.random() * 0.5
+      });
+    }
+    
+    this.shineEffects.push({
+      x,
+      y,
+      particles,
+      life: 1.0, // 持续约1秒
+      maxLife: 1.0
+    });
+  }
+
+  /**
+   * 渲染亮晶晶特效
+   */
+  _renderShineEffects(ctx) {
+    for (const effect of this.shineEffects) {
+      const alpha = effect.life / effect.maxLife;
+      
+      for (const p of effect.particles) {
+        // 闪烁效果
+        const twinkle = 0.5 + 0.5 * Math.sin(p.phase);
+        const currentAlpha = alpha * twinkle;
+        
+        // 绘制四角星形状
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.phase * 0.5);
+        
+        // 外发光
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+        ctx.shadowBlur = p.size * 2;
+        
+        // 绘制星星
+        ctx.fillStyle = `rgba(255, 255, 220, ${currentAlpha})`;
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const angle = (Math.PI * 2 * i) / 4;
+          const r1 = p.size; // 长半径
+          const r2 = p.size * 0.3; // 短半径
+          if (i === 0) {
+            ctx.moveTo(Math.cos(angle) * r1, Math.sin(angle) * r1);
+          } else {
+            ctx.lineTo(Math.cos(angle) * r1, Math.sin(angle) * r1);
+          }
+          ctx.lineTo(Math.cos(angle + Math.PI / 4) * r2, Math.sin(angle + Math.PI / 4) * r2);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        // 中心亮点
+        ctx.fillStyle = `rgba(255, 255, 255, ${currentAlpha})`;
+        ctx.beginPath();
+        ctx.arc(0, 0, p.size * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
       }
     }
   }
@@ -1765,6 +1897,11 @@ class GameplayScene extends Scene {
     dirt.state = 'clean';
     dirt.isHighlighted = false;
     
+    // 添加亮晶晶特效
+    const s = this.screenWidth / 750;
+    const gameAreaY = this.screenHeight * 0.08;
+    this._addShineEffect(dirt.x, dirt.y + gameAreaY, s);
+    
     // 增加清洁度
     this.cleanProgress = Math.min(this.cleanProgress + 10, 100);
     
@@ -1873,6 +2010,11 @@ class GameplayScene extends Scene {
   _completeSweepClean(dirt) {
     dirt.state = 'clean';
     dirt.isHighlighted = false;
+    
+    // 添加亮晶晶特效
+    const s = this.screenWidth / 750;
+    const gameAreaY = this.screenHeight * 0.08;
+    this._addShineEffect(dirt.x, dirt.y + gameAreaY, s);
     
     // 增加清洁度
     this.cleanProgress = Math.min(this.cleanProgress + 10, 100);
@@ -2037,6 +2179,14 @@ class GameplayScene extends Scene {
         dirt.state = 'clean';
         dirt.isFlying = false;
         console.log(`[GameplayScene] ${dirt.name} 已扔进垃圾桶`);
+        
+        // 触发活动工具（垃圾桶）摇晃动画（不倒翁效果）
+        if (this.activeTool && this.activeTool.id === 'rubbish_bin') {
+          this.toolShakeAnim.active = true;
+          this.toolShakeAnim.targetToolId = 'rubbish_bin';
+          this.toolShakeAnim.angle = 0;
+          this.toolShakeAnim.velocity = 0.07; // 初始角速度（更小的幅度）
+        }
       }
     };
     

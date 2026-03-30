@@ -44,6 +44,13 @@ class LoadingScene extends Scene {
     this.homeBgImage = null;
     this.homeBgLoaded = false;
     
+    // 预加载主页底部按钮图片
+    this.bottomButtons = {
+      shop: { fileID: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_bottom_shop.png', img: null, loaded: false },
+      bag: { fileID: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_bottom_bag.png', img: null, loaded: false },
+      setting: { fileID: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_bottom_setting.png', img: null, loaded: false }
+    };
+    
     // 需要加载的资源列表
     this.resourcesToLoad = [];
     this.loadedCount = 0;
@@ -505,9 +512,35 @@ class LoadingScene extends Scene {
       // 同时预加载当前关卡的预览图
       await this._preloadCurrentLevelPreview();
       
+      // 预加载主页底部按钮图片
+      await this._preloadBottomButtons();
+      
     } catch (e) {
       console.log('[LoadingScene] 主页背景预加载失败:', e.message);
       this.homeBgLoaded = false;
+    }
+  }
+  
+  /**
+   * 预加载主页底部按钮图片
+   */
+  async _preloadBottomButtons() {
+    if (typeof wx === 'undefined') return;
+    
+    console.log('[LoadingScene] 开始加载底部按钮图片');
+    
+    for (const [key, config] of Object.entries(this.bottomButtons)) {
+      try {
+        const tempURL = await this.cloudStorage.getTempFileURL(config.fileID);
+        if (tempURL) {
+          const img = await this._downloadImage(tempURL);
+          this.bottomButtons[key].img = img;
+          this.bottomButtons[key].loaded = true;
+          console.log(`[LoadingScene] 底部按钮加载成功: ${key}`);
+        }
+      } catch (e) {
+        console.warn(`[LoadingScene] 底部按钮加载失败: ${key}`, e.message);
+      }
     }
   }
   
@@ -700,10 +733,15 @@ class LoadingScene extends Scene {
     console.log('[LoadingScene] 切换到首页');
 
     setTimeout(() => {
-      // 传递预加载的主页背景图，避免白屏
+      // 传递预加载的主页背景图和底部按钮图片，避免白屏
       globalEvent.emit('scene:switch', 'HomeScene', {
         preloadedBgImage: this.homeBgImage,
-        preloadedBgLoaded: this.homeBgLoaded
+        preloadedBgLoaded: this.homeBgLoaded,
+        bottomButtons: {
+          shop: this.bottomButtons.shop.img,
+          bag: this.bottomButtons.bag.img,
+          setting: this.bottomButtons.setting.img
+        }
       });
     }, 500);
   }

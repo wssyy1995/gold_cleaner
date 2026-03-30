@@ -11,6 +11,23 @@ import CloudStorage from '../cloud/CloudStorage';
 import { getGame } from '../../app';
 import { getLevel } from '../config/LevelConfig';
 
+// 全局底部按钮图片缓存 - 避免场景切换时重新加载
+const GlobalBottomBtnCache = {
+  _cache: {},
+  
+  save(key, img) {
+    this._cache[key] = { img, loaded: !!img };
+  },
+  
+  get(key) {
+    return this._cache[key] || null;
+  },
+  
+  clear() {
+    this._cache = {};
+  }
+};
+
 // 全局背景图缓存 - 避免场景切换时重新加载
 const GlobalBgCache = {
   bgImage: null,
@@ -141,6 +158,13 @@ class HomeScene extends Scene {
     // 标题图片（初始化为未加载状态）
     this._bg_game_titleImage = null;
     this._bg_game_titleLoaded = false;
+    
+    // 底部按钮图片
+    this.bottomButtonImages = {
+      shop: null,
+      bag: null,
+      setting: null
+    };
     this._bg_stage1_tagImage = null;
     this._bg_stage1_tagLoaded = false;
     
@@ -183,6 +207,18 @@ class HomeScene extends Scene {
       console.log('[HomeScene] 使用预加载的背景图并缓存');
     }
     
+    // 3. 使用预加载的底部按钮图片并缓存
+    if (data.bottomButtons) {
+      this.bottomButtonImages.shop = data.bottomButtons.shop;
+      this.bottomButtonImages.bag = data.bottomButtons.bag;
+      this.bottomButtonImages.setting = data.bottomButtons.setting;
+      // 保存到全局缓存
+      GlobalBottomBtnCache.save('shop', data.bottomButtons.shop);
+      GlobalBottomBtnCache.save('bag', data.bottomButtons.bag);
+      GlobalBottomBtnCache.save('setting', data.bottomButtons.setting);
+      console.log('[HomeScene] 使用预加载的底部按钮图片并缓存');
+    }
+    
     // 初始化云存储
     await this.cloudStorage.init();
     
@@ -223,6 +259,9 @@ class HomeScene extends Scene {
     
     // 恢复标题和标签图
     this._restoreTitleImagesFromCache();
+    
+    // 恢复底部按钮图片
+    this._restoreBottomButtonsFromCache();
   }
   
   /**
@@ -243,6 +282,29 @@ class HomeScene extends Scene {
       this._bg_stage1_tagImage = tagCached.img;
       this._bg_stage1_tagLoaded = true;
       console.log('[HomeScene] 阶段标签从全局缓存恢复');
+    }
+  }
+  
+  /**
+   * 从全局缓存恢复底部按钮图片
+   */
+  _restoreBottomButtonsFromCache() {
+    const shopCached = GlobalBottomBtnCache.get('shop');
+    if (shopCached && shopCached.img) {
+      this.bottomButtonImages.shop = shopCached.img;
+      console.log('[HomeScene] 商店按钮从全局缓存恢复');
+    }
+    
+    const bagCached = GlobalBottomBtnCache.get('bag');
+    if (bagCached && bagCached.img) {
+      this.bottomButtonImages.bag = bagCached.img;
+      console.log('[HomeScene] 工具包按钮从全局缓存恢复');
+    }
+    
+    const settingCached = GlobalBottomBtnCache.get('setting');
+    if (settingCached && settingCached.img) {
+      this.bottomButtonImages.setting = settingCached.img;
+      console.log('[HomeScene] 设置按钮从全局缓存恢复');
     }
   }
   
@@ -612,24 +674,228 @@ class HomeScene extends Scene {
     this.iconSize = 80 * s;
     this.iconHitArea = 100 * s;
 
-    const btnW = 120 * s, btnH = 80 * s;
-    const btnY = this.screenHeight - 150 * s;
+    // 底部图片按钮配置（变大并向下移动）
+    const btnY = this.screenHeight - 137 * s;  // 再往下 3px
+    const btnWidth = 180 * s;  // 变大：160 -> 180
+    const btnHeight = 110 * s; // 变大：100 -> 110
     
-    this.shopBtn = new Button({ 
-      x: 50 * s, y: btnY, width: btnW, height: btnH, 
-      text: '商店', fontSize: 24 * s, bgColor: '#FF9500', borderRadius: 8 * s,
-      onClick: () => globalEvent.emit('scene:switch', 'ShopScene')
+    // 均匀分布三个按钮在屏幕宽度上（增大间距）
+    // 使用 5 等分，按钮中心位于 1/5, 2.5/5, 4/5 位置，间距更大
+    const screenW = this.screenWidth;
+    const margin = 30 * s;  // 增大边距
+    const availableWidth = screenW - 2 * margin;
+    
+    // 中间按钮稍微加大
+    const midWidth = btnWidth * 1.1;
+    const midHeight = btnHeight * 1.1;
+    
+    this.bottomButtons = [
+      {
+        id: 'shop',
+        x: margin + availableWidth * 0.15 - btnWidth / 2,  // 15% 位置
+        y: btnY,
+        width: btnWidth,
+        height: btnHeight,
+        imgKey: 'shop',
+        onClick: () => globalEvent.emit('scene:switch', 'ShopScene')
+      },
+      {
+        id: 'tool',
+        x: margin + availableWidth * 0.5 - midWidth / 2,   // 50% 位置（中间，加大）
+        y: btnY - (midHeight - btnHeight) / 2,  // 垂直居中
+        width: midWidth,
+        height: midHeight,
+        imgKey: 'bag',
+        onClick: () => globalEvent.emit('scene:switch', 'ToolScene')
+      },
+      {
+        id: 'setting',
+        x: margin + availableWidth * 0.85 - btnWidth / 2,  // 85% 位置
+        y: btnY,
+        width: btnWidth,
+        height: btnHeight,
+        imgKey: 'setting',
+        onClick: () => globalEvent.emit('scene:switch', 'SettingScene')
+      }
+    ];
+    
+    // 兼容旧代码的点击检测
+    this.shopBtn = { 
+      onTouchStart: (x, y) => this._checkBottomButtonClick('shop', x, y),
+      onTouchEnd: (x, y) => this._checkBottomButtonClick('shop', x, y),
+      update: () => {},
+      onRender: () => {}
+    };
+    this.toolBtn = { 
+      onTouchStart: (x, y) => this._checkBottomButtonClick('tool', x, y),
+      onTouchEnd: (x, y) => this._checkBottomButtonClick('tool', x, y),
+      update: () => {},
+      onRender: () => {}
+    };
+    this.settingBtn = { 
+      onTouchStart: (x, y) => this._checkBottomButtonClick('setting', x, y),
+      onTouchEnd: (x, y) => this._checkBottomButtonClick('setting', x, y),
+      update: () => {},
+      onRender: () => {}
+    };
+  }
+  
+  /**
+   * 检测底部按钮点击
+   */
+  _checkBottomButtonClick(id, x, y) {
+    const btn = this.bottomButtons.find(b => b.id === id);
+    if (!btn) return false;
+    
+    // 矩形区域检测
+    if (x >= btn.x && x <= btn.x + btn.width &&
+        y >= btn.y && y <= btn.y + btn.height) {
+      btn.onClick();
+      return true;
+    }
+    return false;
+  }
+  
+  /**
+   * 绘制底部图片按钮
+   */
+  _drawBottomButtons(ctx) {
+    this.bottomButtons.forEach(btn => {
+      const img = this.bottomButtonImages[btn.imgKey];
+      if (img) {
+        // 保持图片比例，适应按钮区域
+        const scale = Math.min(btn.width / img.width, btn.height / img.height);
+        const drawWidth = img.width * scale;
+        const drawHeight = img.height * scale;
+        const drawX = btn.x + (btn.width - drawWidth) / 2;
+        const drawY = btn.y + (btn.height - drawHeight) / 2;
+        
+        ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+      }
     });
-    this.toolBtn = new Button({ 
-      x: 200 * s, y: btnY, width: btnW, height: btnH, 
-      text: '工具包', fontSize: 24 * s, bgColor: '#4CAF50', borderRadius: 8 * s,
-      onClick: () => globalEvent.emit('scene:switch', 'ToolScene')
+  }
+  
+  /**
+   * 绘制立体云朵（三层效果）
+   * @param {Array} circles - 圆的配置数组 [{x, y, r}, ...]
+   * @param {string} color - 主颜色
+   */
+  _drawStyledCloud(ctx, circles, color) {
+    // 计算加深色（中间层）
+    const darkenColor = this._darkenColor(color, 20);
+    
+    // 第1层：最外层白色 3px 描边
+    ctx.fillStyle = '#FFFFFF';
+    circles.forEach(c => {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, c.r + 6, 0, Math.PI * 2);
+      ctx.fill();
     });
-    this.settingBtn = new Button({ 
-      x: 350 * s, y: btnY, width: btnW, height: btnH, 
-      text: '设置', fontSize: 24 * s, bgColor: '#9C27B0', borderRadius: 8 * s,
-      onClick: () => globalEvent.emit('scene:switch', 'SettingScene')
+    
+    // 第2层：加深色 3px 中间层
+    ctx.fillStyle = darkenColor;
+    circles.forEach(c => {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, c.r + 3, 0, Math.PI * 2);
+      ctx.fill();
     });
+    
+    // 第3层：主颜色 + 渐变（不使用透明度）
+    circles.forEach(c => {
+      // 创建径向渐变（从左上到右下）模拟光照
+      const grad = ctx.createRadialGradient(
+        c.x - c.r * 0.3, c.y - c.r * 0.3, 0,  // 高光中心（左上）
+        c.x, c.y, c.r  // 渐变范围
+      );
+      // 不使用透明度，直接使用颜色
+      grad.addColorStop(0, this._lightenColor(color, 40));
+      grad.addColorStop(0.5, color);
+      grad.addColorStop(1, this._darkenColor(color, 15));
+      
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+  
+  /**
+   * Hex颜色转RGBA
+   */
+  _hexToRgba(color, alpha) {
+    const num = parseInt(color.replace('#', ''), 16);
+    const R = num >> 16;
+    const G = num >> 8 & 0x00FF;
+    const B = num & 0x0000FF;
+    return `rgba(${R}, ${G}, ${B}, ${alpha})`;
+  }
+  
+  /**
+   * 加深颜色
+   */
+  _darkenColor(color, percent) {
+    const num = parseInt(color.replace('#', ''), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = Math.max((num >> 16) - amt, 0);
+    const G = Math.max((num >> 8 & 0x00FF) - amt, 0);
+    const B = Math.max((num & 0x0000FF) - amt, 0);
+    return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
+  }
+  
+  /**
+   * 提亮颜色
+   */
+  _lightenColor(color, percent) {
+    const num = parseInt(color.replace('#', ''), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = Math.min((num >> 16) + amt, 255);
+    const G = Math.min((num >> 8 & 0x00FF) + amt, 255);
+    const B = Math.min((num & 0x0000FF) + amt, 255);
+    return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
+  }
+  
+  /**
+   * 云朵形状 1：标准云朵
+   */
+  _drawCloudShape1(ctx, cx, cy, r, color) {
+    const circles = [
+      { x: cx, y: cy + r * 0.1, r: r * 1.1 },           // 主体大圆
+      { x: cx - r * 0.9, y: cy + r * 0.2, r: r * 0.7 }, // 左侧圆
+      { x: cx + r * 0.9, y: cy + r * 0.2, r: r * 0.7 }, // 右侧圆
+      { x: cx - r * 0.3, y: cy - r * 0.5, r: r * 0.6 }, // 顶部左小圆
+      { x: cx + r * 0.3, y: cy - r * 0.5, r: r * 0.55 } // 顶部右小圆
+    ];
+    this._drawStyledCloud(ctx, circles, color);
+  }
+  
+  /**
+   * 云朵形状 2：椭圆云朵（横向拉伸）
+   */
+  _drawCloudShape2(ctx, cx, cy, r, color) {
+    const circles = [
+      { x: cx, y: cy, r: r * 1.3 },                      // 中央椭圆主体（用圆代替）
+      { x: cx - r * 1.0, y: cy - r * 0.2, r: r * 0.65 }, // 左上圆
+      { x: cx + r * 1.0, y: cy - r * 0.2, r: r * 0.65 }, // 右上圆
+      { x: cx, y: cy - r * 0.7, r: r * 0.5 }             // 顶部凸起
+    ];
+    this._drawStyledCloud(ctx, circles, color);
+  }
+  
+  /**
+   * 云朵形状 3：蓬松云朵（更多小圆）
+   */
+  _drawCloudShape3(ctx, cx, cy, r, color) {
+    const circles = [
+      { x: cx, y: cy, r: r * 0.9 },                       // 中心圆
+      { x: cx - r * 0.7, y: cy + r * 0.1, r: r * 0.6 },  // 左侧圆1
+      { x: cx - r * 1.1, y: cy - r * 0.2, r: r * 0.5 },  // 左侧圆2
+      { x: cx + r * 0.7, y: cy + r * 0.1, r: r * 0.6 },  // 右侧圆1
+      { x: cx + r * 1.1, y: cy - r * 0.2, r: r * 0.5 },  // 右侧圆2
+      { x: cx - r * 0.4, y: cy - r * 0.6, r: r * 0.45 }, // 顶部左小圆
+      { x: cx + r * 0.4, y: cy - r * 0.6, r: r * 0.45 }, // 顶部右小圆
+      { x: cx, y: cy - r * 0.8, r: r * 0.4 }             // 顶部中心小圆
+    ];
+    this._drawStyledCloud(ctx, circles, color);
   }
 
   /**
@@ -1047,9 +1313,8 @@ class HomeScene extends Scene {
     // 再绘制游戏标题和阶段标签（确保在关卡图标之上）
     this._drawTitleImages(ctx);
 
-    if (this.shopBtn) this.shopBtn.onRender(ctx);
-    if (this.toolBtn) this.toolBtn.onRender(ctx);
-    if (this.settingBtn) this.settingBtn.onRender(ctx);
+    // 绘制底部图片按钮
+    this._drawBottomButtons(ctx);
   }
 
   _drawBackgroundCover(ctx, img, sw, sh) {

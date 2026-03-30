@@ -1372,9 +1372,11 @@ class GameplayScene extends Scene {
     // 应用摇晃动画（不倒翁效果）
     if (this.toolShakeAnim.active && this.activeTool && this.activeTool.id === this.toolShakeAnim.targetToolId) {
       // 以工具底部中心为旋转中心（像不倒翁一样）
-      ctx.translate(x, y + size / 2);
+      // 拖动时工具底部在指尖位置(y)，静止时工具底部在 y + size/2
+      const pivotY = this.isDraggingTool ? y : y + size / 2;
+      ctx.translate(x, pivotY);
       ctx.rotate(this.toolShakeAnim.angle);
-      ctx.translate(-x, -(y + size / 2));
+      ctx.translate(-x, -pivotY);
     }
     
     // 拖动时光效消失，静止时显示光效
@@ -1417,7 +1419,8 @@ class GameplayScene extends Scene {
       const drawWidth = toolImage.width * scale;
       const drawHeight = toolImage.height * scale;
       const drawX = x - drawWidth / 2;
-      const drawY = y - drawHeight / 2;
+      // 拖动时工具底部对齐指尖，静止时居中
+      const drawY = this.isDraggingTool ? y - drawHeight : y - drawHeight / 2;
       
       // broom 工具拖动时添加翻滚效果（左右镜像）
       if (tool.id === 'broom' && this.isDraggingTool) {
@@ -1443,19 +1446,21 @@ class GameplayScene extends Scene {
       // 绘制工具图标阴影（增加立体感）
       ctx.font = `bold ${Math.floor(size)}px sans-serif`;
       ctx.textAlign = 'center';
+      // 拖动时底部对齐指尖，静止时居中
+      const textY = this.isDraggingTool ? y - size / 2 : y;
       ctx.textBaseline = 'middle';
       
       // 阴影
       ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
-      ctx.fillText(tool.icon, x + 2, y + 2);
+      ctx.fillText(tool.icon, x + 2, textY + 2);
       
       // 主图标
       ctx.fillStyle = tool.color;
-      ctx.fillText(tool.icon, x, y);
+      ctx.fillText(tool.icon, x, textY);
       
       // 高光
       ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.fillText(tool.icon, x - 1, y - 1);
+      ctx.fillText(tool.icon, x - 1, textY - 1);
     }
     
     ctx.restore();

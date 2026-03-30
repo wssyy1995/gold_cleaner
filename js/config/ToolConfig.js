@@ -16,12 +16,12 @@ export const BASE_TOOLS = [
     unlockLevel: 1
   },
   {
-    id: 'sponge',
-    name: '海绵',
-    icon: '🧼',
-    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_sponge.png',
+    id: 'broom',
+    name: '扫帚',
+    icon: '🧹',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_broom.png',
     color: '#66BB6A',
-    description: '吸水性好，适合清理污渍',
+    description: '可以清理稀碎的固体垃圾，碎纸屑',
     efficiency: 1.2,
     type: 'base',
     unlockLevel: 1

@@ -21,6 +21,15 @@ export const DIRT_TYPES = {
     operate_type: 'throw',
     scale: 1
   },
+  shred_paper:{
+    name: '碎纸屑',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_shred_paper.png',
+    color: '#8B4513', 
+    difficulty: 1,
+    recipes: [['broom']],
+    operate_type: 'sweep',
+    scale: 4
+  },
   socks:{
     name: '脏袜子', 
     imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_socks.png',
@@ -28,7 +37,7 @@ export const DIRT_TYPES = {
     difficulty: 1,
     recipes: [['rubbish_bin']],
     operate_type: 'throw',
-    scale: 1
+    scale: 1.5
   },
   stain: { 
     name: '水渍污渍', 
@@ -59,6 +68,14 @@ export const DIRT_TYPES = {
     difficulty: 5,
     recipes: [['rust_remover', 'brush'], ['spray', 'sponge']],
     scale: 1
+  },
+  leaves: {
+    name: '落叶',
+    color: '#D84315',
+    difficulty: 2,
+    recipes: [['broom']],
+    operate_type: 'sweep',
+    scale: 1.2
   }
 };
 

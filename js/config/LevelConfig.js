@@ -21,7 +21,7 @@ const STAGE_1_LEVELS = [
       { type: 'paper', x: 300, y: 400 },
       { type: 'socks', x: 500, y: 600 },
       { type: 'stain', x: 500, y: 1100 },
-      { type: 'stain', x: 200, y: 1100 },{ type: 'stain', x: 100, y: 1100 }
+      { type: 'shred_paper', x: 200, y: 1000 },{ type: 'stain', x: 100, y: 1100 }
     ],
     dirts_deep: [
       { image:'images/game/stage1_level1_bookshelf.png',type: 'stain', x: 300, y: 400 },
@@ -39,8 +39,8 @@ const STAGE_1_LEVELS = [
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l2_home.png`,
     dirts: [
       { type: 'paper', x: 200, y: 350 },
-      { type: 'socks', x: 400, y: 500 },
-      { type: 'paper', x: 600, y: 400 },
+      { type: 'shred_paper', x: 400, y: 900 },
+      { type: 'shred_paper', x: 600, y: 900 },
     ],
     timeLimit: 100,
     targetScore: 150,
@@ -193,11 +193,11 @@ const STAGE_2_LEVELS = [
     name: '公寓管理员',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage2_l10_home.png`,
     dirts: [
-      { type: 'mold', x: 300, y: 400, size: 2 },
-      { type: 'mold', x: 500, y: 500, size: 2 },
-      { type: 'grime', x: 200, y: 600 },
-      { type: 'grime', x: 600, y: 350 },
-      { type: 'stain', x: 400, y: 700 },
+      { type: 'shred_paper', x: 300, y: 400, size: 2 },
+      { type: 'shred_paper', x: 500, y: 500, size: 2 },
+      { type: 'shred_paper', x: 200, y: 600 },
+      { type: 'shred_paper', x: 600, y: 350 },
+      { type: 'shred_paper', x: 400, y: 700 },
     ],
     timeLimit: 120,
     targetScore: 1200,

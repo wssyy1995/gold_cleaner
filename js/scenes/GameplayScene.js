@@ -53,6 +53,11 @@ class GameplayScene extends Scene {
     this.totalWipeAngle = 0;            // 总涂抹角度
     this.clockwiseWipes = 0;            // 顺时针涂抹圈数
     
+    // broom 工具状态
+    this.broomInDirt = false;           // broom 工具是否在污垢区域内
+    this.broomFlipTimer = 0;            // broom 翻滚动画计时器
+    this.broomFlipDirection = 1;        // 翻滚方向 1或-1
+    
     // 工具弹出动画状态
     this.toolAnim = {
       active: false,        // 是否正在动画
@@ -817,6 +822,18 @@ class GameplayScene extends Scene {
       if (this.toolShake < 0) this.toolShake = 0;
     }
     
+    // 更新 broom 翻滚动画（500ms 一个周期，持续左右镜像翻滚）
+    if (this.isDraggingTool && this.activeTool && this.activeTool.id === 'broom') {
+      this.broomFlipTimer += deltaTime;
+      // 500ms 一个完整周期
+      const cycle = 500;
+      this.broomFlipDirection = Math.sin((this.broomFlipTimer / cycle) * Math.PI * 2) > 0 ? 1 : -1;
+    } else {
+      // 不拖动时重置翻滚状态
+      this.broomFlipTimer = 0;
+      this.broomFlipDirection = 1;
+    }
+    
     // 更新工具弹出动画
     if (this.toolAnim.active) {
       this.toolAnim.progress += deltaTime * 0.003; // 动画速度
@@ -1034,9 +1051,9 @@ class GameplayScene extends Scene {
       const x = cx - drawWidth / 2;
       const y = cy - drawHeight / 2;
       
-      // 根据擦拭进度裁切显示图片（从下往上消失）
-      const wipeProgress = dirt.wipeProgress || 0;
-      const remainingRatio = 1 - wipeProgress; // 剩余显示比例
+      // 根据擦拭/清扫进度裁切显示图片（从下往上消失）
+      const progress = dirt.wipeProgress || dirt.sweepProgress || 0;
+      const remainingRatio = 1 - progress; // 剩余显示比例
       
       if (remainingRatio > 0) {
         // 计算裁切区域（从下往上消失）
@@ -1065,8 +1082,8 @@ class GameplayScene extends Scene {
       
       ctx.restore();
       
-      // 显示擦拭进度提示
-      if (wipeProgress > 0 && wipeProgress < 1) {
+      // 显示擦拭/清扫进度提示
+      if (progress > 0 && progress < 1) {
         ctx.save();
         ctx.fillStyle = '#FFFFFF';
         ctx.font = `bold ${14 * s}px Arial`;
@@ -1074,7 +1091,7 @@ class GameplayScene extends Scene {
         ctx.textBaseline = 'middle';
         ctx.shadowColor = 'rgba(0,0,0,0.5)';
         ctx.shadowBlur = 4;
-        ctx.fillText(`${Math.floor(wipeProgress * 5)}/5`, cx, cy);
+        ctx.fillText(`${Math.floor(progress * 5)}/5`, cx, cy + radius + 20 * s);
         ctx.restore();
       }
   }
@@ -1122,9 +1139,9 @@ class GameplayScene extends Scene {
     // 应用 scale 配置
     const scaledRadius = radius * scale;
     
-    // 根据擦拭进度计算显示比例（从下往上消失）
-    const wipeProgress = dirt.wipeProgress || 0;
-    const remainingRatio = 1 - wipeProgress;
+    // 根据擦拭/清扫进度计算显示比例（从下往上消失）
+    const progress = dirt.wipeProgress || dirt.sweepProgress || 0;
+    const remainingRatio = 1 - progress;
     
     if (remainingRatio <= 0) return; // 完全擦除后不显示
     
@@ -1155,8 +1172,8 @@ class GameplayScene extends Scene {
     
     ctx.restore();
     
-    // 显示擦拭进度
-    if (wipeProgress > 0 && wipeProgress < 1) {
+    // 显示擦拭/清扫进度
+    if (progress > 0 && progress < 1) {
       ctx.save();
       ctx.fillStyle = '#FFFFFF';
       ctx.font = `bold ${14 * s}px Arial`;
@@ -1164,7 +1181,7 @@ class GameplayScene extends Scene {
       ctx.textBaseline = 'middle';
       ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.shadowBlur = 4;
-      ctx.fillText(`${Math.floor(wipeProgress * 5)}/5`, cx, cy);
+      ctx.fillText(`${Math.floor(progress * 5)}/5`, cx, cy + radius + 20 * s);
       ctx.restore();
     }
   }
@@ -1232,11 +1249,25 @@ class GameplayScene extends Scene {
       const drawX = x - drawWidth / 2;
       const drawY = y - drawHeight / 2;
       
-      // 绘制阴影
-      ctx.drawImage(toolImage, drawX + 2, drawY + 2, drawWidth, drawHeight);
-      
-      // 绘制主图
-      ctx.drawImage(toolImage, drawX, drawY, drawWidth, drawHeight);
+      // broom 工具拖动时添加翻滚效果（左右镜像）
+      if (tool.id === 'broom' && this.isDraggingTool) {
+        ctx.save();
+        // 根据翻滚方向进行水平翻转
+        if (this.broomFlipDirection < 0) {
+          ctx.translate(x * 2, 0);
+          ctx.scale(-1, 1);
+        }
+        // 绘制阴影
+        ctx.drawImage(toolImage, drawX + 2, drawY + 2, drawWidth, drawHeight);
+        // 绘制主图
+        ctx.drawImage(toolImage, drawX, drawY, drawWidth, drawHeight);
+        ctx.restore();
+      } else {
+        // 绘制阴影
+        ctx.drawImage(toolImage, drawX + 2, drawY + 2, drawWidth, drawHeight);
+        // 绘制主图
+        ctx.drawImage(toolImage, drawX, drawY, drawWidth, drawHeight);
+      }
     } else {
       // 没有图片时使用 emoji 图标
       // 绘制工具图标阴影（增加立体感）
@@ -1520,6 +1551,10 @@ class GameplayScene extends Scene {
       // cloth 工具特殊处理：拖动时检测附近 wipe 类型污垢并高亮
       if (this.activeTool.id === 'cloth') {
         this._updateClothDrag(x, clampedY);
+      }
+      // broom 工具特殊处理：拖动时检测附近 sweep 类型污垢
+      else if (this.activeTool.id === 'broom') {
+        this._updateBroomDrag(x, clampedY);
       } else {
         // 其他工具原有逻辑
         const nearbyDirt = this._findNearbyDirt(x, y);
@@ -1569,6 +1604,7 @@ class GameplayScene extends Scene {
     if (this.isDraggingTool) {
       this.isDraggingTool = false;
       this.clothInDirt = false; // 重置 cloth 进入污垢状态
+      this.broomInDirt = false; // 重置 broom 进入污垢状态
       
       // 重置所有污垢的高亮状态
       this.dirtObjects.forEach(dirt => {
@@ -1744,6 +1780,115 @@ class GameplayScene extends Scene {
   }
 
   /**
+   * broom 工具拖动时的特殊处理
+   * 检测附近的 sweep 类型污垢，处理清扫进度
+   */
+  _updateBroomDrag(x, y) {
+    const gameAreaY = this.screenHeight * 0.08;
+    const gameY = y - gameAreaY;
+    
+    // 先重置所有污垢的高亮状态
+    this.dirtObjects.forEach(dirt => {
+      if (dirt.state !== 'clean') {
+        dirt.isHighlighted = false;
+        dirt.highlightScale = 1;
+      }
+    });
+    
+    // 查找附近的 sweep 类型污垢（40px 范围）
+    let nearbyDirt = null;
+    for (let i = this.dirtObjects.length - 1; i >= 0; i--) {
+      const dirt = this.dirtObjects[i];
+      if (dirt.state === 'clean') continue;
+      
+      // 检查是否是 sweep 类型
+      const dirtType = DIRT_TYPES[dirt.type];
+      if (!dirtType || dirtType.operate_type !== 'sweep') continue;
+      
+      const dx = x - dirt.x;
+      const dy = gameY - dirt.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // 40px 范围内可清扫
+      if (distance <= dirt.size / 2 + 40) {
+        nearbyDirt = dirt;
+        break;
+      }
+    }
+    
+    if (nearbyDirt) {
+      // 高亮效果（20px 范围内显示白光）
+      const dx = x - nearbyDirt.x;
+      const dy = gameY - nearbyDirt.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance <= nearbyDirt.size / 2 + 20) {
+        nearbyDirt.isHighlighted = true;
+        nearbyDirt.highlightScale = 1;
+      }
+      
+      // 处理清扫进度
+      this._updateSweepProgress(nearbyDirt);
+      this.selectedDirt = nearbyDirt;
+    } else {
+      // 离开所有污垢，重置清扫状态
+      this.broomInDirt = false;
+      this.selectedDirt = null;
+    }
+  }
+
+  /**
+   * 更新清扫进度
+   * 工具经过污垢5次后完成清洁，每次经过裁切1/5
+   */
+  _updateSweepProgress(dirt) {
+    // 初始化清扫进度
+    if (dirt.sweepProgress === undefined) {
+      dirt.sweepProgress = 0; // 0-5，5次完成
+      dirt.sweepCount = 0;    // 经过次数
+    }
+    
+    // 检测工具是否刚进入或离开污垢区域
+    if (!this.broomInDirt) {
+      // 工具刚进入污垢区域
+      this.broomInDirt = true;
+      dirt.sweepCount++;
+      dirt.sweepProgress = Math.min(dirt.sweepCount / 5, 1); // 5次完成
+      
+      console.log(`[GameplayScene] 清扫进度: ${dirt.sweepCount}/5, ${dirt.name}`);
+      
+      // 轻微震动反馈（仅在 iOS/Android 平台）
+      haptic.light();
+      
+      // 5次后完成清洁
+      if (dirt.sweepCount >= 5) {
+        this._completeSweepClean(dirt);
+      }
+    }
+  }
+
+  /**
+   * 完成清扫清洁
+   */
+  _completeSweepClean(dirt) {
+    dirt.state = 'clean';
+    dirt.isHighlighted = false;
+    
+    // 增加清洁度
+    this.cleanProgress = Math.min(this.cleanProgress + 10, 100);
+    
+    // 更新顶部进度条
+    if (this.topBar) {
+      this.topBar.updateData({ progress: this.cleanProgress });
+    }
+    
+    console.log(`[GameplayScene] ${dirt.name} 清扫完成，清洁度 +10`);
+    
+    // 检查是否全部完成
+    this._checkAllCleaned();
+  }
+
+  /**
    * 检查是否全部清洁完成
    */
   _checkAllCleaned() {
@@ -1779,7 +1924,13 @@ class GameplayScene extends Scene {
       return;
     }
     
-    // 其他类型（wipe 等）：原有的选中逻辑
+    // sweep 类型（如 leaves）：不执行选中效果，通过 broom 工具拖动交互
+    if (dirtType.operate_type === 'sweep') {
+      // 不选中，无反应
+      return;
+    }
+    
+    // 其他类型：原有的选中逻辑
     // 取消之前的选中
     this.dirtObjects.forEach(d => {
       d.selected = false;

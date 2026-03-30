@@ -11,6 +11,7 @@ import { getAllPreloadImages, getLevelImageKey } from '../cloud/CloudResourceCon
 import { globalEvent } from '../core/EventEmitter';
 import { getGame } from '../../app';
 import { getAllDirtTypes, GlobalDirtImageCache } from '../config/dirtyConfig';
+import { ALL_TOOLS, GlobalToolImageCache } from '../config/ToolConfig';
 
 class LoadingScene extends Scene {
   constructor() {
@@ -216,6 +217,93 @@ class LoadingScene extends Scene {
     }
   }
 
+  /**
+   * 加载工具图片资源
+   * 直接从 ToolConfig.js 中的 imgPath 加载
+   */
+  async _loadToolImages() {
+    // 收集所有配置了 imgPath 的工具
+    const toolImagesToLoad = [];
+    ALL_TOOLS.forEach(tool => {
+      if (tool.imgPath) {
+        toolImagesToLoad.push({
+          toolId: tool.id,
+          imgPath: tool.imgPath
+        });
+      }
+    });
+    
+    if (toolImagesToLoad.length === 0) {
+      console.log('[LoadingScene] 没有需要加载的工具图片');
+      return;
+    }
+    
+    console.log(`[LoadingScene] 开始加载 ${toolImagesToLoad.length} 个工具图片`);
+    
+    // 加载每个工具图片
+    for (const tool of toolImagesToLoad) {
+      try {
+        await this._loadToolImage(tool.toolId, tool.imgPath);
+      } catch (e) {
+        console.error(`[LoadingScene] 工具图片加载失败: ${tool.toolId}`, e.message);
+      }
+    }
+  }
+
+  /**
+   * 加载单个工具图片
+   * @param {string} toolId - 工具ID
+   * @param {string} imgPath - 云存储路径或本地路径
+   */
+  async _loadToolImage(toolId, imgPath) {
+    // 判断是否是云存储路径
+    if (imgPath.startsWith('cloud://')) {
+      // 云存储路径：获取临时URL并加载
+      await this._loadToolImageFromCloud(toolId, imgPath);
+    } else {
+      // 本地路径：直接加载
+      await this._loadToolImageFromLocal(toolId, imgPath);
+    }
+  }
+
+  /**
+   * 从云存储加载工具图片
+   * @param {string} toolId - 工具ID
+   * @param {string} fileID - 完整的云存储 fileID
+   */
+  async _loadToolImageFromCloud(toolId, fileID) {
+    try {
+      const tempURL = await this.cloudStorage.getTempFileURL(fileID);
+      
+      if (!tempURL) {
+        throw new Error('获取临时URL失败');
+      }
+      
+      const img = await this._downloadImage(tempURL);
+      GlobalToolImageCache.set(toolId, img);
+      
+      console.log(`[LoadingScene] 工具图片从云存储加载: ${toolId}`);
+    } catch (error) {
+      console.error(`[LoadingScene] 工具图片加载失败 ${toolId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 从本地加载工具图片
+   * @param {string} toolId - 工具ID
+   * @param {string} imagePath - 本地图片路径
+   */
+  async _loadToolImageFromLocal(toolId, imagePath) {
+    try {
+      const img = await this._downloadLocalImage(imagePath);
+      GlobalToolImageCache.set(toolId, img);
+      console.log(`[LoadingScene] 工具图片从本地加载: ${toolId}`);
+    } catch (e) {
+      throw new Error(`本地加载失败: ${e.message}`);
+    }
+  }
+
   _initUI() {
     const centerX = this.screenWidth / 2;
     const s = this.screenWidth / 750;
@@ -362,6 +450,10 @@ class LoadingScene extends Scene {
     // 加载污垢图片
     this.loadingText = '准备污垢资源...';
     await this._loadDirtImages();
+    
+    // 加载工具图片
+    this.loadingText = '准备清洁工具...';
+    await this._loadToolImages();
     
     // 云存储资源加载完成后，预加载主页背景图（避免切换白屏）
     this.loadingText = '准备主页...';

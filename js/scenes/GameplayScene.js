@@ -9,7 +9,7 @@ import ProgressBar from '../ui/components/ProgressBar';
 import TopBar from '../ui/components/TopBar';
 import ToolSlot from '../ui/components/ToolSlot';
 import GameConfig from '../config/GameConfig';
-import { BASE_TOOLS, PREMIUM_TOOLS, getTool } from '../config/ToolConfig';
+import { BASE_TOOLS, PREMIUM_TOOLS, getTool, GlobalToolImageCache } from '../config/ToolConfig';
 import { getLevel } from '../config/LevelConfig';
 import { DIRT_TYPES, GlobalDirtImageCache } from '../config/dirtyConfig';
 import { GlobalPreviewCache } from './HomeScene';
@@ -790,6 +790,9 @@ class GameplayScene extends Scene {
     if (this.winBtn) this.winBtn.update(deltaTime);
     if (this.exitZoomBtn) this.exitZoomBtn.update(deltaTime);
     
+    // 更新工具槽（滑动惯性）
+    if (this.toolSlot) this.toolSlot.update(deltaTime);
+    
     // 更新清洁度
     if (this.dirtObjects && this.dirtObjects.length > 0) {
       const cleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
@@ -1167,6 +1170,7 @@ class GameplayScene extends Scene {
 
   /**
    * 绘制活动工具（带淡发光效果，无背景圆圈）
+   * 优先使用真实图片，如果没有则使用 emoji
    */
   _renderActiveTool(ctx, s) {
     const tool = this.activeTool;
@@ -1208,22 +1212,45 @@ class GameplayScene extends Scene {
       ctx.fill();
     }
     
-    // 绘制工具图标阴影（增加立体感）
-    ctx.font = `bold ${Math.floor(size)}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // 阴影
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
-    ctx.fillText(tool.icon, x + 2, y + 2);
-    
-    // 主图标
-    ctx.fillStyle = tool.color;
-    ctx.fillText(tool.icon, x, y);
-    
-    // 高光
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.fillText(tool.icon, x - 1, y - 1);
+    // 优先使用缓存的工具图片
+    const toolImage = GlobalToolImageCache.get(tool.id);
+    if (toolImage) {
+      // 计算图片绘制尺寸（保持比例）
+      const padding = size * 0.1;
+      const availableSize = size - padding * 2;
+      const scale = Math.min(
+        availableSize / toolImage.width,
+        availableSize / toolImage.height
+      );
+      const drawWidth = toolImage.width * scale;
+      const drawHeight = toolImage.height * scale;
+      const drawX = x - drawWidth / 2;
+      const drawY = y - drawHeight / 2;
+      
+      // 绘制阴影
+      ctx.drawImage(toolImage, drawX + 2, drawY + 2, drawWidth, drawHeight);
+      
+      // 绘制主图
+      ctx.drawImage(toolImage, drawX, drawY, drawWidth, drawHeight);
+    } else {
+      // 没有图片时使用 emoji 图标
+      // 绘制工具图标阴影（增加立体感）
+      ctx.font = `bold ${Math.floor(size)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // 阴影
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+      ctx.fillText(tool.icon, x + 2, y + 2);
+      
+      // 主图标
+      ctx.fillStyle = tool.color;
+      ctx.fillText(tool.icon, x, y);
+      
+      // 高光
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fillText(tool.icon, x - 1, y - 1);
+    }
     
     ctx.restore();
   }
@@ -1467,6 +1494,13 @@ class GameplayScene extends Scene {
     // 结算弹窗显示时阻止下方触摸
     if (this.settlementDialog && this.settlementDialog.visible) {
       return false;
+    }
+    
+    // 处理工具槽滑动（如果不在拖动工具模式下）
+    if (!this.isDraggingTool && this.toolSlot) {
+      if (this.toolSlot.onTouchMove(x, y)) {
+        return true;
+      }
     }
     
     // 处理工具拖动

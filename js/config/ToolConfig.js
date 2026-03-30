@@ -19,6 +19,7 @@ export const BASE_TOOLS = [
     id: 'sponge',
     name: '海绵',
     icon: '🧼',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_sponge.png',
     color: '#66BB6A',
     description: '吸水性好，适合清理污渍',
     efficiency: 1.2,
@@ -29,6 +30,7 @@ export const BASE_TOOLS = [
     id: 'rubbish_bin',
     name: '垃圾桶',
     icon: '🗑️',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_rubbish_bin.png',
     color: '#66BB6A',
     description: '纸团，包装纸类的垃圾扔进去',
     efficiency: 1.2,
@@ -39,6 +41,7 @@ export const BASE_TOOLS = [
     id: 'brush',
     name: '刷子',
     icon: '🪥',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_brush.png',
     color: '#FFA726',
     description: '刷洗顽固污垢',
     efficiency: 1.0,
@@ -46,11 +49,12 @@ export const BASE_TOOLS = [
     unlockLevel: 1
   },
   {
-    id: 'spray',
-    name: '喷雾',
+    id: 'common_spray',
+    name: '万能清洁喷雾',
     icon: '🧴',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_common_spray.png',
     color: '#AB47BC',
-    description: '喷洒清洁剂，预处理污垢',
+    description: '喷洒清洁剂，对大部分污渍有效，对顽固污渍作用较弱',
     efficiency: 0.5, // 喷雾本身清洁力低，但可组合
     type: 'auxiliary',
     unlockLevel: 1
@@ -59,11 +63,12 @@ export const BASE_TOOLS = [
     id: 'vacuum',
     name: '吸尘器',
     icon: '🌪️',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_vacuum.png',
     color: '#EF5350',
     description: '快速清理大量灰尘',
     efficiency: 2.0,
     type: 'advanced',
-    unlockLevel: 2
+    unlockLevel: 1
   }
 ];
 
@@ -178,6 +183,23 @@ export function isToolUnlocked(toolId, currentStage = 1, ownedTools = []) {
   return true;
 }
 
+// 全局工具图片缓存 - 供 LoadingScene 和 GameplayScene 共享
+export const GlobalToolImageCache = {
+  _cache: {},
+  
+  get(toolId) {
+    return this._cache[toolId] || null;
+  },
+  
+  set(toolId, img) {
+    this._cache[toolId] = img;
+  },
+  
+  has(toolId) {
+    return !!this._cache[toolId];
+  }
+};
+
 export default {
   BASE_TOOLS,
   PREMIUM_TOOLS,
@@ -185,5 +207,6 @@ export default {
   MAX_TOOL_SLOTS,
   getDefaultToolSlots,
   getTool,
-  isToolUnlocked
+  isToolUnlocked,
+  GlobalToolImageCache
 };

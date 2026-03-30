@@ -10,6 +10,7 @@
  */
 
 import haptic from '../../utils/HapticFeedback';
+import { GlobalToolImageCache } from '../../config/ToolConfig';
 
 class ToolSlot {
   constructor(options = {}) {
@@ -27,11 +28,30 @@ class ToolSlot {
     // 回调
     this.onSelect = options.onSelect || (() => {});
     
-    // 配置 - 始终显示 5 个槽位
-    this.maxSlotCount = 5;
+    // 配置 - 每页显示 5 个槽位
+    this.visibleSlotCount = 5;
     this.slotSize = options.slotSize || 80;
     this.slotGap = options.slotGap || 15;
     this.padding = options.padding || 20;
+    
+    // 滑动相关状态
+    this.scrollOffset = 0;           // 当前滑动偏移
+    this.maxScrollOffset = 0;        // 最大滑动偏移
+    this.isDragging = false;         // 是否正在拖动
+    this.dragStartX = 0;             // 拖动起始X
+    this.dragStartOffset = 0;        // 拖动起始偏移
+    this.dragVelocity = 0;           // 拖动速度（用于惯性）
+    this.lastDragX = 0;              // 上一次拖动位置
+    this.lastDragTime = 0;           // 上一次拖动时间
+    
+    // 回弹动画状态
+    this.bounceAnim = {
+      active: false,
+      startOffset: 0,
+      targetOffset: 0,
+      progress: 0,
+      duration: 300  // 回弹动画时长(ms)
+    };
     
     // 计算尺寸
     this._calculateDimensions();
@@ -39,7 +59,7 @@ class ToolSlot {
   
   /**
    * 计算尺寸和位置
-   * 宽度占满整个屏幕，始终显示 5 个槽位
+   * 宽度占满整个屏幕，每页显示 5 个槽位，支持滑动
    */
   _calculateDimensions() {
     const W = this.screenWidth;
@@ -60,21 +80,44 @@ class ToolSlot {
     // 槽位之间的间隙（固定值或基于宽度）
     this.slotGap = W * 0.03;
     
-    // 槽位大小：根据可用空间计算，然后减小5
-    const availableWidth = this.containerW - this.slotGap * (this.maxSlotCount - 1);
-    this.slotSize = availableWidth / this.maxSlotCount - 5;
+    // 槽位大小：根据可见槽位数量计算
+    const availableWidth = this.containerW - this.slotGap * (this.visibleSlotCount - 1);
+    this.slotSize = availableWidth / this.visibleSlotCount - 5;
     
     // 槽位垂直居中
-    this.startX = this.containerX+10;
+    this.startX = this.containerX + 10;
     this.startY = this.containerY + (this.containerH - this.slotSize) / 2;
     
-    // 存储槽位位置（用于点击检测）
+    // 计算最大滑动偏移（确保最后一个槽位可以被滑到可见区域）
+    const totalTools = this.tools.length;
+    if (totalTools > this.visibleSlotCount) {
+      // 最后一个槽位完全可见需要的偏移
+      const lastSlotX = this.startX + (totalTools - 1) * (this.slotSize + this.slotGap);
+      const visibleEndX = this.containerX + this.containerW;
+      this.maxScrollOffset = Math.max(0, lastSlotX + this.slotSize - visibleEndX + this.slotGap);
+    } else {
+      this.maxScrollOffset = 0;
+    }
+    
+    // 限制当前偏移在有效范围内
+    this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, this.maxScrollOffset));
+    
+    // 存储所有槽位位置（用于点击检测，考虑滑动偏移）
+    this._updateSlotPositions();
+  }
+  
+  /**
+   * 更新槽位位置（考虑滑动偏移）
+   */
+  _updateSlotPositions() {
+    const totalTools = this.tools.length;
     this.slotPositions = [];
-    for (let i = 0; i < this.maxSlotCount; i++) {
+    for (let i = 0; i < totalTools; i++) {
       this.slotPositions[i] = {
-        x: this.startX + i * (this.slotSize + this.slotGap),
+        x: this.startX + i * (this.slotSize + this.slotGap) - this.scrollOffset,
         y: this.startY,
-        size: this.slotSize
+        size: this.slotSize,
+        index: i
       };
     }
   }
@@ -95,6 +138,71 @@ class ToolSlot {
     if (data.disabledSlots !== undefined) {
       this.disabledSlots = new Set(data.disabledSlots);
     }
+  }
+  
+  /**
+   * 更新滑动（用于惯性动画和回弹）
+   */
+  update(deltaTime) {
+    // 处理回弹动画
+    if (this.bounceAnim.active) {
+      this.bounceAnim.progress += deltaTime;
+      const t = Math.min(this.bounceAnim.progress / this.bounceAnim.duration, 1);
+      const eased = this._easeOutCubic(t);
+      
+      this.scrollOffset = this.bounceAnim.startOffset + 
+        (this.bounceAnim.targetOffset - this.bounceAnim.startOffset) * eased;
+      
+      if (t >= 1) {
+        this.bounceAnim.active = false;
+        this.scrollOffset = this.bounceAnim.targetOffset;
+      }
+      
+      this._updateSlotPositions();
+      return;
+    }
+    
+    // 处理惯性滑动
+    if (!this.isDragging && Math.abs(this.dragVelocity) > 0.5) {
+      // 应用惯性滑动
+      this.scrollOffset += this.dragVelocity * deltaTime;
+      
+      // 更平滑的减速（指数衰减）
+      this.dragVelocity *= 0.95;
+      
+      // 检查是否需要触发回弹
+      if (this.scrollOffset < 0 || this.scrollOffset > this.maxScrollOffset) {
+        // 触发出界回弹
+        this._startBounce(
+          this.scrollOffset,
+          this.scrollOffset < 0 ? 0 : this.maxScrollOffset
+        );
+        this.dragVelocity = 0;
+      }
+      
+      // 更新槽位位置
+      this._updateSlotPositions();
+    }
+  }
+  
+  /**
+   * 启动回弹动画
+   */
+  _startBounce(from, to) {
+    this.bounceAnim = {
+      active: true,
+      startOffset: from,
+      targetOffset: to,
+      progress: 0,
+      duration: 400  // 回弹动画时长(ms)
+    };
+  }
+  
+  /**
+   * 缓出三次方（平滑减速）
+   */
+  _easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
   }
   
   /**
@@ -170,20 +278,37 @@ class ToolSlot {
   
   /**
    * 2) 绘制所有槽位
-   * 始终显示 5 个槽位，不足时显示"待解锁"
+   * 支持滑动，只绘制可见范围内的槽位
    */
   _drawSlots(ctx) {
-    for (let i = 0; i < this.maxSlotCount; i++) {
+    // 保存上下文并设置裁剪区域（只在容器内绘制）
+    ctx.save();
+    ctx.beginPath();
+    this._drawRoundedRect(ctx, this.containerX, this.containerY, this.containerW, this.containerH, 15);
+    ctx.clip();
+    
+    const totalTools = this.tools.length;
+    const visibleStart = this.containerX - this.slotSize;
+    const visibleEnd = this.containerX + this.containerW + this.slotSize;
+    
+    // 绘制所有工具的槽位
+    for (let i = 0; i < totalTools; i++) {
       const pos = this.slotPositions[i];
+      
+      // 只绘制可见范围内的槽位（优化性能）
+      if (pos.x + pos.size < visibleStart || pos.x > visibleEnd) {
+        continue;
+      }
+      
       const isSelected = i === this.selectedIndex;
       const isDisabled = this.disabledSlots.has(i);
-      // 判断槽位状态
-      const isEmpty = this.emptySlots.has(i); // 工具被取出
-      const hasTool = i < this.tools.length && !isEmpty; // 有工具且未被取出
-      const isLocked = i >= this.tools.length; // 未解锁槽位
+      const isEmpty = this.emptySlots.has(i);
+      const hasTool = !isEmpty;
       
-      this._drawSlot(ctx, pos.x, pos.y, pos.size, i, isSelected, isDisabled, hasTool, isEmpty, isLocked);
+      this._drawSlot(ctx, pos.x, pos.y, pos.size, i, isSelected, isDisabled, hasTool, isEmpty, false);
     }
+    
+    ctx.restore();
   }
   
   /**
@@ -319,7 +444,7 @@ class ToolSlot {
   
   /**
    * 5) 绘制工具图标
-   * 优先使用 tool.icon (emoji)，如果没有则使用 Canvas 绘制
+   * 优先使用缓存的工具图片，其次使用 tool.icon (emoji)，最后使用 Canvas 绘制
    */
   _drawToolIcon(ctx, x, y, size, tool, isDisabled) {
     const iconX = x + size / 2;
@@ -328,8 +453,24 @@ class ToolSlot {
     ctx.save();
     if (isDisabled) ctx.globalAlpha = 0.4;
     
-    // 如果有 emoji 图标，优先使用
-    if (tool.icon && tool.icon.length > 0) {
+    // 优先使用缓存的工具图片
+    const toolImage = GlobalToolImageCache.get(tool.id);
+    if (toolImage) {
+      // 计算图片绘制尺寸（保持比例，适应槽位）
+      const padding = size * 0.15;
+      const availableSize = size - padding * 2;
+      const scale = Math.min(
+        availableSize / toolImage.width,
+        availableSize / toolImage.height
+      );
+      const drawWidth = toolImage.width * scale;
+      const drawHeight = toolImage.height * scale;
+      const drawX = x + (size - drawWidth) / 2;
+      const drawY = y + (size - drawHeight) / 2;
+      
+      ctx.drawImage(toolImage, drawX, drawY, drawWidth, drawHeight);
+    } else if (tool.icon && tool.icon.length > 0) {
+      // 如果没有图片缓存，使用 emoji 图标
       ctx.font = `${Math.floor(size * 0.5)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -455,7 +596,8 @@ class ToolSlot {
    * 检查点击位置是否在槽位内
    */
   getSlotIndexAt(x, y) {
-    for (let i = 0; i < this.maxSlotCount; i++) {
+    // 检查所有槽位位置（包括滑出可见区域的）
+    for (let i = 0; i < this.slotPositions.length; i++) {
       const slot = this.slotPositions[i];
       if (x >= slot.x && x <= slot.x + slot.size &&
           y >= slot.y && y <= slot.y + slot.size) {
@@ -476,20 +618,109 @@ class ToolSlot {
    * 处理触摸开始
    */
   onTouchStart(x, y) {
-    const slotIndex = this.getSlotIndexAt(x, y);
-    // 只有有工具的槽位才能被选中
-    if (slotIndex >= 0 && this.hasToolAt(slotIndex) && !this.disabledSlots.has(slotIndex)) {
-      return { slotIndex };
+    // 检查是否在容器内
+    if (x < this.containerX || x > this.containerX + this.containerW ||
+        y < this.containerY || y > this.containerY + this.containerH) {
+      return null;
     }
-    return null;
+    
+    // 开始拖动
+    this.isDragging = true;
+    this.dragStartX = x;
+    this.dragStartOffset = this.scrollOffset;
+    this.dragVelocity = 0;
+    this.lastDragX = x;
+    this.lastDragTime = Date.now();
+    
+    // 检查是否点击了某个槽位（用于后续判断是点击还是滑动）
+    const slotIndex = this.getSlotIndexAt(x, y);
+    this._pendingSlotIndex = slotIndex;
+    
+    return { slotIndex, isInContainer: true };
+  }
+  
+  /**
+   * 处理触摸移动（滑动）
+   * 支持超出边界的阻力感
+   */
+  onTouchMove(x, y) {
+    if (!this.isDragging) return false;
+    
+    // 计算滑动距离
+    const deltaX = x - this.dragStartX;
+    let newOffset = this.dragStartOffset - deltaX;
+    
+    // 超出边界的阻力感（超出越多阻力越大）
+    const overScroll = this._getOverScroll(newOffset);
+    if (overScroll !== 0) {
+      // 使用阻尼公式：超出部分按平方根衰减，产生弹性感
+      const dampedOverScroll = overScroll > 0 
+        ? Math.sqrt(overScroll * 10) 
+        : -Math.sqrt(-overScroll * 10);
+      newOffset = overScroll > 0 
+        ? this.maxScrollOffset + dampedOverScroll
+        : dampedOverScroll;
+    }
+    
+    // 计算速度（用于惯性）
+    const now = Date.now();
+    const dt = now - this.lastDragTime;
+    if (dt > 0) {
+      this.dragVelocity = (x - this.lastDragX) / dt * -1; // 反向，因为滑动方向与偏移方向相反
+    }
+    this.lastDragX = x;
+    this.lastDragTime = now;
+    
+    // 如果滑动距离超过阈值，标记为滑动模式
+    if (Math.abs(deltaX) > 10) {
+      this._isScrolling = true;
+    }
+    
+    // 更新偏移
+    this.scrollOffset = newOffset;
+    this._updateSlotPositions();
+    
+    return true;
+  }
+  
+  /**
+   * 获取超出边界的距离
+   * @returns {number} 正值表示超出右边界，负值表示超出左边界，0表示在范围内
+   */
+  _getOverScroll(offset) {
+    if (offset < 0) return offset; // 超出左边界
+    if (offset > this.maxScrollOffset) return offset - this.maxScrollOffset; // 超出右边界
+    return 0;
   }
   
   /**
    * 处理触摸结束
    */
   onTouchEnd(x, y) {
-    const slotIndex = this.getSlotIndexAt(x, y);
-    // 只有有工具的槽位才能被选中
+    if (!this.isDragging) return false;
+    
+    this.isDragging = false;
+    
+    // 如果是滑动操作，不处理点击
+    if (this._isScrolling) {
+      this._isScrolling = false;
+      this._pendingSlotIndex = -1;
+      
+      // 检查是否需要回弹（超出边界）
+      if (this.scrollOffset < 0 || this.scrollOffset > this.maxScrollOffset) {
+        this._startBounce(
+          this.scrollOffset,
+          this.scrollOffset < 0 ? 0 : this.maxScrollOffset
+        );
+      }
+      
+      return true;
+    }
+    
+    // 处理点击
+    const slotIndex = this._pendingSlotIndex;
+    this._pendingSlotIndex = -1;
+    
     if (slotIndex >= 0 && this.hasToolAt(slotIndex) && !this.disabledSlots.has(slotIndex)) {
       // 切换选中
       if (this.selectedIndex !== slotIndex) {
@@ -500,6 +731,7 @@ class ToolSlot {
       }
       return true;
     }
+    
     return false;
   }
 }

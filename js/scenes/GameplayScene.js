@@ -482,24 +482,32 @@ class GameplayScene extends Scene {
       stars: stars,
       coins: coins,
       onNext: () => {
+        // 计算全局关卡ID（1-40）
+        const globalLevelId = (this.stage - 1) * 10 + this.levelId;
+        const nextGlobalLevelId = globalLevelId + 1;
+        
         // 保存进度：标记当前关卡完成，解锁下一关
         if (dataManager) {
-          dataManager.completeLevel(this.levelId, stars);
-          dataManager.unlockLevel(this.levelId + 1);
+          dataManager.completeLevel(globalLevelId, stars);
+          dataManager.unlockLevel(nextGlobalLevelId);
           dataManager.addCoins(coins);
           dataManager.save();
         }
-        globalEvent.emit('scene:switch', 'GameplayScene', { levelId: this.levelId + 1 });
+        globalEvent.emit('scene:switch', 'GameplayScene', { levelId: this.levelId + 1, stage: this.stage });
       },
       onReplay: () => {
         // 重玩不保存进度，只是重新开始
         globalEvent.emit('scene:switch', 'GameplayScene', { levelId: this.levelId });
       },
       onHome: () => {
+        // 计算全局关卡ID（1-40）
+        const globalLevelId = (this.stage - 1) * 10 + this.levelId;
+        const nextGlobalLevelId = globalLevelId + 1;
+        
         // 保存进度：标记当前关卡完成，解锁下一关
         if (dataManager) {
-          dataManager.completeLevel(this.levelId, stars);
-          dataManager.unlockLevel(this.levelId + 1);
+          dataManager.completeLevel(globalLevelId, stars);
+          dataManager.unlockLevel(nextGlobalLevelId);
           dataManager.addCoins(coins);
           dataManager.save();
         }

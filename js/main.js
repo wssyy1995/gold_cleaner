@@ -217,6 +217,31 @@ class Main {
       this.sceneManager.switchScene(sceneName, data, options);
     });
     
+    // 场景推入事件（保留当前场景，用于从主页面进入游戏关卡）
+    globalEvent.on('scene:push', (sceneName, data) => {
+      console.log(`[Main] 推入场景: ${sceneName}`, data);
+      
+      // 构建切换选项
+      const options = {};
+      if (data) {
+        if (data.transition) {
+          options.transition = data.transition;
+        }
+        if (data.direction) {
+          options.direction = data.direction;
+        }
+      }
+      
+      // 使用 pushScene 保留当前场景
+      this.sceneManager.pushScene(sceneName, data, options);
+    });
+    
+    // 场景弹出事件（返回上一个场景）
+    globalEvent.on('scene:pop', (data) => {
+      console.log(`[Main] 弹出场景，返回上一个`);
+      this.sceneManager.popScene(data);
+    });
+    
     // 游戏事件
     globalEvent.on('game:levelComplete', (result) => {
       console.log('[Main] 关卡完成:', result);
@@ -265,8 +290,12 @@ class Main {
           });
         },
         onHome: () => {
-          // 返回首页
-          globalEvent.emit('scene:switch', 'HomeScene');
+          // 使用 scene:pop 返回首页，并传递通关数据用于播放动画
+          globalEvent.emit('scene:pop', {
+            justCompletedLevel: result.levelId,
+            completedStage: Math.ceil(result.levelId / 10),
+            completedStars: result.stars
+          });
         }
       });
       this.dialogManager.show(dialog);

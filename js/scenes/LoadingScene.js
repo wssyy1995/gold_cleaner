@@ -733,7 +733,7 @@ class LoadingScene extends Scene {
     console.log('[LoadingScene] 切换到首页');
 
     setTimeout(() => {
-      // 传递预加载的主页背景图和底部按钮图片，避免白屏
+      // 传递预加载的主页背景图、底部按钮图片和标题图片，避免白屏
       globalEvent.emit('scene:switch', 'HomeScene', {
         preloadedBgImage: this.homeBgImage,
         preloadedBgLoaded: this.homeBgLoaded,
@@ -741,7 +741,10 @@ class LoadingScene extends Scene {
           shop: this.bottomButtons.shop.img,
           bag: this.bottomButtons.bag.img,
           setting: this.bottomButtons.setting.img
-        }
+        },
+        // 预加载的标题和 tag 图片
+        preloadedTitleImage: this.cachedImages['bg_game_title'] || null,
+        preloadedTagImage: this.cachedImages['bg_stage1_tag'] || null
       });
     }, 500);
   }

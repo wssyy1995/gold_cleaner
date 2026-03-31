@@ -309,7 +309,8 @@ class SceneManager {
     
     // 过渡完成后，延迟一帧再销毁旧场景
     // 确保新场景至少完成一帧渲染，避免黑屏
-    if (sceneToDestroy && sceneToDestroy.destroy) {
+    // 注意：如果 pushToStack 为 true，场景在栈中，不应该销毁
+    if (sceneToDestroy && sceneToDestroy.destroy && !pushToStack) {
       // 使用 requestAnimationFrame 或 setTimeout(0) 延迟到下一帧
       const doDestroy = () => {
         sceneToDestroy.destroy();
@@ -326,6 +327,8 @@ class SceneManager {
       } else {
         setTimeout(doDestroy, 0);
       }
+    } else if (pushToStack && previousScene) {
+      console.log(`[SceneManager] 旧场景已压入栈，保留实例: ${previousScene.sceneName}`);
     }
 
     globalEvent.emit('scene:switched', name, data);

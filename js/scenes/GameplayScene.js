@@ -314,7 +314,8 @@ class GameplayScene extends Scene {
         if (this.viewMode === 'zoom') {
           this._exitZoomView();
         } else {
-          globalEvent.emit('scene:switch', 'HomeScene');
+          // 使用 scene:pop 返回上一个场景（HomeScene）
+          globalEvent.emit('scene:pop');
         }
       }
     });
@@ -627,8 +628,8 @@ class GameplayScene extends Scene {
         const { GlobalLevelStateCache } = require('./HomeScene');
         GlobalLevelStateCache.save(this.stage, this.levelId, 'unlocked', stars);
         
-        // 切换到首页，并传递通关动画标记
-        globalEvent.emit('scene:switch', 'HomeScene', {
+        // 使用 scene:pop 返回 HomeScene，并传递通关动画标记
+        globalEvent.emit('scene:pop', {
           justCompletedLevel: this.levelId,  // 刚通关的关卡ID
           completedStage: this.stage,         // 通关的stage
           completedStars: stars               // 获得的星级
@@ -754,7 +755,8 @@ class GameplayScene extends Scene {
       },
       onHome: () => {
         this.isPaused = false;
-        globalEvent.emit('scene:switch', 'HomeScene');
+        // 使用 scene:pop 返回 HomeScene
+        globalEvent.emit('scene:pop');
       }
     });
     
@@ -775,7 +777,8 @@ class GameplayScene extends Scene {
       confirmText: '退出',
       cancelText: '继续游戏',
       onConfirm: () => {
-        globalEvent.emit('scene:switch', 'HomeScene');
+        // 使用 scene:pop 返回 HomeScene
+        globalEvent.emit('scene:pop');
       }
     });
     
@@ -848,8 +851,12 @@ class GameplayScene extends Scene {
     // 5. 预加载下一关预览图
     this._preloadNextLevelPreview();
     
-    // 6. 返回游戏主页面
-    globalEvent.emit('scene:switch', 'HomeScene');
+    // 6. 使用 scene:pop 返回 HomeScene，并传递通关数据
+    globalEvent.emit('scene:pop', {
+      justCompletedLevel: this.levelId,
+      completedStage: this.stage,
+      completedStars: result.stars
+    });
   }
   
   /**

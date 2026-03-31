@@ -219,6 +219,18 @@ class HomeScene extends Scene {
       console.log('[HomeScene] 使用预加载的底部按钮图片并缓存');
     }
     
+    // 4. 使用预加载的标题和 tag 图片（确保第一帧就能渲染）
+    if (data.preloadedTitleImage) {
+      this._bg_game_titleImage = data.preloadedTitleImage;
+      this._bg_game_titleLoaded = true;
+      console.log('[HomeScene] 使用预加载的游戏标题图片');
+    }
+    if (data.preloadedTagImage) {
+      this._bg_stage1_tagImage = data.preloadedTagImage;
+      this._bg_stage1_tagLoaded = true;
+      console.log('[HomeScene] 使用预加载的阶段标签图片');
+    }
+    
     // 初始化云存储
     await this.cloudStorage.init();
     
@@ -262,6 +274,32 @@ class HomeScene extends Scene {
     
     // 恢复底部按钮图片
     this._restoreBottomButtonsFromCache();
+  }
+  
+  /**
+   * 从场景栈恢复时调用（由 SceneManager.popScene 触发）
+   * @param {Object} data - 传递的数据，包含通关信息
+   */
+  onResumeFromStack(data = {}) {
+    console.log('[HomeScene] 从场景栈恢复', data);
+    
+    // 检查是否需要播放通关动画
+    const hasCompleteData = data.justCompletedLevel && data.completedStage === this.currentStage;
+    
+    if (hasCompleteData) {
+      // 有过关动画时，先刷新非过关关卡的状态
+      this._refreshLevelStatesExcept(data.justCompletedLevel);
+      
+      // 然后播放过关动画（动画会处理该关卡的状态变化）
+      console.log(`[HomeScene] 播放通关动画: 关卡 ${data.justCompletedLevel}, 星级 ${data.completedStars}`);
+      this._startLevelCompleteAnimation(data.justCompletedLevel, data.completedStars);
+      
+      // 立即异步预加载下一关预览图（动画期间加载）
+      this._preloadNextLevelPreview(data.justCompletedLevel);
+    } else {
+      // 没有过关动画时，刷新所有关卡状态
+      this._refreshLevelStates();
+    }
   }
   
   /**
@@ -314,6 +352,110 @@ class HomeScene extends Scene {
   _restoreIconsFromCache() {
     // 图标已经在 _loadCachedImages 中加载，这里不需要额外处理
     // 因为图标是通用的，已经缓存在 iconImages 中
+  }
+  
+  /**
+   * 刷新关卡状态（从 DataManager 获取最新状态）
+   * 在从其他页面返回时调用，避免显示旧状态
+   */
+  _refreshLevelStates() {
+    if (!this.levels || this.levels.length === 0) return;
+    
+    const game = getGame();
+    const dataManager = game ? game.dataManager : null;
+    if (!dataManager) return;
+    
+    console.log('[HomeScene] 刷新关卡状态');
+    
+    let hasChanged = false;
+    
+    this.levels.forEach(level => {
+      const globalLevelId = (this.currentStage - 1) * 10 + level.id;
+      
+      // 从 DataManager 获取最新状态
+      let isUnlocked = false;
+      if (level.id === 1) {
+        isUnlocked = true;
+      } else {
+        isUnlocked = dataManager.isLevelUnlocked(globalLevelId);
+      }
+      
+      const stars = dataManager.getLevelStars(globalLevelId);
+      
+      // 确定新状态
+      let newStatus = 'locked';
+      if (isUnlocked) {
+        newStatus = stars > 0 ? 'completed' : 'unlocked';
+      }
+      
+      // 如果状态发生变化，更新
+      if (level.status !== newStatus || level.stars !== stars) {
+        console.log(`[HomeScene] 关卡 ${level.id} 状态更新: ${level.status} -> ${newStatus}, 星级: ${level.stars} -> ${stars}`);
+        level.status = newStatus;
+        level.stars = stars;
+        hasChanged = true;
+        
+        // 更新全局缓存
+        GlobalLevelStateCache.save(this.currentStage, level.id, newStatus, stars);
+      }
+    });
+    
+    if (hasChanged) {
+      console.log('[HomeScene] 关卡状态已刷新');
+    }
+  }
+  
+  /**
+   * 刷新关卡状态，但排除指定关卡（用于过关动画）
+   * @param {number} excludeLevelId - 要排除的关卡ID
+   */
+  _refreshLevelStatesExcept(excludeLevelId) {
+    if (!this.levels || this.levels.length === 0) return;
+    
+    const game = getGame();
+    const dataManager = game ? game.dataManager : null;
+    if (!dataManager) return;
+    
+    console.log(`[HomeScene] 刷新关卡状态（排除关卡 ${excludeLevelId}）`);
+    
+    this.levels.forEach(level => {
+      // 跳过要播放动画的关卡
+      if (level.id === excludeLevelId) {
+        // 将该关卡临时设为 unlocked，以便动画正常播放
+        // 动画完成后会设为 completed
+        level.status = 'unlocked';
+        level.displayStatus = 'unlocked';
+        return;
+      }
+      
+      const globalLevelId = (this.currentStage - 1) * 10 + level.id;
+      
+      // 从 DataManager 获取最新状态
+      let isUnlocked = false;
+      if (level.id === 1) {
+        isUnlocked = true;
+      } else {
+        isUnlocked = dataManager.isLevelUnlocked(globalLevelId);
+      }
+      
+      const stars = dataManager.getLevelStars(globalLevelId);
+      
+      // 确定新状态
+      let newStatus = 'locked';
+      if (isUnlocked) {
+        newStatus = stars > 0 ? 'completed' : 'unlocked';
+      }
+      
+      // 如果状态发生变化，更新
+      if (level.status !== newStatus || level.stars !== stars) {
+        console.log(`[HomeScene] 关卡 ${level.id} 状态更新: ${level.status} -> ${newStatus}, 星级: ${level.stars} -> ${stars}`);
+        level.status = newStatus;
+        level.stars = stars;
+        
+        // 更新全局缓存
+        GlobalLevelStateCache.save(this.currentStage, level.id, newStatus, stars);
+      }
+    });
   }
   
   /**
@@ -912,10 +1054,13 @@ class HomeScene extends Scene {
    * 加载主页面标题和阶段标签图
    */
   async _loadTitleImages() {
-    // 加载游戏标题图（带缓存）
-    await this._loadTitleImage('bg_game_title', 'bg_game_title');
-    // 加载阶段标签图（带缓存）
-    await this._loadTitleImage('bg_stage1_tag', 'bg_stage1_tag');
+    // 如果已经通过预加载获取了图片，跳过异步加载
+    if (!this._bg_game_titleLoaded) {
+      await this._loadTitleImage('bg_game_title', 'bg_game_title');
+    }
+    if (!this._bg_stage1_tagLoaded) {
+      await this._loadTitleImage('bg_stage1_tag', 'bg_stage1_tag');
+    }
   }
 
   /**
@@ -1271,7 +1416,8 @@ class HomeScene extends Scene {
       console.log(`[HomeScene] 关卡${level.id}未解锁`);
       return;
     }
-    globalEvent.emit('scene:switch', 'GameplayScene', { 
+    // 使用 scene:push 保留 HomeScene，返回时可以恢复状态
+    globalEvent.emit('scene:push', 'GameplayScene', { 
       levelId: level.id, stage: this.currentStage 
     });
   }
@@ -1700,7 +1846,8 @@ class HomeScene extends Scene {
     if (this._pressedStartBtn) {
       const btnLevel = this._checkStartBtnClick(x, y);
       if (btnLevel) {
-        globalEvent.emit('scene:switch', 'GameplayScene', { 
+        // 使用 scene:push 保留 HomeScene，返回时可以恢复状态
+        globalEvent.emit('scene:push', 'GameplayScene', { 
           levelId: btnLevel.id, stage: this.currentStage 
         });
       }

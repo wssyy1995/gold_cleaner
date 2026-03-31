@@ -1,496 +1,295 @@
+这是一个很棒的交互引导设计！结合了指示方向和强调目标区域的两种动画，能极大地提升玩家的理解。
+
+下面是用 Canvas 和 JavaScript 实现这个引导动画的代码示例。
+
+**代码说明：**
+
+1.  **Canvas 设置:** 初始化一个全屏的 Canvas，并获取 2D 绘图上下文。
+2.  **游戏元素模拟:**
+    *   `toolPosition`: 模拟工具弹出的位置（屏幕中央偏下）。
+    *   `stainPosition`: 模拟污渍的位置（屏幕右上方）。
+    *   `drawTool`, `drawStain`: 简单的函数来绘制工具和污渍的占位符。
+3.  **动画状态管理:**
+    *   `AnimationPhase`: 枚举类型，用于区分拖拽箭头阶段和环绕箭头阶段。
+    *   `currentPhase`: 当前的动画阶段。
+    *   `dragArrowProgress`: 拖拽箭头的动画进度（0 到 1），用于控制箭头的移动和渐隐。
+    *   `circularArrowAngle`: 环绕箭头的旋转角度。
+    *   `phaseTimer`: 计时器，用于控制每个阶段的持续时间。
+    *   `dragPhaseDuration`, `circularPhaseDuration`: 各阶段的持续时长（毫秒）。
+4.  **`drawDragArrow` 函数:**
+    *   绘制一个从 `startX, startY` 到 `endX, endY` 的黄色箭头。
+    *   箭头会沿着路径移动，并逐渐透明（`1 - progress`）。
+5.  **`drawCircularArrow` 函数:**
+    *   绘制一个围绕 `centerX, centerY` 污渍的绿色弧形箭头。
+    *   箭头会顺时针旋转，强调污渍是目标。
+6.  **`animate` 循环:**
+    *   使用 `requestAnimationFrame` 创建流畅的动画循环。
+    *   在每一帧中清除 Canvas，绘制工具和污渍。
+    *   根据 `currentPhase` 更新相应的动画进度并调用绘制函数。
+    *   当一个阶段的时间到达后，切换到下一个阶段。
+
+您可以将以下代码保存为一个 `.html` 文件，然后在浏览器中打开查看效果。
 
 ```html
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>获得新工具弹窗</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      position: relative;
-    }
-    
-    .game-scene {
-      width: 100%;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 40px;
-      padding: 20px;
-    }
-    
-    .game-title {
-      color: white;
-      font-size: 32px;
-      font-weight: bold;
-      text-shadow: 0 2px 10px rgba(0,0,0,0.3);
-      text-align: center;
-      background: linear-gradient(to right, #ffd700, #ff8c00);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      letter-spacing: 2px;
-    }
-    
-    .game-desc {
-      color: rgba(255,255,255,0.8);
-      font-size: 16px;
-      text-align: center;
-      max-width: 600px;
-      line-height: 1.6;
-    }
-    
-    .trigger-btn {
-      background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
-      border: none;
-      padding: 16px 40px;
-      font-size: 18px;
-      font-weight: bold;
-      color: #8b4513;
-      border-radius: 50px;
-      cursor: pointer;
-      box-shadow: 
-        0 6px 20px rgba(255, 165, 0, 0.6),
-        inset 0 2px 0 rgba(255,255,255,0.4);
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }
-    
-    .trigger-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 
-        0 8px 25px rgba(255, 165, 0, 0.8),
-        inset 0 2px 0 rgba(255,255,255,0.4);
-    }
-    
-    .trigger-btn:active {
-      transform: translateY(1px);
-      box-shadow: 
-        0 4px 15px rgba(255, 165, 0, 0.6),
-        inset 0 2px 0 rgba(255,255,255,0.4);
-    }
-    
-    .popup-container {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0,0,0,0.85);
-      z-index: 1000;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s ease;
-    }
-    
-    .popup-container.show {
-      opacity: 1;
-      pointer-events: all;
-    }
-    
-    #popupCanvas {
-      display: block;
-      max-width: 90%;
-      max-height: 90%;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏引导动画</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #333; /* 背景色 */
+        }
+        canvas {
+            border: 1px solid #ccc; /* Canvas 边框 */
+            background-color: #fff; /* Canvas 背景 */
+            display: block; /* 移除底部空白 */
+        }
+    </style>
 </head>
 <body>
-  <div class="game-scene">
-    <h1 class="game-title">✨ 清洁大师游戏</h1>
-    <p class="game-desc">点击下方按钮，体验获得新工具的惊喜时刻！这个弹窗完全使用 Canvas + JavaScript 实现，包含动画星星效果和交互式按钮。</p>
-    <button class="trigger-btn" id="showPopup">获得新工具！</button>
-  </div>
+    <canvas id="gameCanvas"></canvas>
 
-  <div class="popup-container" id="popupContainer">
-    <canvas id="popupCanvas"></canvas>
-  </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
 
-  <script>
-    class StarParticle {
-      constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.size = Math.random() * 3 + 1;
-        this.speedX = (Math.random() - 0.5) * 4;
-        this.speedY = (Math.random() - 0.5) * 2 - 2; // 向上飘
-        this.alpha = 1;
-        this.decay = Math.random() * 0.02 + 0.01;
-        this.color = `hsl(${Math.random() * 60 + 40}, 100%, ${Math.random() * 30 + 70}%)`;
-      }
-      
-      update() {
-        this.x += this.speedX;
-        this.y += this.speedY;
-        this.alpha -= this.decay;
-        this.size *= 0.98;
-      }
-      
-      draw(ctx) {
-        ctx.save();
-        ctx.globalAlpha = this.alpha;
-        ctx.fillStyle = this.color;
-        
-        // 绘制星星形状
-        ctx.beginPath();
-        for (let i = 0; i < 5; i++) {
-          const angle = (i * Math.PI * 2) / 5 - Math.PI / 2;
-          const radius = this.size;
-          const x = this.x + Math.cos(angle) * radius;
-          const y = this.y + Math.sin(angle) * radius;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-          
-          const innerAngle = angle + Math.PI / 5;
-          const innerX = this.x + Math.cos(innerAngle) * (radius * 0.4);
-          const innerY = this.y + Math.sin(innerAngle) * (radius * 0.4);
-          ctx.lineTo(innerX, innerY);
+        // 设置 Canvas 尺寸为窗口大小
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // --- 游戏元素占位符 ---
+        // 模拟工具弹出的位置 (屏幕中央偏下)
+        const toolPosition = { x: canvas.width / 2, y: canvas.height * 0.7 };
+        // 模拟污渍的位置 (屏幕右上方)
+        const stainPosition = { x: canvas.width * 0.7, y: canvas.height * 0.4 };
+        const stainRadius = 50; // 污渍的半径
+
+        // --- 动画状态 ---
+        const AnimationPhase = {
+            DRAG_ARROW: 0,      // 拖拽箭头阶段
+            CIRCULAR_ARROW: 1   // 环绕箭头阶段
+        };
+        let currentPhase = AnimationPhase.DRAG_ARROW;
+
+        let dragArrowProgress = 0; // 拖拽箭头进度 (0 到 1)
+        const dragArrowSpeed = 0.0015; // 拖拽箭头移动速度 (每毫秒)
+
+        let circularArrowAngle = 0; // 环绕箭头角度 (弧度)
+        const circularArrowSpeed = -0.003; // 环绕箭头旋转速度 (负值表示顺时针，每毫秒)
+
+        const dragPhaseDuration = 3000; // 拖拽阶段持续时间 (毫秒)
+        const circularPhaseDuration = 2000; // 环绕阶段持续时间 (毫秒)
+        let phaseTimer = 0; // 阶段计时器
+
+        let lastTime = 0; // 上次动画帧的时间戳
+
+        // --- 绘图函数 ---
+
+        // 绘制工具占位符
+        function drawTool(ctx, x, y) {
+            ctx.fillStyle = 'orange';
+            ctx.fillRect(x - 30, y - 20, 60, 40);
+            ctx.fillStyle = 'white';
+            ctx.fillText('工具', x - 20, y + 5);
         }
-        ctx.closePath();
-        ctx.fill();
-        
-        ctx.restore();
-      }
-      
-      isOffScreen(canvasHeight) {
-        return this.alpha <= 0 || this.y < -50;
-      }
-    }
 
-    class Popup {
-      constructor(canvas) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-        this.width = 0;
-        this.height = 0;
-        this.stars = [];
-        this.lastTime = 0;
-        this.buttonHover = false;
-        this.buttonActive = false;
-        this.animationFrame = null;
-        this.scale = 0;
-        this.init();
-      }
-      
-      init() {
-        this.resize();
-        window.addEventListener('resize', () => this.resize());
-        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-        this.canvas.addEventListener('click', (e) => this.handleClick(e));
-        this.canvas.addEventListener('mousedown', () => this.buttonActive = true);
-        this.canvas.addEventListener('mouseup', () => this.buttonActive = false);
-        this.canvas.addEventListener('mouseout', () => {
-          this.buttonHover = false;
-          this.buttonActive = false;
+        // 绘制污渍占位符
+        function drawStain(ctx, x, y, radius) {
+            ctx.fillStyle = 'lightblue';
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.fillText('污渍', x - 20, y + 5);
+        }
+
+        /**
+         * 绘制从起点到终点并逐渐消失的拖拽箭头。
+         * @param {CanvasRenderingContext2D} ctx - Canvas 2D 渲染上下文。
+         * @param {number} startX - 起点 X 坐标。
+         * @param {number} startY - 起点 Y 坐标。
+         * @param {number} endX - 终点 X 坐标。
+         * @param {number} endY - 终点 Y 坐标。
+         * @param {number} progress - 动画进度 (0 到 1)，控制箭头的位置和透明度。
+         */
+        function drawDragArrow(ctx, startX, startY, endX, endY, progress) {
+            const arrowLength = 80;    // 箭头可见部分的长度
+            const headLength = 20;     // 箭头头部的长度
+
+            // 箭头整体的透明度，随着进度增加而降低
+            const opacity = 1 - progress;
+            if (opacity <= 0) return; // 完全透明时不再绘制
+
+            ctx.strokeStyle = `rgba(255, 255, 0, ${opacity})`; // 黄色，逐渐透明
+            ctx.fillStyle = `rgba(255, 255, 0, ${opacity})`;
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+
+            // 计算方向向量
+            const dx = endX - startX;
+            const dy = endY - startY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const unitDx = dx / dist;
+            const unitDy = dy / dist;
+
+            // 计算箭头尖端当前位置
+            const tipX = startX + unitDx * dist * progress;
+            const tipY = startY + unitDy * dist * progress;
+
+            // 计算箭头尾部当前位置
+            const tailX = tipX - unitDx * arrowLength;
+            const tailY = tipY - unitDy * arrowLength;
+
+            // 绘制箭头主体
+            ctx.beginPath();
+            ctx.moveTo(tailX, tailY);
+            ctx.lineTo(tipX, tipY);
+            ctx.stroke();
+
+            // 绘制箭头头部
+            const angle = Math.atan2(unitDy, unitDx); // 箭头的方向角度
+
+            ctx.beginPath();
+            ctx.moveTo(tipX, tipY);
+            // 箭头头部两翼
+            ctx.lineTo(tipX - headLength * Math.cos(angle - Math.PI / 6), tipY - headLength * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(tipX, tipY);
+            ctx.lineTo(tipX - headLength * Math.cos(angle + Math.PI / 6), tipY - headLength * Math.sin(angle + Math.PI / 6));
+            ctx.stroke();
+            ctx.fill();
+        }
+
+        /**
+         * 绘制围绕污渍顺时针旋转的箭头。
+         * @param {CanvasRenderingContext2D} ctx - Canvas 2D 渲染上下文。
+         * @param {number} centerX - 污渍中心 X 坐标。
+         * @param {number} centerY - 污渍中心 Y 坐标。
+         * @param {number} radius - 污渍半径。
+         * @param {number} angle - 箭头的当前旋转角度。
+         */
+        function drawCircularArrow(ctx, centerX, centerY, radius, angle) {
+            ctx.strokeStyle = 'green'; // 绿色
+            ctx.fillStyle = 'green';
+            ctx.lineWidth = 5;
+
+            const headLength = 20;     // 箭头头部的长度
+            const arcSpan = Math.PI * 1.5; // 弧形长度 (270度)
+
+            // 顺时针旋转: 弧形从 `angle` 开始，到 `angle - arcSpan` 结束
+            const arcStartAngle = angle;
+            const arcEndAngle = angle - arcSpan;
+
+            // 绘制弧形 (最后一个参数 true 表示逆时针，false 或省略表示顺时针)
+            ctx.beginPath();
+            // 在这里，如果 arcStartAngle > arcEndAngle, 且 counterclockwise = false, 会画出顺时针的长弧
+            ctx.arc(centerX, centerY, radius + 20, arcStartAngle, arcEndAngle, false);
+            ctx.stroke();
+
+            // 绘制箭头头部
+            // 箭头尖端位于弧形的终点
+            const tipX = centerX + (radius + 20) * Math.cos(arcEndAngle);
+            const tipY = centerY + (radius + 20) * Math.sin(arcEndAngle);
+
+            // 箭头方向应与圆弧的切线方向一致，并指向顺时针方向
+            // 在 arcEndAngle 处的切线方向为 arcEndAngle - Math.PI / 2 (对于顺时针)
+            const arrowOrientationAngle = arcEndAngle - Math.PI / 2;
+
+            ctx.beginPath();
+            ctx.moveTo(tipX, tipY);
+            // 箭头头部两翼
+            ctx.lineTo(tipX - headLength * Math.cos(arrowOrientationAngle - Math.PI / 6), tipY - headLength * Math.sin(arrowOrientationAngle - Math.PI / 6));
+            ctx.moveTo(tipX, tipY);
+            ctx.lineTo(tipX - headLength * Math.cos(arrowOrientationAngle + Math.PI / 6), tipY - headLength * Math.sin(arrowOrientationAngle + Math.PI / 6));
+            ctx.stroke();
+            ctx.fill();
+        }
+
+        // --- 动画主循环 ---
+        function animate(currentTime) {
+            // 计算时间差 (deltaTime) 以实现帧率无关的动画
+            if (!lastTime) lastTime = currentTime;
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // 清空 Canvas
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // 绘制游戏元素 (占位符)
+            drawTool(ctx, toolPosition.x, toolPosition.y);
+            drawStain(ctx, stainPosition.x, stainPosition.y, stainRadius);
+
+            phaseTimer += deltaTime; // 更新阶段计时器
+
+            switch (currentPhase) {
+                case AnimationPhase.DRAG_ARROW:
+                    // 更新拖拽箭头进度
+                    dragArrowProgress += dragArrowSpeed * deltaTime;
+                    if (dragArrowProgress > 1) {
+                        dragArrowProgress = 0; // 进度超过 1 后重置，实现循环出现和移动
+                    }
+                    drawDragArrow(ctx, toolPosition.x, toolPosition.y, stainPosition.x, stainPosition.y, dragArrowProgress);
+
+                    // 检查阶段时间，如果到达则切换到下一个阶段
+                    if (phaseTimer >= dragPhaseDuration) {
+                        currentPhase = AnimationPhase.CIRCULAR_ARROW;
+                        phaseTimer = 0; // 重置计时器
+                        circularArrowAngle = 0; // 切换时重置环绕箭头角度
+                    }
+                    break;
+
+                case AnimationPhase.CIRCULAR_ARROW:
+                    // 更新环绕箭头角度
+                    circularArrowAngle += circularArrowSpeed * deltaTime;
+                    // 保持角度在 0 到 2PI 之间，防止过大
+                    if (circularArrowAngle < -Math.PI * 2) {
+                        circularArrowAngle += Math.PI * 2;
+                    }
+                    drawCircularArrow(ctx, stainPosition.x, stainPosition.y, stainRadius + 10, circularArrowAngle);
+
+                    // 检查阶段时间，如果到达则切换到下一个阶段
+                    if (phaseTimer >= circularPhaseDuration) {
+                        currentPhase = AnimationPhase.DRAG_ARROW;
+                        phaseTimer = 0; // 重置计时器
+                        dragArrowProgress = 0; // 切换时重置拖拽箭头进度
+                    }
+                    break;
+            }
+
+            requestAnimationFrame(animate); // 请求下一帧动画
+        }
+
+        // 调整窗口大小时重新设置 Canvas 尺寸
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // 重新计算元素位置 (如果需要)
+            toolPosition.x = canvas.width / 2;
+            toolPosition.y = canvas.height * 0.7;
+            stainPosition.x = canvas.width * 0.7;
+            stainPosition.y = canvas.height * 0.4;
         });
-        
-        // 初始星星
-        for (let i = 0; i < 30; i++) {
-          this.createStar();
-        }
-      }
-      
-      resize() {
-        const maxWidth = Math.min(500, window.innerWidth * 0.9);
-        const maxHeight = Math.min(400, window.innerHeight * 0.8);
-        
-        this.width = maxWidth;
-        this.height = maxHeight;
-        this.canvas.width = maxWidth;
-        this.canvas.height = maxHeight;
-        
-        // 重新定位弹窗
-        this.canvas.style.width = `${maxWidth}px`;
-        this.canvas.style.height = `${maxHeight}px`;
-      }
-      
-      createStar() {
-        const x = Math.random() * this.width;
-        const y = this.height * 0.3 + Math.random() * this.height * 0.2;
-        this.stars.push(new StarParticle(x, y));
-      }
-      
-      handleMouseMove(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        // 检测是否在按钮上
-        const buttonY = this.height * 0.85;
-        const buttonWidth = this.width * 0.8;
-        const buttonHeight = this.height * 0.12;
-        const buttonX = (this.width - buttonWidth) / 2;
-        
-        this.buttonHover = (
-          x >= buttonX && 
-          x <= buttonX + buttonWidth && 
-          y >= buttonY && 
-          y <= buttonY + buttonHeight
-        );
-      }
-      
-      handleClick(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        // 检测按钮点击
-        const buttonY = this.height * 0.85;
-        const buttonWidth = this.width * 0.8;
-        const buttonHeight = this.height * 0.12;
-        const buttonX = (this.width - buttonWidth) / 2;
-        
-        if (this.buttonHover && x >= buttonX && x <= buttonX + buttonWidth && y >= buttonY && y <= buttonY + buttonHeight) {
-          this.closePopup();
-        }
-      }
-      
-      closePopup() {
-        const popupContainer = document.getElementById('popupContainer');
-        popupContainer.classList.remove('show');
-        
-        // 2秒后重置
-        setTimeout(() => {
-          if (this.animationFrame) {
-            cancelAnimationFrame(this.animationFrame);
-          }
-          this.stars = [];
-          for (let i = 0; i < 30; i++) {
-            this.createStar();
-          }
-          this.scale = 0;
-        }, 300);
-      }
-      
-      update(timestamp) {
-        if (!this.lastTime) this.lastTime = timestamp;
-        const deltaTime = timestamp - this.lastTime;
-        this.lastTime = timestamp;
-        
-        // 创建新星星
-        if (Math.random() > 0.8) {
-          this.createStar();
-        }
-        
-        // 更新星星
-        for (let i = this.stars.length - 1; i >= 0; i--) {
-          this.stars[i].update();
-          if (this.stars[i].isOffScreen(this.height)) {
-            this.stars.splice(i, 1);
-          }
-        }
-        
-        // 动画缩放效果
-        if (this.scale < 1) {
-          this.scale += 0.05;
-        }
-        
-        this.draw();
-        this.animationFrame = requestAnimationFrame((time) => this.update(time));
-      }
-      
-      draw() {
-        const ctx = this.ctx;
-        ctx.clearRect(0, 0, this.width, this.height);
-        
-        // 整体缩放动画
-        ctx.save();
-        ctx.translate(this.width / 2, this.height / 2);
-        ctx.scale(this.scale, this.scale);
-        ctx.translate(-this.width / 2, -this.height / 2);
-        
-        // 1. 绘制弹窗背景
-        const popupPadding = this.width * 0.08;
-        const popupWidth = this.width - popupPadding * 2;
-        const popupHeight = this.height - popupPadding * 2;
-        const popupX = popupPadding;
-        const popupY = popupPadding;
-        const popupRadius = 24;
-        
-        // 阴影
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-        ctx.shadowBlur = 30;
-        ctx.shadowOffsetY = 10;
-        
-        // 弹窗背景
-        ctx.fillStyle = 'white';
-        this.drawRoundedRect(ctx, popupX, popupY, popupWidth, popupHeight, popupRadius);
-        ctx.fill();
-        
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        
-        // 2. 顶部星星装饰区域
-        const headerHeight = this.height * 0.25;
-        const headerY = popupY;
-        
-        // 顶部渐变背景
-        const headerGrad = ctx.createLinearGradient(popupX, headerY, popupX, headerY + headerHeight);
-        headerGrad.addColorStop(0, '#ff9a9e');
-        headerGrad.addColorStop(0.5, '#fad0c4');
-        headerGrad.addColorStop(1, '#fbc2eb');
-        
-        ctx.fillStyle = headerGrad;
-        this.drawRoundedRect(ctx, popupX, headerY, popupWidth, headerHeight, popupRadius);
-        ctx.fill();
-        
-        // 3. 标题
-        ctx.fillStyle = '#8b4513';
-        ctx.font = `bold ${Math.floor(this.width * 0.08)}px 'Arial', sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('🎉 获得新工具！', this.width / 2, headerY + headerHeight / 2);
-        
-        // 4. 工具卡片
-        const cardWidth = popupWidth * 0.7;
-        const cardHeight = popupHeight * 0.4;
-        const cardX = popupX + (popupWidth - cardWidth) / 2;
-        const cardY = headerY + headerHeight + popupPadding * 0.5;
-        
-        // 卡片背景
-        ctx.fillStyle = '#fff8dc';
-        ctx.strokeStyle = '#d4af37';
-        ctx.lineWidth = 3;
-        this.drawRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 16);
-        ctx.fill();
-        ctx.stroke();
-        
-        // 卡片阴影
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetY = 5;
-        ctx.fillStyle = 'rgba(0,0,0,0.05)';
-        this.drawRoundedRect(ctx, cardX + 5, cardY + 5, cardWidth - 10, cardHeight - 10, 12);
-        ctx.fill();
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        
-        // 绘制工具图标（海绵）
-        const toolSize = Math.min(cardWidth * 0.6, cardHeight * 0.6);
-        const toolX = cardX + cardWidth / 2;
-        const toolY = cardY + cardHeight / 2;
-        
-        // 海绵主体
-        ctx.fillStyle = '#ffd700';
-        ctx.beginPath();
-        ctx.ellipse(toolX, toolY, toolSize * 0.6, toolSize * 0.4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // 海绵细节
-        ctx.fillStyle = '#ffcc00';
-        ctx.beginPath();
-        ctx.ellipse(toolX - toolSize * 0.15, toolY - toolSize * 0.05, toolSize * 0.2, toolSize * 0.15, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.fillStyle = '#ffaa00';
-        ctx.beginPath();
-        ctx.ellipse(toolX + toolSize * 0.15, toolY + toolSize * 0.05, toolSize * 0.15, toolSize * 0.12, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // 5. 按钮
-        const buttonWidth = popupWidth * 0.8;
-        const buttonHeight = this.height * 0.12;
-        const buttonX = popupX + (popupWidth - buttonWidth) / 2;
-        const buttonY = popupY + popupHeight - buttonHeight - popupPadding * 0.5;
-        
-        // 按钮状态
-        const buttonColor = this.buttonActive ? '#e0b34a' : (this.buttonHover ? '#f5c542' : '#ffd700');
-        const buttonShadow = this.buttonActive ? 2 : 4;
-        
-        // 按钮阴影
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
-        ctx.shadowBlur = 15;
-        ctx.shadowOffsetY = buttonShadow;
-        
-        // 按钮背景
-        ctx.fillStyle = buttonColor;
-        this.drawRoundedRect(ctx, buttonX, buttonY, buttonWidth, buttonHeight, 18);
-        ctx.fill();
-        
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        
-        // 按钮边框
-        ctx.strokeStyle = '#8b4513';
-        ctx.lineWidth = 3;
-        this.drawRoundedRect(ctx, buttonX, buttonY, buttonWidth, buttonHeight, 18);
-        ctx.stroke();
-        
-        // 按钮文字
-        ctx.fillStyle = '#8b4513';
-        ctx.font = `bold ${Math.floor(this.width * 0.06)}px 'Arial', sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('✨ 收 取 ✨', buttonX + buttonWidth / 2, buttonY + buttonHeight / 2);
-        
-        // 6. 绘制所有星星
-        for (const star of this.stars) {
-          star.draw(ctx);
-        }
-        
-        ctx.restore();
-      }
-      
-      drawRoundedRect(ctx, x, y, width, height, radius) {
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.arcTo(x + width, y, x + width, y + height, radius);
-        ctx.arcTo(x + width, y + height, x, y + height, radius);
-        ctx.arcTo(x, y + height, x, y, radius);
-        ctx.arcTo(x, y, x + width, y, radius);
-        ctx.closePath();
-      }
-      
-      show() {
-        this.scale = 0;
-        this.animationFrame = requestAnimationFrame((time) => this.update(time));
-      }
-    }
 
-    // 初始化
-    document.addEventListener('DOMContentLoaded', () => {
-      const popupContainer = document.getElementById('popupContainer');
-      const popupCanvas = document.getElementById('popupCanvas');
-      const showPopupBtn = document.getElementById('showPopup');
-      
-      // 创建弹窗实例
-      const popup = new Popup(popupCanvas);
-      
-      // 显示弹窗
-      showPopupBtn.addEventListener('click', () => {
-        popupContainer.classList.add('show');
-        setTimeout(() => {
-          popup.show();
-        }, 100);
-      });
-      
-      // 点击遮罩关闭
-      popupContainer.addEventListener('click', (e) => {
-        if (e.target === popupContainer) {
-          popup.closePopup();
-        }
-      });
-    });
-  </script>
+        // 启动动画
+        animate(0);
+
+        // --- 如何集成到您的游戏逻辑中 ---
+        // 1. 在新手引导开始时调用 `animate(0)` 来启动引导动画。
+        // 2. 当玩家成功执行了拖拽操作（例如，工具被拖拽到污渍上）时：
+        //    * 可以设置一个全局的 `isGuiding = false;` 变量。
+        //    * 在 `animate` 函数内部，在 `requestAnimationFrame(animate)` 调用前检查 `if (isGuiding)`。
+        //    * 停止引导时，需要调用 `ctx.clearRect(0, 0, canvas.width, canvas.height);` 来清除引导动画。
+        //    * 确保在停止引导时，不会再次调用 `requestAnimationFrame`。
+    </script>
 </body>
 </html>
 ```

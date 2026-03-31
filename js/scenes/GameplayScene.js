@@ -22,6 +22,7 @@ import PauseMenu from '../ui/dialogs/PauseMenu';
 import LevelCompleteDialog from '../ui/dialogs/LevelCompleteDialog';
 import SettlementDialog from '../ui/dialogs/SettlementDialog';
 import ToolUnlockDialog from '../ui/dialogs/ToolUnlockDialog';
+import { GlobalFingerImageCache } from './LoadingScene';
 import haptic from '../utils/HapticFeedback';
 
 class GameplayScene extends Scene {
@@ -95,6 +96,18 @@ class GameplayScene extends Scene {
     // 本关新解锁的工具列表
     this.newUnlockedTools = [];
     
+    // 新手引导状态
+    this.tutorial = {
+      isActive: false,        // 是否正在引导中
+      step: 0,                // 当前步骤：0=未开始, 1=选工具, 2=选污垢, 3=完成
+      targetToolId: null,     // 目标工具ID
+      targetDirtId: null,     // 目标污垢ID
+      handAnim: {             // 小手动画状态
+        offset: 0,
+        time: 0
+      }
+    };
+    
     // 云存储
     this.cloudStorage = new CloudStorage();
   }
@@ -128,8 +141,12 @@ class GameplayScene extends Scene {
     this._generateDirts();
     await this._loadBackground();
     
-    // 如果有新解锁的工具，显示解锁弹窗
-    if (this.newUnlockedTools && this.newUnlockedTools.length > 0) {
+    // 检查是否需要显示新手引导（第一关且未完成引导）
+    // 注意：必须在 _generateDirts 之后调用，因为需要污垢数据
+    this._checkTutorial();
+    
+    // 如果有新解锁的工具，显示解锁弹窗（在引导之后）
+    if (this.newUnlockedTools && this.newUnlockedTools.length > 0 && !this.tutorial.isActive) {
       this._showToolUnlockDialog();
     }
   }
@@ -191,6 +208,68 @@ class GameplayScene extends Scene {
     });
   }
 
+  /**
+   * 检查是否需要显示新手引导
+   * 条件：第一关 + 新玩家 + 未展示过引导
+   */
+  _checkTutorial() {
+    // 只有第一关才显示引导
+    if (this.levelId !== 1) return;
+    
+    const game = getGame();
+    const dataManager = game ? game.dataManager : null;
+    
+    // 检查是否已完成引导
+    if (dataManager && dataManager.hasCompletedTutorial) {
+      if (dataManager.hasCompletedTutorial()) return;
+    } else {
+      // 降级检查：使用本地存储
+      try {
+        const hasShown = wx.getStorageSync('tutorial_completed');
+        if (hasShown) return;
+      } catch (e) {
+        // 忽略错误
+      }
+    }
+    
+    // 找到第一个 paper 类型的污垢作为目标
+    const paperDirt = this.dirtObjects.find(d => d.type === 'paper');
+    if (!paperDirt) {
+      console.warn('[GameplayScene] 未找到 paper 类型污垢，无法开启引导');
+      return;
+    }
+    
+    // 开启引导
+    console.log('[GameplayScene] 开启新手引导，目标污垢:', paperDirt.id);
+    this.tutorial.isActive = true;
+    this.tutorial.step = 1; // 第一步：选择工具
+    this.tutorial.targetToolId = 'rubbish_bin';
+    this.tutorial.targetDirtId = paperDirt.id;
+  }
+  
+  /**
+   * 完成新手引导
+   */
+  _completeTutorial() {
+    console.log('[GameplayScene] 完成新手引导');
+    this.tutorial.isActive = false;
+    this.tutorial.step = 3;
+    
+    const game = getGame();
+    const dataManager = game ? game.dataManager : null;
+    
+    // 保存引导完成状态
+    if (dataManager && dataManager.setTutorialCompleted) {
+      dataManager.setTutorialCompleted();
+    } else {
+      try {
+        wx.setStorageSync('tutorial_completed', true);
+      } catch (e) {
+        // 忽略错误
+      }
+    }
+  }
+  
   /**
    * 检查当前关卡新解锁的工具
    * unlockLevel === 当前关卡ID 的工具
@@ -710,6 +789,220 @@ class GameplayScene extends Scene {
   }
   
   /**
+   * 更新新手引导动画
+   */
+  _updateTutorial(dt) {
+    if (!this.tutorial.isActive) return;
+    
+    // 更新小手摆动动画（正弦波，周期2秒）
+    this.tutorial.handAnim.time += dt;
+    this.tutorial.handAnim.offset = Math.sin(this.tutorial.handAnim.time * 0.003) * 10;
+  }
+  
+  /**
+   * 渲染新手引导UI（主入口，在 onRender 中调用）
+   * 注意：步骤1和步骤2的具体渲染已移到 _renderRoomView 中，
+   * 这里只处理需要在弹窗层之前显示的内容
+   */
+  _renderTutorial(ctx, s) {
+    if (!this.tutorial.isActive) return;
+    
+    // 调试信息（开发调试用）
+    ctx.save();
+    ctx.fillStyle = '#FF0000';
+    ctx.font = `bold ${16 * s}px Arial`;
+    ctx.textAlign = 'left';
+    ctx.fillText(`引导步骤: ${this.tutorial.step}, targetDirt: ${this.tutorial.targetDirtId}`, 10 * s, 200 * s);
+    ctx.restore();
+  }
+  
+  /**
+   * 渲染工具槽位高亮引导
+   * 白色3px光圈，向外扩散波纹效果
+   */
+  _renderTutorialToolHighlight(ctx, s) {
+    // 只在步骤1渲染工具高亮
+    if (this.tutorial.step !== 1) return;
+    
+    // 找到目标工具的槽位索引
+    const toolIndex = this.tools.findIndex(t => t.id === this.tutorial.targetToolId);
+    if (toolIndex === -1 || !this.toolSlot) return;
+    
+    const slotPos = this.toolSlot.slotPositions[toolIndex];
+    if (!slotPos) return;
+    
+    const { x, y, size } = slotPos;
+    const centerX = x + size / 2;
+    const centerY = y + size / 2;
+    const baseRadius = size / 2 + 5 * s;
+    
+    console.log('[GameplayScene] 引导：渲染工具高亮', { toolIndex, centerX, centerY, baseRadius });
+    
+    // 波纹扩散动画（周期2秒，更慢更柔和）
+    const cycle = 2000;
+    const progress = (this.tutorial.handAnim.time % cycle) / cycle;
+    
+    ctx.save();
+    ctx.lineWidth = 4 * s; // 加粗1px
+    
+    // 绘制2层向外扩散的白色波纹（减弱：层数减少，扩散距离减小）
+    for (let i = 0; i < 2; i++) {
+      const ringProgress = (progress + i * 0.5) % 1; // 每层错开50%
+      const radius = baseRadius + ringProgress * 12 * s; // 向外扩散12px（减小）
+      const alpha = (1 - ringProgress) * 0.4; // 越外越透明，最大透明度降低
+      
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
+      ctx.shadowBlur = 6 * s; // 发光减弱
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    
+    // 中心固定白圈
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.shadowBlur = 10 * s;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.restore();
+    
+    // 绘制手指（在槽位上方，指尖向下指向槽位）
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.004) * 6;
+    this._renderHandBig(ctx, s, centerX, y - 10 * s, handOffset, false);
+  }
+  
+  /**
+   * 渲染污垢高亮引导
+   * 白色3px光圈，向外扩散波纹效果
+   */
+  _renderTutorialDirtHighlight(ctx, s) {
+    // 只在步骤2渲染污垢高亮
+    if (this.tutorial.step !== 2) return;
+    
+    // 找到目标污垢
+    const dirt = this.dirtObjects.find(d => d.id === this.tutorial.targetDirtId);
+    if (!dirt || dirt.state === 'clean') {
+      console.log('[GameplayScene] 引导：目标污垢不存在或已清理');
+      return;
+    }
+    
+    const gameAreaY = this.screenHeight * 0.08;
+    const cx = dirt.x;
+    const cy = dirt.y + gameAreaY;
+    const baseRadius = dirt.size / 2 + 20 * s;
+    
+    console.log('[GameplayScene] 引导：渲染污垢高亮', { cx, cy, baseRadius, dirtSize: dirt.size, id: dirt.id });
+    
+    // 小手摆动偏移
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.004) * 8;
+    
+    // 波纹扩散动画（周期2秒，更慢更柔和）
+    const cycle = 2000;
+    const progress = (this.tutorial.handAnim.time % cycle) / cycle;
+    
+    ctx.save();
+    ctx.lineWidth = 4 * s; // 加粗1px
+    
+    // 绘制2层向外扩散的白色波纹（减弱：层数减少，扩散距离减小）
+    for (let i = 0; i < 2; i++) {
+      const ringProgress = (progress + i * 0.5) % 1; // 每层错开50%
+      const radius = baseRadius + ringProgress * 15 * s; // 向外扩散15px（减小）
+      const alpha = (1 - ringProgress) * 0.4; // 越外越透明，最大透明度降低
+      
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
+      ctx.shadowBlur = 6 * s; // 发光减弱
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    
+    // 中心固定白圈
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.shadowBlur = 10 * s;
+    ctx.beginPath();
+    ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.restore();
+    
+    // 绘制手指（在污垢下方，指尖向上指向污垢）
+    this._renderHandBig(ctx, s, cx, cy + baseRadius + 70 * s, handOffset, true);
+  }
+  
+  /**
+   * 绘制小手emoji（带摆动动画）
+   */
+  _renderHand(ctx, s, x, y) {
+    const handOffset = this.tutorial.handAnim.offset || 0;
+    
+    ctx.save();
+    ctx.font = `bold ${36 * s}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // 阴影
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fillText('👆', x + 2 * s, y + handOffset + 2 * s);
+    
+    // 主图
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('👆', x, y + handOffset);
+    
+    ctx.restore();
+  }
+  
+  /**
+   * 绘制手指引导图片（带摆动动画）
+   * 使用预加载的手指图片替代emoji
+   * @param {boolean} pointUp - 是否指尖朝上（默认朝下）
+   */
+  _renderHandBig(ctx, s, x, y, offset = 0, pointUp = false) {
+    const fingerImg = GlobalFingerImageCache.get();
+    
+    if (fingerImg) {
+      // 使用手指图片
+      const size = 70 * s; // 手指图片大小（加大）
+      
+      ctx.save();
+      
+      // 绘制阴影
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.beginPath();
+      ctx.ellipse(x + 4 * s, y + offset + 4 * s, size / 3, size / 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      if (pointUp) {
+        // 指尖朝上：旋转180度
+        ctx.translate(x, y + offset);
+        ctx.rotate(Math.PI);
+        ctx.drawImage(fingerImg, -size / 2, -size, size, size);
+      } else {
+        // 指尖朝下（默认）：不旋转
+        ctx.drawImage(fingerImg, x - size / 2, y + offset - size, size, size);
+      }
+      
+      ctx.restore();
+    } else {
+      // 降级：使用emoji
+      ctx.save();
+      ctx.font = `bold ${56 * s}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillText('👆', x + 3 * s, y + offset + 3 * s);
+      
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText('👆', x, y + offset);
+      
+      ctx.restore();
+    }
+  }
+  
+  /**
    * 渲染结算弹窗
    */
   _renderSettlementDialog(ctx) {
@@ -921,6 +1214,9 @@ class GameplayScene extends Scene {
     
     const s = this.screenWidth / 750;
     
+    // 更新新手引导动画
+    this._updateTutorial(deltaTime);
+    
     // 更新按钮
     if (this.backBtn) this.backBtn.update(deltaTime);
     if (this.winBtn) this.winBtn.update(deltaTime);
@@ -1046,6 +1342,9 @@ class GameplayScene extends Scene {
     // 绘制亮晶晶特效（清洁完成后的闪烁效果）
     this._renderShineEffects(ctx);
     
+    // 渲染新手引导（调试用，实际步骤1和步骤2已在 _renderRoomView 中渲染）
+    this._renderTutorial(ctx, s);
+    
     // 渲染工具解锁弹窗
     this._renderToolUnlockDialog(ctx);
     
@@ -1094,6 +1393,11 @@ class GameplayScene extends Scene {
     
     // 3. 绘制污垢圆圈（y 坐标相对于游戏区域）
     this._renderDirts(ctx, gameAreaY, s);
+    
+    // 3.5 渲染新手引导（在污垢之上，确保光圈可见）
+    if (this.tutorial.isActive && this.tutorial.step === 2) {
+      this._renderTutorialDirtHighlight(ctx, s);
+    }
 
     // 4. 绘制底部 10% 浅棕黄色背景（工具槽区域）
     ctx.fillStyle = lightBrown;
@@ -1111,6 +1415,11 @@ class GameplayScene extends Scene {
     // 6. 绘制 ToolSlot 组件（在底部区域）
     if (this.toolSlot) {
       this.toolSlot.render(ctx);
+    }
+    
+    // 6.5 渲染新手引导步骤1（工具高亮，在工具槽之上）
+    if (this.tutorial.isActive && this.tutorial.step === 1) {
+      this._renderTutorialToolHighlight(ctx, s);
     }
   }
 
@@ -1437,14 +1746,10 @@ class GameplayScene extends Scene {
           ctx.translate(x * 2, 0);
           ctx.scale(-1, 1);
         }
-        // 绘制阴影
-        ctx.drawImage(toolImage, drawX + 2, drawY + 2, drawWidth, drawHeight);
         // 绘制主图
         ctx.drawImage(toolImage, drawX, drawY, drawWidth, drawHeight);
         ctx.restore();
       } else {
-        // 绘制阴影
-        ctx.drawImage(toolImage, drawX + 2, drawY + 2, drawWidth, drawHeight);
         // 绘制主图
         ctx.drawImage(toolImage, drawX, drawY, drawWidth, drawHeight);
       }
@@ -2281,6 +2586,14 @@ class GameplayScene extends Scene {
     if (dirt.isFlying) return; // 防止重复点击
     dirt.isFlying = true;
     
+    // 新手引导：检查是否点击了正确的污垢
+    if (this.tutorial.isActive && this.tutorial.step === 2) {
+      if (dirt.id === this.tutorial.targetDirtId) {
+        console.log('[GameplayScene] 引导：已选中目标污垢，完成引导');
+        this._completeTutorial();
+      }
+    }
+    
     const s = this.screenWidth / 750; // 屏幕缩放比例
     const baseSize = 60 * s; // 基础尺寸
     
@@ -2414,6 +2727,7 @@ class GameplayScene extends Scene {
    * 选择工具时回调
    */
   _selectTool(index) {
+    const tool = this.tools[index];
     this.currentToolIndex = index;
     
     // 同步更新 ToolSlot 组件
@@ -2428,6 +2742,15 @@ class GameplayScene extends Scene {
     
     // 点击工具槽直接弹出活动工具（不再依赖选中的圆圈）
     this._spawnTool();
+    
+    // 新手引导：检查是否选中了正确的工具
+    if (this.tutorial.isActive && this.tutorial.step === 1) {
+      console.log('[GameplayScene] 引导：检查工具选择', { toolId: tool?.id, target: this.tutorial.targetToolId });
+      if (tool && tool.id === this.tutorial.targetToolId) {
+        console.log('[GameplayScene] 引导：已选中正确工具，进入步骤2');
+        this.tutorial.step = 2; // 进入第二步：选择污垢
+      }
+    }
     
     this.showToolTip = true;
     // 重置提示框定时器

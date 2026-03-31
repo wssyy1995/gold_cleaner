@@ -32,7 +32,9 @@ class DataManager {
       // 完成的关卡
       completedLevels: [],
       // 最高星级记录
-      levelStars: {}
+      levelStars: {},
+      // 是否完成新手引导
+      tutorialCompleted: false
     };
 
     // 游戏设置
@@ -363,6 +365,25 @@ class DataManager {
     this.save();
     globalEvent.emit('data:itemChanged', itemId, this.items[itemId] || 0);
     return true;
+  }
+
+  // ============== 新手引导 ==============
+
+  /**
+   * 检查是否已完成新手引导
+   * @returns {boolean}
+   */
+  hasCompletedTutorial() {
+    return this.userData.tutorialCompleted || false;
+  }
+
+  /**
+   * 设置新手引导已完成
+   */
+  setTutorialCompleted() {
+    this.userData.tutorialCompleted = true;
+    this.save();
+    console.log('[DataManager] 新手引导已完成');
   }
 }
 

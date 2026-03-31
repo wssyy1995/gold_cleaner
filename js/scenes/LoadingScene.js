@@ -14,6 +14,14 @@ import { getAllDirtTypes, GlobalDirtImageCache } from '../config/dirtyConfig';
 import { ALL_TOOLS, GlobalToolImageCache } from '../config/ToolConfig';
 import { GlobalPreviewCache } from './HomeScene';
 
+// 全局手指引导图片缓存
+export const GlobalFingerImageCache = {
+  _image: null,
+  set(img) { this._image = img; },
+  get() { return this._image; },
+  has() { return !!this._image; }
+};
+
 class LoadingScene extends Scene {
   constructor() {
     super({ name: 'LoadingScene' });
@@ -50,6 +58,10 @@ class LoadingScene extends Scene {
       bag: { fileID: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_bottom_bag.png', img: null, loaded: false },
       setting: { fileID: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg_bottom_setting.png', img: null, loaded: false }
     };
+    
+    // 预加载手指引导图片
+    this.fingerImage = null;
+    this.fingerImageLoaded = false;
     
     // 需要加载的资源列表
     this.resourcesToLoad = [];
@@ -467,6 +479,10 @@ class LoadingScene extends Scene {
     this.loadingText = '准备主页...';
     await this._preloadHomeBackground();
     
+    // 预加载手指引导图片
+    this.loadingText = '准备指引...';
+    await this._preloadFingerImage();
+    
     // 只要有部分资源加载成功就继续
     if (successCount > 0 || this.homeBgLoaded) {
       console.log(`[LoadingScene] 资源加载完成，成功:${successCount} 失败:${failCount} 主页背景:${this.homeBgLoaded}`);
@@ -541,6 +557,29 @@ class LoadingScene extends Scene {
       } catch (e) {
         console.warn(`[LoadingScene] 底部按钮加载失败: ${key}`, e.message);
       }
+    }
+  }
+  
+  /**
+   * 预加载手指引导图片
+   */
+  async _preloadFingerImage() {
+    if (typeof wx === 'undefined') return;
+    
+    try {
+      const fileID = 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/icon/ui_icon_finger.png';
+      const tempURL = await this.cloudStorage.getTempFileURL(fileID);
+      if (tempURL) {
+        this.fingerImage = await this._downloadImage(tempURL);
+        this.fingerImageLoaded = true;
+        console.log('[LoadingScene] 手指引导图片加载成功');
+        
+        // 保存到全局缓存供其他场景使用
+        GlobalFingerImageCache.set(this.fingerImage);
+      }
+    } catch (e) {
+      console.warn('[LoadingScene] 手指引导图片加载失败:', e.message);
+      this.fingerImageLoaded = false;
     }
   }
   

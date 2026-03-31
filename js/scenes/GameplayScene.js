@@ -838,30 +838,30 @@ class GameplayScene extends Scene {
     
     console.log('[GameplayScene] 引导：渲染工具高亮', { toolIndex, centerX, centerY, baseRadius });
     
-    // 波纹扩散动画（周期2秒，更慢更柔和）
-    const cycle = 2000;
+    // 波纹扩散动画（周期1.75秒，折中）
+    const cycle = 1750;
     const progress = (this.tutorial.handAnim.time % cycle) / cycle;
     
     ctx.save();
-    ctx.lineWidth = 4 * s; // 加粗1px
+    ctx.lineWidth = 4 * s;
     
-    // 绘制2层向外扩散的白色波纹（减弱：层数减少，扩散距离减小）
-    for (let i = 0; i < 2; i++) {
-      const ringProgress = (progress + i * 0.5) % 1; // 每层错开50%
-      const radius = baseRadius + ringProgress * 12 * s; // 向外扩散12px（减小）
-      const alpha = (1 - ringProgress) * 0.4; // 越外越透明，最大透明度降低
+    // 绘制3层向外扩散的白色波纹（折中）
+    for (let i = 0; i < 3; i++) {
+      const ringProgress = (progress + i * 0.33) % 1; // 每层错开33%
+      const radius = baseRadius + ringProgress * 16 * s; // 向外扩散16px（折中）
+      const alpha = (1 - ringProgress) * 0.6; // 越外越透明，最大透明度0.6（折中）
       
       ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
-      ctx.shadowBlur = 6 * s; // 发光减弱
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+      ctx.shadowBlur = 8 * s; // 发光折中
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       ctx.stroke();
     }
     
     // 中心固定白圈
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.shadowBlur = 10 * s;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.shadowBlur = 12 * s;
     ctx.beginPath();
     ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
     ctx.stroke();
@@ -869,7 +869,7 @@ class GameplayScene extends Scene {
     ctx.restore();
     
     // 绘制手指（在槽位上方，指尖向下指向槽位）
-    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.004) * 6;
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 6; // 频率加快
     this._renderHandBig(ctx, s, centerX, y - 10 * s, handOffset, false);
   }
   
@@ -895,33 +895,33 @@ class GameplayScene extends Scene {
     
     console.log('[GameplayScene] 引导：渲染污垢高亮', { cx, cy, baseRadius, dirtSize: dirt.size, id: dirt.id });
     
-    // 小手摆动偏移
-    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.004) * 8;
+    // 小手摆动偏移（频率加快）
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 8;
     
-    // 波纹扩散动画（周期2秒，更慢更柔和）
-    const cycle = 2000;
+    // 波纹扩散动画（周期1.75秒，折中）
+    const cycle = 1750;
     const progress = (this.tutorial.handAnim.time % cycle) / cycle;
     
     ctx.save();
-    ctx.lineWidth = 4 * s; // 加粗1px
+    ctx.lineWidth = 4 * s;
     
-    // 绘制2层向外扩散的白色波纹（减弱：层数减少，扩散距离减小）
-    for (let i = 0; i < 2; i++) {
-      const ringProgress = (progress + i * 0.5) % 1; // 每层错开50%
-      const radius = baseRadius + ringProgress * 15 * s; // 向外扩散15px（减小）
-      const alpha = (1 - ringProgress) * 0.4; // 越外越透明，最大透明度降低
+    // 绘制3层向外扩散的白色波纹（折中）
+    for (let i = 0; i < 3; i++) {
+      const ringProgress = (progress + i * 0.33) % 1; // 每层错开33%
+      const radius = baseRadius + ringProgress * 20 * s; // 向外扩散20px（折中）
+      const alpha = (1 - ringProgress) * 0.6; // 越外越透明，最大透明度0.6（折中）
       
       ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
-      ctx.shadowBlur = 6 * s; // 发光减弱
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+      ctx.shadowBlur = 8 * s; // 发光折中
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.stroke();
     }
     
     // 中心固定白圈
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.shadowBlur = 10 * s;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.shadowBlur = 12 * s;
     ctx.beginPath();
     ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
     ctx.stroke();
@@ -968,11 +968,7 @@ class GameplayScene extends Scene {
       
       ctx.save();
       
-      // 绘制阴影
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.beginPath();
-      ctx.ellipse(x + 4 * s, y + offset + 4 * s, size / 3, size / 6, 0, 0, Math.PI * 2);
-      ctx.fill();
+      // 不绘制阴影（用户要求去掉指尖阴影）
       
       if (pointUp) {
         // 指尖朝上：旋转180度

@@ -35,7 +35,7 @@ export const DIRT_TYPES = {
     imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_socks.png',
     color: '#8B4513', 
     difficulty: 1,
-    recipes: [['rubbish_bin']],
+    recipes: [['dc_basket']],
     operate_type: 'throw',
     scale: 1.5
   },

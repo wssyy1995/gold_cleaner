@@ -635,11 +635,11 @@ class HomeScene extends Scene {
       { x: 540, y: 1180 },
       { x: 450, y: 1120 },
       { x: 300, y: 1060 },
-      { x: 145, y: 1000 },
-      { x: 130, y: 800 },
-      { x: 530, y: 650 },
-      { x: 570, y: 500 },
-      { x: 610, y: 550 },
+      { x: 170, y: 1000 },
+      { x: 110, y: 800 },
+      { x: 480, y: 680 },
+      { x: 550, y: 600 },
+      { x: 630, y: 520 },
     ];
     
     // 获取 DataManager 中的解锁状态和星级
@@ -828,8 +828,8 @@ class HomeScene extends Scene {
     const availableWidth = screenW - 2 * margin;
     
     // 中间按钮稍微加大
-    const midWidth = btnWidth * 1.1;
-    const midHeight = btnHeight * 1.1;
+    const midWidth = btnWidth * 1.2;
+    const midHeight = btnHeight * 1.2;
     
     this.bottomButtons = [
       {

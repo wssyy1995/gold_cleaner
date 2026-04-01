@@ -112,7 +112,7 @@ class LoadingScene extends Scene {
   }
 
   /**
-   * 加载污垢图片资源
+   * 加载污垢图片资源（并行下载）
    * 直接从 dirtyConfig.js 中的 imgPath 加载
    */
   async _loadDirtImages() {
@@ -135,16 +135,17 @@ class LoadingScene extends Scene {
       return;
     }
     
-    console.log(`[LoadingScene] 开始加载 ${dirtImagesToLoad.length} 个污垢图片`);
+    console.log(`[LoadingScene] 开始并行加载 ${dirtImagesToLoad.length} 个污垢图片`);
     
-    // 加载每个污垢图片
-    for (const dirt of dirtImagesToLoad) {
-      try {
-        await this._loadDirtImage(dirt.type, dirt.imgPath);
-      } catch (e) {
+    // 并行加载所有污垢图片
+    const tasks = dirtImagesToLoad.map(dirt => 
+      this._loadDirtImage(dirt.type, dirt.imgPath).catch(e => {
         console.error(`[LoadingScene] 污垢图片加载失败: ${dirt.type}`, e.message);
-      }
-    }
+      })
+    );
+    
+    await Promise.allSettled(tasks);
+    console.log('[LoadingScene] 污垢图片并行加载完成');
   }
 
   /**
@@ -238,7 +239,7 @@ class LoadingScene extends Scene {
   }
 
   /**
-   * 加载工具图片资源
+   * 加载工具图片资源（并行下载）
    * 直接从 ToolConfig.js 中的 imgPath 加载
    */
   async _loadToolImages() {
@@ -258,16 +259,17 @@ class LoadingScene extends Scene {
       return;
     }
     
-    console.log(`[LoadingScene] 开始加载 ${toolImagesToLoad.length} 个工具图片`);
+    console.log(`[LoadingScene] 开始并行加载 ${toolImagesToLoad.length} 个工具图片`);
     
-    // 加载每个工具图片
-    for (const tool of toolImagesToLoad) {
-      try {
-        await this._loadToolImage(tool.toolId, tool.imgPath);
-      } catch (e) {
+    // 并行加载所有工具图片
+    const tasks = toolImagesToLoad.map(tool => 
+      this._loadToolImage(tool.toolId, tool.imgPath).catch(e => {
         console.error(`[LoadingScene] 工具图片加载失败: ${tool.toolId}`, e.message);
-      }
-    }
+      })
+    );
+    
+    await Promise.allSettled(tasks);
+    console.log('[LoadingScene] 工具图片并行加载完成');
   }
 
   /**
@@ -441,7 +443,7 @@ class LoadingScene extends Scene {
   }
 
   /**
-   * 从云存储批量下载图片
+   * 从云存储批量下载图片（并行下载）
    */
   async _startLoading() {
     const total = this.resourcesToLoad.length;
@@ -449,31 +451,36 @@ class LoadingScene extends Scene {
     let successCount = 0;
     let failCount = 0;
     
-    // 逐个下载图片（部分失败不影响整体）
-    for (const resource of this.resourcesToLoad) {
-      try {
-        await this._loadImageFromCloud(resource);
+    // 创建并行下载任务
+    const downloadTasks = this.resourcesToLoad.map(resource => {
+      return this._loadImageFromCloudWithProgress(resource, () => {
+        this.loadedCount++;
+        this.progress = this.loadedCount / total;
+        this._updateProgressUI();
+      });
+    });
+    
+    // 等待所有并行下载完成
+    const results = await Promise.allSettled(downloadTasks);
+    
+    // 统计结果
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
         successCount++;
-      } catch (error) {
-        // 单个失败不影响其他资源
-        console.warn(`[LoadingScene] 跳过失败资源: ${resource.key}`);
+      } else {
         failCount++;
+        console.warn(`[LoadingScene] 跳过失败资源: ${this.resourcesToLoad[index]?.key}`);
       }
-      
-      this.loadedCount++;
-      this.progress = this.loadedCount / total;
-      this._updateProgressUI();
-      
-      console.log(`[LoadingScene] 加载进度: ${this.loadedCount}/${total} (成功:${successCount} 失败:${failCount})`);
-    }
+    });
     
-    // 加载污垢图片
-    this.loadingText = '准备污垢资源...';
-    await this._loadDirtImages();
+    console.log(`[LoadingScene] PRELOAD资源加载完成: 成功${successCount} 失败${failCount}`);
     
-    // 加载工具图片
-    this.loadingText = '准备清洁工具...';
-    await this._loadToolImages();
+    // 并行加载污垢图片和工具图片
+    this.loadingText = '准备污垢和工具资源...';
+    await Promise.all([
+      this._loadDirtImages(),
+      this._loadToolImages()
+    ]);
     
     // 云存储资源加载完成后，预加载主页背景图（避免切换白屏）
     this.loadingText = '准备主页...';
@@ -495,8 +502,19 @@ class LoadingScene extends Scene {
   }
   
   /**
+   * 加载单个图片并触发进度回调
+   */
+  async _loadImageFromCloudWithProgress(resource, onProgress) {
+    try {
+      await this._loadImageFromCloud(resource);
+    } finally {
+      onProgress();
+    }
+  }
+  
+  /**
    * 预加载主页背景图（避免切换时白屏）
-   * 从云存储获取已下载的背景图
+   * 从云存储获取已下载的背景图，并行加载预览图和底部按钮
    */
   async _preloadHomeBackground() {
     if (typeof wx === 'undefined') return;
@@ -525,11 +543,11 @@ class LoadingScene extends Scene {
         this.homeBgLoaded = false;
       }
       
-      // 同时预加载当前关卡的预览图
-      await this._preloadCurrentLevelPreview();
-      
-      // 预加载主页底部按钮图片
-      await this._preloadBottomButtons();
+      // 并行预加载当前关卡的预览图和底部按钮
+      await Promise.all([
+        this._preloadCurrentLevelPreview(),
+        this._preloadBottomButtons()
+      ]);
       
     } catch (e) {
       console.log('[LoadingScene] 主页背景预加载失败:', e.message);
@@ -538,14 +556,15 @@ class LoadingScene extends Scene {
   }
   
   /**
-   * 预加载主页底部按钮图片
+   * 预加载主页底部按钮图片（并行下载）
    */
   async _preloadBottomButtons() {
     if (typeof wx === 'undefined') return;
     
-    console.log('[LoadingScene] 开始加载底部按钮图片');
+    console.log('[LoadingScene] 开始并行加载底部按钮图片');
     
-    for (const [key, config] of Object.entries(this.bottomButtons)) {
+    // 创建并行下载任务
+    const tasks = Object.entries(this.bottomButtons).map(async ([key, config]) => {
       try {
         const tempURL = await this.cloudStorage.getTempFileURL(config.fileID);
         if (tempURL) {
@@ -557,7 +576,10 @@ class LoadingScene extends Scene {
       } catch (e) {
         console.warn(`[LoadingScene] 底部按钮加载失败: ${key}`, e.message);
       }
-    }
+    });
+    
+    await Promise.allSettled(tasks);
+    console.log('[LoadingScene] 底部按钮并行加载完成');
   }
   
   /**

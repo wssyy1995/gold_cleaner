@@ -96,29 +96,54 @@ class GameplayScene extends Scene {
     // 本关新解锁的工具列表
     this.newUnlockedTools = [];
     
-    // 新手引导状态
+    // 新手引导状态（被动式）
     this.tutorial = {
-      isActive: false,        // 是否正在引导中
-      step: 0,                // 当前步骤：0=未开始, 1=选rubbish_bin工具, 2=选paper污垢, 3=选cloth工具, 4=cloth工具弹出, 5=拖拽箭头指向wipe污垢, 6=环绕箭头, 7=完成
-      targetToolId: null,     // 目标工具ID
-      targetDirtId: null,     // 目标污垢ID（paper类型）
-      targetWipeDirtId: null, // 目标wipe类型污垢ID
-      handAnim: {             // 小手动画状态
+      isActive: false,               // 是否正在引导中
+      targetRubbishBinDirt: null,    // 第一个需要 rubbish_bin 的污垢
+      targetDcBasketDirt: null,      // 第一个需要 dc_basket 的污垢
+      targetClothDirt: null,         // 第一个需要 cloth 的污垢
+      
+      // 金色边框提示只显示一次
+      rubbishBinGlowShown: false,
+      dcBasketGlowShown: false,
+      clothGlowShown: false,
+      showingRubbishBinGlow: false,  // 当前是否正在显示 rubbish_bin 金色边框
+      showingDcBasketGlow: false,    // 当前是否正在显示 dc_basket 金色边框
+      showingClothGlow: false,       // 当前是否正在显示 cloth 金色边框
+      
+      // 生气 emoji
+      showAngryEmoji: false,
+      angryEmojiEndTime: 0,
+      
+      // 工具选中后的目标污垢提示
+      showRubbishBinDirtHint: false, // 是否显示 rubbish_bin 目标污垢的白色光圈+手指
+      showDcBasketDirtHint: false,   // 是否显示 dc_basket 目标污垢的白色光圈+手指
+      showClothDirtHint: false,      // 是否显示 cloth 目标污垢的 Z 字形动画
+      
+      // 记录用户是否已正确使用
+      rubbishBinUsed: false,
+      dcBasketUsed: false,
+      clothUsed: false,
+      
+      handAnim: {                     // 小手动画状态
         offset: 0,
         time: 0
       },
-      arrowAnim: {            // 箭头动画状态
-        time: 0,              // 动画时间
-        repeatCount: 0,       // 当前重复次数
-        maxRepeats: 2,        // 最大重复次数
-        duration: 1500        // 每次动画持续时间（毫秒）- 1.5秒更慢
-      },
-      circularAnim: {         // 环绕箭头动画状态
-        time: 0,              // 动画时间
-        repeatCount: 0,       // 当前重复次数
-        maxRepeats: 2,        // 最大重复次数
-        duration: 1000        // 每次动画持续时间（毫秒）
+      circularAnim: {                 // Z 字形动画状态
+        time: 0,
+        repeatCount: 0,
+        maxRepeats: 2,
+        duration: 1000
       }
+    };
+    
+    // Z 字绘制状态（用于 sweep 和 wipe 新玩法）
+    this.zDrawState = {
+      active: false,
+      dirt: null,
+      phase: 0,
+      startX: 0,
+      startY: 0
     };
     
     // 云存储
@@ -222,7 +247,7 @@ class GameplayScene extends Scene {
   }
 
   /**
-   * 检查是否需要显示新手引导
+   * 检查是否需要显示新手引导（被动式）
    * 条件：第一关 + 新玩家 + 未展示过引导
    */
   _checkTutorial() {
@@ -245,30 +270,35 @@ class GameplayScene extends Scene {
       }
     }
     
-    // 找到第一个 paper 类型的污垢作为目标
-    const paperDirt = this.dirtObjects.find(d => d.type === 'paper');
-    if (!paperDirt) {
-      console.warn('[GameplayScene] 未找到 paper 类型污垢，无法开启引导');
-      return;
-    }
-    
-    // 找到第一个 operate_type 为 wipe 的污垢作为目标
-    const wipeDirt = this.dirtObjects.find(d => {
+    // 找到第一个 recipes 包含 rubbish_bin 的污垢
+    const rubbishBinDirt = this.dirtObjects.find(d => {
       const dirtType = DIRT_TYPES[d.type];
-      return dirtType && dirtType.operate_type === 'wipe';
+      return dirtType && dirtType.recipes && dirtType.recipes.some(r => r.includes('rubbish_bin'));
     });
-    if (!wipeDirt) {
-      console.warn('[GameplayScene] 未找到 wipe 类型污垢，无法开启引导');
+    
+    // 找到第一个 recipes 包含 dc_basket 的污垢
+    const dcBasketDirt = this.dirtObjects.find(d => {
+      const dirtType = DIRT_TYPES[d.type];
+      return dirtType && dirtType.recipes && dirtType.recipes.some(r => r.includes('dc_basket'));
+    });
+    
+    // 找到第一个 recipes 包含 cloth 的污垢
+    const clothDirt = this.dirtObjects.find(d => {
+      const dirtType = DIRT_TYPES[d.type];
+      return dirtType && dirtType.recipes && dirtType.recipes.some(r => r.includes('cloth'));
+    });
+    
+    if (!rubbishBinDirt && !dcBasketDirt && !clothDirt) {
+      console.warn('[GameplayScene] 未找到适合引导的污垢，无法开启引导');
       return;
     }
     
     // 开启引导
-    console.log('[GameplayScene] 开启新手引导，目标paper:', paperDirt.id, '目标wipe:', wipeDirt.id);
+    console.log('[GameplayScene] 开启被动式新手引导');
     this.tutorial.isActive = true;
-    this.tutorial.step = 1; // 第一步：选择 rubbish_bin 工具
-    this.tutorial.targetToolId = 'rubbish_bin';
-    this.tutorial.targetDirtId = paperDirt.id;
-    this.tutorial.targetWipeDirtId = wipeDirt.id;
+    this.tutorial.targetRubbishBinDirt = rubbishBinDirt || null;
+    this.tutorial.targetDcBasketDirt = dcBasketDirt || null;
+    this.tutorial.targetClothDirt = clothDirt || null;
   }
   
   /**
@@ -277,7 +307,13 @@ class GameplayScene extends Scene {
   _completeTutorial() {
     console.log('[GameplayScene] 完成新手引导');
     this.tutorial.isActive = false;
-    this.tutorial.step = 7; // 更新为7表示完全完成
+    this.tutorial.showingRubbishBinGlow = false;
+    this.tutorial.showingDcBasketGlow = false;
+    this.tutorial.showingClothGlow = false;
+    this.tutorial.showAngryEmoji = false;
+    this.tutorial.showRubbishBinDirtHint = false;
+    this.tutorial.showDcBasketDirtHint = false;
+    this.tutorial.showClothDirtHint = false;
     
     const game = getGame();
     const dataManager = game ? game.dataManager : null;
@@ -291,6 +327,16 @@ class GameplayScene extends Scene {
       } catch (e) {
         // 忽略错误
       }
+    }
+  }
+  
+  /**
+   * 检查引导是否可以完成
+   */
+  _checkTutorialComplete() {
+    if (!this.tutorial.isActive) return;
+    if (this.tutorial.rubbishBinUsed && this.tutorial.dcBasketUsed && this.tutorial.clothUsed) {
+      this._completeTutorial();
     }
   }
   
@@ -319,31 +365,30 @@ class GameplayScene extends Scene {
     this.activeTool = null;
     this.toolAnim = { active: false };
     
+    // 重置引导状态
+    this.tutorial.isActive = false;
+    this.tutorial.targetRubbishBinDirt = null;
+    this.tutorial.targetDcBasketDirt = null;
+    this.tutorial.targetClothDirt = null;
+    this.tutorial.rubbishBinGlowShown = false;
+    this.tutorial.dcBasketGlowShown = false;
+    this.tutorial.clothGlowShown = false;
+    this.tutorial.showingRubbishBinGlow = false;
+    this.tutorial.showingDcBasketGlow = false;
+    this.tutorial.showingClothGlow = false;
+    this.tutorial.showAngryEmoji = false;
+    this.tutorial.angryEmojiEndTime = 0;
+    this.tutorial.showRubbishBinDirtHint = false;
+    this.tutorial.showDcBasketDirtHint = false;
+    this.tutorial.showClothDirtHint = false;
+    this.tutorial.rubbishBinUsed = false;
+    this.tutorial.dcBasketUsed = false;
+    this.tutorial.clothUsed = false;
+    this.tutorial.handAnim = { offset: 0, time: 0 };
+    this.tutorial.circularAnim = { time: 0, repeatCount: 0, maxRepeats: 2, duration: 1000 };
+    
     // 重新检查并启动引导
     this._checkTutorial();
-    
-    // 如果引导未激活（可能因为找不到污垢），手动设置
-    if (!this.tutorial.isActive) {
-      const paperDirt = this.dirtObjects.find(d => d.type === 'paper');
-      const wipeDirt = this.dirtObjects.find(d => {
-        const dirtType = DIRT_TYPES[d.type];
-        return dirtType && dirtType.operate_type === 'wipe';
-      });
-      
-      if (paperDirt && wipeDirt) {
-        this.tutorial.isActive = true;
-        this.tutorial.step = 1;
-        this.tutorial.targetToolId = 'rubbish_bin';
-        this.tutorial.targetDirtId = paperDirt.id;
-        this.tutorial.targetWipeDirtId = wipeDirt.id;
-        this.tutorial.handAnim = { offset: 0, time: 0 };
-        this.tutorial.arrowAnim = { time: 0, repeatCount: 0, maxRepeats: 2, duration: 1000 };
-        this.tutorial.circularAnim = { time: 0, repeatCount: 0, maxRepeats: 2, duration: 1000 };
-        console.log('[GameplayScene] 手动启动引导:', { paperId: paperDirt.id, wipeId: wipeDirt.id });
-      } else {
-        console.warn('[GameplayScene] 无法启动引导：缺少必要的污垢类型');
-      }
-    }
   }
   
   /**
@@ -879,7 +924,16 @@ class GameplayScene extends Scene {
   }
   
   /**
-   * 更新新手引导动画
+   * 显示生气 emoji（错误工具提示）
+   */
+  _showAngryEmoji() {
+    if (!this.tutorial.isActive) return;
+    this.tutorial.showAngryEmoji = true;
+    this.tutorial.angryEmojiEndTime = Date.now() + 1200; // 显示 1.2 秒
+  }
+  
+  /**
+   * 更新新手引导动画（被动式）
    */
   _updateTutorial(dt) {
     if (!this.tutorial.isActive) return;
@@ -888,40 +942,27 @@ class GameplayScene extends Scene {
     this.tutorial.handAnim.time += dt;
     this.tutorial.handAnim.offset = Math.sin(this.tutorial.handAnim.time * 0.003) * 10;
     
-    // 更新步骤5的拖拽箭头动画
-    if (this.tutorial.step === 5) {
-      const anim = this.tutorial.arrowAnim;
-      anim.time += dt;
-      
-      // 检查是否完成一次动画周期
-      if (anim.time >= anim.duration) {
-        anim.time = 0;
-        anim.repeatCount++;
-        
-        // 完成2次重复后进入步骤6
-        if (anim.repeatCount >= anim.maxRepeats) {
-          console.log('[GameplayScene] 引导：拖拽箭头动画完成，进入步骤6');
-          this.tutorial.step = 6;
-          anim.repeatCount = 0;
-          anim.time = 0;
-        }
+    // 更新生气 emoji 定时器
+    if (this.tutorial.showAngryEmoji) {
+      if (Date.now() >= this.tutorial.angryEmojiEndTime) {
+        this.tutorial.showAngryEmoji = false;
       }
     }
     
-    // 更新步骤6的环绕箭头动画
-    if (this.tutorial.step === 6) {
+    // 更新 Z 字形动画（用于 cloth 选中后的提示）
+    if (this.tutorial.showClothDirtHint) {
       const anim = this.tutorial.circularAnim;
       anim.time += dt;
       
-      // 检查是否完成一次动画周期
       if (anim.time >= anim.duration) {
         anim.time = 0;
         anim.repeatCount++;
         
-        // 完成2次重复后完成引导
+        // 完成2次重复后自动隐藏 Z 字形提示（引导不结束，只是提示动画完成）
         if (anim.repeatCount >= anim.maxRepeats) {
-          console.log('[GameplayScene] 引导：环绕箭头动画完成，引导结束');
-          this._completeTutorial();
+          anim.repeatCount = 0;
+          anim.time = 0;
+          // 不自动隐藏，循环播放以持续提示用户
         }
       }
     }
@@ -929,87 +970,83 @@ class GameplayScene extends Scene {
   
   /**
    * 渲染新手引导UI（主入口，在 onRender 中调用）
-   * 注意：步骤1和步骤2的具体渲染已移到 _renderRoomView 中，
-   * 这里只处理需要在弹窗层之前显示的内容
    */
   _renderTutorial(ctx, s) {
     if (!this.tutorial.isActive) return;
-    
-    // 调试信息（开发调试用）- 已注释
-    // ctx.save();
-    // ctx.fillStyle = '#FF0000';
-    // ctx.font = `bold ${16 * s}px Arial`;
-    // ctx.textAlign = 'left';
-    // ctx.fillText(`引导步骤: ${this.tutorial.step}, targetDirt: ${this.tutorial.targetDirtId}`, 10 * s, 200 * s);
-    // ctx.restore();
   }
   
   /**
-   * 渲染工具槽位高亮引导
-   * 白色3px光圈，向外扩散波纹效果
+   * 渲染 rubbish_bin 槽位金色边框闪烁+呼吸感
    */
-  _renderTutorialToolHighlight(ctx, s) {
-    // 只在步骤1渲染工具高亮
-    if (this.tutorial.step !== 1) return;
+  _renderTutorialRubbishBinGlow(ctx, s) {
+    if (!this.tutorial.showingRubbishBinGlow) return;
     
-    // 找到目标工具的槽位索引
-    const toolIndex = this.tools.findIndex(t => t.id === this.tutorial.targetToolId);
+    const toolIndex = this.tools.findIndex(t => t.id === 'rubbish_bin');
     if (toolIndex === -1 || !this.toolSlot) return;
     
     const slotPos = this.toolSlot.slotPositions[toolIndex];
     if (!slotPos) return;
     
     const { x, y, size } = slotPos;
-    const centerX = x + size / 2;
-    const centerY = y + size / 2;
-    const baseRadius = size / 2 + 5 * s;
     
-    console.log('[GameplayScene] 引导：渲染工具高亮', { toolIndex, centerX, centerY, baseRadius });
-    
-    // 波纹扩散动画（周期1.5秒，稍快）
-    const cycle = 1500;
-    const progress = (this.tutorial.handAnim.time % cycle) / cycle;
+    // 加强呼吸感：更快频率、更大振幅
+    const breath = (Math.sin(this.tutorial.handAnim.time * 0.008) + 1) / 2; // 0~1，频率加快
+    const alpha = 0.4 + breath * 0.6; // 透明度 0.4 ~ 1.0，变化更大
+    const lineWidth = 3 + breath * 4; // 线宽 3 ~ 7，更明显的粗细变化
+    const glowBlur = 15 * s + breath * 20 * s; // 发光 15 ~ 35，更强烈的辉光
     
     ctx.save();
-    ctx.lineWidth = 4 * s;
     
-    // 绘制4层向外扩散的白色波纹（效果加强）
-    for (let i = 0; i < 4; i++) {
-      const ringProgress = (progress + i * 0.25) % 1; // 每层错开25%
-      const radius = baseRadius + ringProgress * 28 * s; // 向外扩散28px（加强）
-      const alpha = (1 - ringProgress) * 0.85; // 越外越透明，最大透明度0.85（更亮）
-      
-      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
-      ctx.shadowBlur = 12 * s; // 发光加强
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    const padding = 6 * s;
+    const rx = x - padding;
+    const ry = y - padding;
+    const rw = size + padding * 2;
+    const rh = size + padding * 2;
+    const r = 16 * s;
     
-    // 中心固定白圈（更亮）
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.shadowBlur = 15 * s;
+    // 构建路径
     ctx.beginPath();
-    ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
+    ctx.moveTo(rx + r, ry);
+    ctx.lineTo(rx + rw - r, ry);
+    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
+    ctx.lineTo(rx + rw, ry + rh - r);
+    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
+    ctx.lineTo(rx + r, ry + rh);
+    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
+    ctx.lineTo(rx, ry + r);
+    ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+    ctx.closePath();
+    
+    // 1. 最外层金色光晕（大范围呼吸）
+    ctx.lineWidth = 5 * s;
+    ctx.strokeStyle = `rgba(255, 215, 0, ${0.1 + breath * 0.15})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
+    ctx.shadowBlur = glowBlur + 10 * s;
+    ctx.stroke();
+    
+    // 2. 中层金色扩散
+    ctx.lineWidth = 3 * s;
+    ctx.strokeStyle = `rgba(255, 215, 0, ${0.25 + breath * 0.3})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+    ctx.shadowBlur = glowBlur;
+    ctx.stroke();
+    
+    // 3. 主金色呼吸边框（最亮）
+    ctx.lineWidth = lineWidth * s;
+    ctx.strokeStyle = `rgba(255, 235, 80, ${alpha})`; // 偏亮的金色
+    ctx.shadowColor = 'rgba(255, 215, 0, 1.0)';
+    ctx.shadowBlur = glowBlur * 0.6;
     ctx.stroke();
     
     ctx.restore();
-    
-    // 绘制手指（在槽位上方，指尖向下指向槽位）
-    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 6; // 频率加快
-    this._renderHandBig(ctx, s, centerX, y - 10 * s, handOffset, false);
   }
   
   /**
-   * 渲染cloth工具槽位高亮引导（步骤3）
-   * 白色光圈+小手指指向
+   * 渲染 cloth 槽位金色边框闪烁+呼吸感
    */
-  _renderTutorialClothHighlight(ctx, s) {
-    // 只在步骤3渲染cloth高亮
-    if (this.tutorial.step !== 3) return;
+  _renderTutorialClothGlow(ctx, s) {
+    if (!this.tutorial.showingClothGlow) return;
     
-    // 找到cloth工具的槽位索引
     const toolIndex = this.tools.findIndex(t => t.id === 'cloth');
     if (toolIndex === -1 || !this.toolSlot) return;
     
@@ -1017,176 +1054,276 @@ class GameplayScene extends Scene {
     if (!slotPos) return;
     
     const { x, y, size } = slotPos;
-    const centerX = x + size / 2;
-    const centerY = y + size / 2;
-    const baseRadius = size / 2 + 5 * s;
     
-    // 波纹扩散动画（周期1.5秒）
-    const cycle = 1500;
+    // 加强呼吸感
+    const breath = (Math.sin(this.tutorial.handAnim.time * 0.008) + 1) / 2;
+    const alpha = 0.4 + breath * 0.6;
+    const lineWidth = 3 + breath * 4;
+    const glowBlur = 15 * s + breath * 20 * s;
+    
+    ctx.save();
+    
+    const padding = 6 * s;
+    const rx = x - padding;
+    const ry = y - padding;
+    const rw = size + padding * 2;
+    const rh = size + padding * 2;
+    const r = 16 * s;
+    
+    ctx.beginPath();
+    ctx.moveTo(rx + r, ry);
+    ctx.lineTo(rx + rw - r, ry);
+    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
+    ctx.lineTo(rx + rw, ry + rh - r);
+    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
+    ctx.lineTo(rx + r, ry + rh);
+    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
+    ctx.lineTo(rx, ry + r);
+    ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+    ctx.closePath();
+    
+    // 1. 最外层金色光晕
+    ctx.lineWidth = 5 * s;
+    ctx.strokeStyle = `rgba(255, 215, 0, ${0.1 + breath * 0.15})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
+    ctx.shadowBlur = glowBlur + 10 * s;
+    ctx.stroke();
+    
+    // 2. 中层金色扩散
+    ctx.lineWidth = 3 * s;
+    ctx.strokeStyle = `rgba(255, 215, 0, ${0.25 + breath * 0.3})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+    ctx.shadowBlur = glowBlur;
+    ctx.stroke();
+    
+    // 3. 主金色呼吸边框
+    ctx.lineWidth = lineWidth * s;
+    ctx.strokeStyle = `rgba(255, 235, 80, ${alpha})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 1.0)';
+    ctx.shadowBlur = glowBlur * 0.6;
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+  
+  /**
+   * 渲染 dc_basket 槽位金色边框闪烁+呼吸感
+   */
+  _renderTutorialDcBasketGlow(ctx, s) {
+    if (!this.tutorial.showingDcBasketGlow) return;
+    
+    const toolIndex = this.tools.findIndex(t => t.id === 'dc_basket');
+    if (toolIndex === -1 || !this.toolSlot) return;
+    
+    const slotPos = this.toolSlot.slotPositions[toolIndex];
+    if (!slotPos) return;
+    
+    const { x, y, size } = slotPos;
+    
+    // 加强呼吸感
+    const breath = (Math.sin(this.tutorial.handAnim.time * 0.008) + 1) / 2;
+    const alpha = 0.4 + breath * 0.6;
+    const lineWidth = 3 + breath * 4;
+    const glowBlur = 15 * s + breath * 20 * s;
+    
+    ctx.save();
+    
+    const padding = 6 * s;
+    const rx = x - padding;
+    const ry = y - padding;
+    const rw = size + padding * 2;
+    const rh = size + padding * 2;
+    const r = 16 * s;
+    
+    ctx.beginPath();
+    ctx.moveTo(rx + r, ry);
+    ctx.lineTo(rx + rw - r, ry);
+    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
+    ctx.lineTo(rx + rw, ry + rh - r);
+    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
+    ctx.lineTo(rx + r, ry + rh);
+    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
+    ctx.lineTo(rx, ry + r);
+    ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+    ctx.closePath();
+    
+    // 1. 最外层金色光晕（大范围呼吸）
+    ctx.lineWidth = 5 * s;
+    ctx.strokeStyle = `rgba(255, 215, 0, ${0.1 + breath * 0.15})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
+    ctx.shadowBlur = glowBlur + 10 * s;
+    ctx.stroke();
+    
+    // 2. 中层金色扩散
+    ctx.lineWidth = 3 * s;
+    ctx.strokeStyle = `rgba(255, 215, 0, ${0.25 + breath * 0.3})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+    ctx.shadowBlur = glowBlur;
+    ctx.stroke();
+    
+    // 3. 主金色呼吸边框（最亮）
+    ctx.lineWidth = lineWidth * s;
+    ctx.strokeStyle = `rgba(255, 235, 80, ${alpha})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 1.0)';
+    ctx.shadowBlur = glowBlur * 0.6;
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+  
+  /**
+   * 渲染生气 emoji（在弹出的工具左上角）
+   */
+  _renderAngryEmoji(ctx, s) {
+    if (!this.tutorial.showAngryEmoji || !this.activeTool) return;
+    
+    const x = this.toolPosition.x - 40 * s;
+    const y = this.toolPosition.y - 50 * s;
+    
+    ctx.save();
+    ctx.font = `bold ${40 * s}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // 小弹跳动画
+    const bounce = Math.sin(Date.now() * 0.02) * 3 * s;
+    
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fillText('😠', x + 2 * s, y + bounce + 2 * s);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('😠', x, y + bounce);
+    
+    ctx.restore();
+  }
+  
+  /**
+   * 渲染 rubbish_bin 目标污垢提示：白色光圈波纹扩散 + 手指图标（指尖朝上）
+   */
+  _renderTutorialRubbishBinDirtHint(ctx, s) {
+    if (!this.tutorial.showRubbishBinDirtHint) return;
+    
+    const dirt = this.tutorial.targetRubbishBinDirt;
+    if (!dirt || dirt.state === 'clean') return;
+    
+    const gameAreaY = this.screenHeight * 0.08;
+    const cx = dirt.x;
+    const cy = dirt.y + gameAreaY;
+    const baseRadius = dirt.size / 2 + 20 * s;
+    
+    // 波纹扩散动画
+    const cycle = 1750;
     const progress = (this.tutorial.handAnim.time % cycle) / cycle;
     
     ctx.save();
     ctx.lineWidth = 4 * s;
     
-    // 绘制4层向外扩散的白色波纹（效果加强）
-    for (let i = 0; i < 4; i++) {
-      const ringProgress = (progress + i * 0.25) % 1;
-      const radius = baseRadius + ringProgress * 28 * s;
-      const alpha = (1 - ringProgress) * 0.85;
+    for (let i = 0; i < 3; i++) {
+      const ringProgress = (progress + i * 0.33) % 1;
+      const radius = baseRadius + ringProgress * 26 * s;
+      const alpha = (1 - ringProgress) * 0.7;
       
       ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
-      ctx.shadowBlur = 12 * s;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+      ctx.shadowBlur = 10 * s;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.stroke();
     }
     
-    // 中心固定白圈
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.shadowBlur = 15 * s;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.shadowBlur = 12 * s;
     ctx.beginPath();
-    ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
+    ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
     ctx.stroke();
     
     ctx.restore();
     
-    // 绘制手指（在槽位上方，指尖向下指向槽位）
-    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 6;
-    this._renderHandBig(ctx, s, centerX, y - 10 * s, handOffset, false);
+    // 手指（指尖朝上）
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 8;
+    this._renderHandBig(ctx, s, cx, cy + baseRadius + 70 * s, handOffset, true);
   }
   
   /**
-   * 渲染拖拽箭头动画（步骤5）
-   * 从 cloth 工具位置指向 wipe 污垢的箭头
+   * 渲染 dc_basket 目标污垢提示：白色光圈波纹扩散 + 手指图标（指尖朝上）
    */
-  _renderTutorialDragArrow(ctx, s) {
-    if (this.tutorial.step !== 5) return;
+  _renderTutorialDcBasketDirtHint(ctx, s) {
+    if (!this.tutorial.showDcBasketDirtHint) return;
     
-    // 获取wipe污垢位置
-    const wipeDirt = this.dirtObjects.find(d => d.id === this.tutorial.targetWipeDirtId);
-    if (!wipeDirt) return;
+    const dirt = this.tutorial.targetDcBasketDirt;
+    if (!dirt || dirt.state === 'clean') return;
     
     const gameAreaY = this.screenHeight * 0.08;
+    const cx = dirt.x;
+    const cy = dirt.y + gameAreaY;
+    const baseRadius = dirt.size / 2 + 20 * s;
     
-    // 起始位置（cloth工具位置）
-    let startX = this.screenWidth / 2;
-    let startY = this.screenHeight * 0.82;
-    if (this.toolPosition) {
-      startX = this.toolPosition.x;
-      startY = this.toolPosition.y;
-    }
-    
-    // 目标位置（wipe污垢）
-    const endX = wipeDirt.x;
-    const endY = wipeDirt.y + gameAreaY;
-    
-    // 动画进度
-    const anim = this.tutorial.arrowAnim;
-    const cycle = 2500;
-    let t = (anim.time % cycle) / cycle;
-    t = 1 - Math.pow(1 - t, 3); // ease-out
-    
-    // 箭头参数
-    const lineWidth = 20 * s;
-    const headLength = 35 * s;
-    
-    // 计算当前箭头尖端位置（从起点向终点移动）
-    const tipX = startX + (endX - startX) * t;
-    const tipY = startY + (endY - startY) * t;
-    
-    // 计算箭头方向
-    const angle = Math.atan2(endY - startY, endX - startX);
-    
-    // 计算尾部位置（固定长度，跟随尖端）
-    const arrowLength = 100 * s;
-    const tailX = tipX - Math.cos(angle) * arrowLength;
-    const tailY = tipY - Math.sin(angle) * arrowLength;
+    // 波纹扩散动画
+    const cycle = 1750;
+    const progress = (this.tutorial.handAnim.time % cycle) / cycle;
     
     ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    ctx.lineWidth = 4 * s;
     
-    // 强发光效果
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
-    ctx.shadowBlur = 25 * s;
+    for (let i = 0; i < 3; i++) {
+      const ringProgress = (progress + i * 0.33) % 1;
+      const radius = baseRadius + ringProgress * 26 * s;
+      const alpha = (1 - ringProgress) * 0.7;
+      
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+      ctx.shadowBlur = 10 * s;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     
-    // 绘制箭头主体（直线）
-    ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
-    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.shadowBlur = 12 * s;
     ctx.beginPath();
-    ctx.moveTo(tailX, tailY);
-    ctx.lineTo(tipX, tipY);
+    ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
     ctx.stroke();
     
-    // 绘制箭头头部（更大的实心三角形）
-    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-    ctx.beginPath();
-    // 垂直于箭头方向的向量
-    const perpX = -Math.sin(angle);
-    const perpY = Math.cos(angle);
-    // 箭头两翼宽度
-    const wingWidth = headLength * 0.6;
-    // 箭头底部中心点
-    const baseX = tipX - Math.cos(angle) * headLength;
-    const baseY = tipY - Math.sin(angle) * headLength;
-    // 两翼点
-    const wingX1 = baseX + perpX * wingWidth;
-    const wingY1 = baseY + perpY * wingWidth;
-    const wingX2 = baseX - perpX * wingWidth;
-    const wingY2 = baseY - perpY * wingWidth;
-    
-    ctx.moveTo(tipX, tipY);
-    ctx.lineTo(wingX1, wingY1);
-    ctx.lineTo(wingX2, wingY2);
-    ctx.closePath();
-    ctx.fill();
-    
     ctx.restore();
+    
+    // 手指（指尖朝上）
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 8;
+    this._renderHandBig(ctx, s, cx, cy + baseRadius + 70 * s, handOffset, true);
   }
   
   /**
-   * 渲染Z字形拖地路径动画（步骤6）
-   * 在wipe污垢上画出Z字形，模拟拖地动作
+   * 渲染 cloth 目标污垢提示：Z 字形动画
    */
-  _renderTutorialCircularArrow(ctx, s) {
-    if (this.tutorial.step !== 6) return;
+  _renderTutorialClothDirtHint(ctx, s) {
+    if (!this.tutorial.showClothDirtHint) return;
     
-    // 获取wipe污垢位置
-    const wipeDirt = this.dirtObjects.find(d => d.id === this.tutorial.targetWipeDirtId);
-    if (!wipeDirt) return;
+    const dirt = this.tutorial.targetClothDirt;
+    if (!dirt || dirt.state === 'clean') return;
     
     const gameAreaY = this.screenHeight * 0.08;
-    const centerX = wipeDirt.x;
-    const centerY = wipeDirt.y + gameAreaY;
-    const size = wipeDirt.size * 0.8; // Z字形范围略小于污垢大小
+    const centerX = dirt.x;
+    const centerY = dirt.y + gameAreaY;
+    const size = dirt.size * 0.8;
     
-    // 动画参数 - Z字形分三段绘制
     const anim = this.tutorial.circularAnim;
     const cycle = anim.duration;
     let progress = (anim.time % cycle) / cycle;
     
-    // Z字形的四个点
     const zPoints = [
-      { x: centerX - size/2, y: centerY - size/3 }, // 左上
-      { x: centerX + size/2, y: centerY - size/3 }, // 右上
-      { x: centerX - size/2, y: centerY + size/3 }, // 左下
-      { x: centerX + size/2, y: centerY + size/3 }  // 右下
+      { x: centerX - size/2, y: centerY - size/3 },
+      { x: centerX + size/2, y: centerY - size/3 },
+      { x: centerX - size/2, y: centerY + size/3 },
+      { x: centerX + size/2, y: centerY + size/3 }
     ];
     
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 8 * s;
-    
-    // 强发光效果
     ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
     ctx.shadowBlur = 15 * s;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
     
-    // 根据进度绘制Z字形的不同阶段
     if (progress < 0.33) {
-      // 第一段：左上到右上
       const p = progress / 0.33;
       const x = zPoints[0].x + (zPoints[1].x - zPoints[0].x) * p;
       const y = zPoints[0].y + (zPoints[1].y - zPoints[0].y) * p;
@@ -1195,7 +1332,6 @@ class GameplayScene extends Scene {
       ctx.lineTo(x, y);
       ctx.stroke();
     } else if (progress < 0.66) {
-      // 第二段：右上到左下
       const p = (progress - 0.33) / 0.33;
       const x = zPoints[1].x + (zPoints[2].x - zPoints[1].x) * p;
       const y = zPoints[1].y + (zPoints[2].y - zPoints[1].y) * p;
@@ -1206,7 +1342,6 @@ class GameplayScene extends Scene {
       ctx.lineTo(x, y);
       ctx.stroke();
     } else {
-      // 第三段：左下到右下
       const p = (progress - 0.66) / 0.34;
       const x = zPoints[2].x + (zPoints[3].x - zPoints[2].x) * p;
       const y = zPoints[2].y + (zPoints[3].y - zPoints[2].y) * p;
@@ -1217,129 +1352,6 @@ class GameplayScene extends Scene {
       ctx.lineTo(x, y);
       ctx.stroke();
     }
-    
-    ctx.restore();
-  }
-  
-  /**
-   * 渲染wipe污垢高亮背景（步骤5和6）
-   * 黄色半透明背景，突出显示目标污垢
-   */
-  _renderTutorialWipeDirtHighlight(ctx, s) {
-    if (!this.tutorial.isActive) return;
-    if (this.tutorial.step !== 5 && this.tutorial.step !== 6) return;
-    
-    // 获取wipe污垢位置
-    const wipeDirt = this.dirtObjects.find(d => d.id === this.tutorial.targetWipeDirtId);
-    if (!wipeDirt || wipeDirt.state === 'clean') return;
-    
-    const gameAreaY = this.screenHeight * 0.08;
-    const cx = wipeDirt.x;
-    const cy = wipeDirt.y + gameAreaY;
-    // 污垢半径
-    const baseRadius = wipeDirt.size / 2 + 10 * s;
-    
-    ctx.save();
-    
-    // 脉动效果
-    const pulse = Math.sin(this.tutorial.handAnim.time * 0.004) * 0.2 + 0.8;
-    
-    // 内层发光（变淡）
-    ctx.shadowColor = 'rgba(255, 255, 220, 0.6)';
-    ctx.shadowBlur = 20 * s * pulse;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.beginPath();
-    ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // 外层发光（更淡更柔和）
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
-    ctx.shadowBlur = 35 * s * pulse;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.beginPath();
-    ctx.arc(cx, cy, baseRadius + 15 * s, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.restore();
-  }
-  
-  /**
-   * 渲染污垢高亮引导
-   * 白色3px光圈，向外扩散波纹效果
-   */
-  _renderTutorialDirtHighlight(ctx, s) {
-    // 只在步骤2渲染污垢高亮
-    if (this.tutorial.step !== 2) return;
-    
-    // 找到目标污垢
-    const dirt = this.dirtObjects.find(d => d.id === this.tutorial.targetDirtId);
-    if (!dirt || dirt.state === 'clean') {
-      console.log('[GameplayScene] 引导：目标污垢不存在或已清理');
-      return;
-    }
-    
-    const gameAreaY = this.screenHeight * 0.08;
-    const cx = dirt.x;
-    const cy = dirt.y + gameAreaY;
-    const baseRadius = dirt.size / 2 + 20 * s;
-    
-    console.log('[GameplayScene] 引导：渲染污垢高亮', { cx, cy, baseRadius, dirtSize: dirt.size, id: dirt.id });
-    
-    // 小手摆动偏移（频率加快）
-    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 8;
-    
-    // 波纹扩散动画（周期1.75秒，折中）
-    const cycle = 1750;
-    const progress = (this.tutorial.handAnim.time % cycle) / cycle;
-    
-    ctx.save();
-    ctx.lineWidth = 4 * s;
-    
-    // 绘制3层向外扩散的白色波纹（效果加强）
-    for (let i = 0; i < 3; i++) {
-      const ringProgress = (progress + i * 0.33) % 1; // 每层错开33%
-      const radius = baseRadius + ringProgress * 26 * s; // 向外扩散26px（加强）
-      const alpha = (1 - ringProgress) * 0.7; // 越外越透明，最大透明度0.7（加强）
-      
-      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-      ctx.shadowBlur = 10 * s; // 发光加强
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    
-    // 中心固定白圈
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.shadowBlur = 12 * s;
-    ctx.beginPath();
-    ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    ctx.restore();
-    
-    // 绘制手指（在污垢下方，指尖向上指向污垢）
-    this._renderHandBig(ctx, s, cx, cy + baseRadius + 70 * s, handOffset, true);
-  }
-  
-  /**
-   * 绘制小手emoji（带摆动动画）
-   */
-  _renderHand(ctx, s, x, y) {
-    const handOffset = this.tutorial.handAnim.offset || 0;
-    
-    ctx.save();
-    ctx.font = `bold ${36 * s}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // 阴影
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-    ctx.fillText('👆', x + 2 * s, y + handOffset + 2 * s);
-    
-    // 主图
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText('👆', x, y + handOffset);
     
     ctx.restore();
   }
@@ -1728,7 +1740,7 @@ class GameplayScene extends Scene {
     // 绘制亮晶晶特效（清洁完成后的闪烁效果）
     this._renderShineEffects(ctx);
     
-    // 渲染新手引导（调试用，实际步骤1和步骤2已在 _renderRoomView 中渲染）
+    // 渲染新手引导
     this._renderTutorial(ctx, s);
     
     // 渲染工具解锁弹窗
@@ -1737,12 +1749,9 @@ class GameplayScene extends Scene {
     // 渲染结算弹窗（在最上层）
     this._renderSettlementDialog(ctx);
     
-    // 在最顶层渲染新手引导步骤5和步骤6（拖拽箭头和环绕箭头）
-    if (this.tutorial.isActive && this.tutorial.step === 5) {
-      this._renderTutorialDragArrow(ctx, s);
-    }
-    if (this.tutorial.isActive && this.tutorial.step === 6) {
-      this._renderTutorialCircularArrow(ctx, s);
+    // 在最顶层渲染生气 emoji
+    if (this.tutorial.isActive) {
+      this._renderAngryEmoji(ctx, s);
     }
   }
 
@@ -1785,17 +1794,14 @@ class GameplayScene extends Scene {
     // 检查UI是否已初始化
     if (!this.dirtObjects) return;
     
-    // 3. 先绘制wipe污垢背后的发光（步骤5和6）
-    if (this.tutorial.isActive && (this.tutorial.step === 5 || this.tutorial.step === 6)) {
-      this._renderTutorialWipeDirtHighlight(ctx, s);
-    }
-    
     // 3.1 绘制污垢圆圈（y 坐标相对于游戏区域）
     this._renderDirts(ctx, gameAreaY, s);
     
-    // 3.5 渲染新手引导步骤2的污垢高亮（在污垢之上）
-    if (this.tutorial.isActive && this.tutorial.step === 2) {
-      this._renderTutorialDirtHighlight(ctx, s);
+    // 3.5 渲染被动引导：目标污垢提示（在污垢之上）
+    if (this.tutorial.isActive) {
+      this._renderTutorialRubbishBinDirtHint(ctx, s);
+      this._renderTutorialDcBasketDirtHint(ctx, s);
+      this._renderTutorialClothDirtHint(ctx, s);
     }
 
     // 4. 绘制底部 10% 浅棕黄色背景（工具槽区域）
@@ -1817,14 +1823,11 @@ class GameplayScene extends Scene {
       this.toolSlot.render(ctx);
     }
     
-    // 6.5 渲染新手引导步骤1（工具高亮，在工具槽之上）
-    if (this.tutorial.isActive && this.tutorial.step === 1) {
-      this._renderTutorialToolHighlight(ctx, s);
-    }
-    
-    // 6.6 渲染新手引导步骤3（cloth工具高亮）
-    if (this.tutorial.isActive && this.tutorial.step === 3) {
-      this._renderTutorialClothHighlight(ctx, s);
+    // 6.5 渲染被动引导：工具槽金色边框高亮
+    if (this.tutorial.isActive) {
+      this._renderTutorialRubbishBinGlow(ctx, s);
+      this._renderTutorialDcBasketGlow(ctx, s);
+      this._renderTutorialClothGlow(ctx, s);
     }
     
   }
@@ -2472,21 +2475,24 @@ class GameplayScene extends Scene {
     
     // 检查是否正在拖动活动工具
     if (this.activeTool && !this.isDraggingTool) {
-      const dx = x - this.toolPosition.x;
-      const dy = y - this.toolPosition.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      // 工具大小为 120 * s，检测范围稍微大一点
-      if (distance < 80 * s) {
-        // 验证工具使用条件
-        if (!this._validateToolUsage(this.activeTool)) {
-          // 验证失败，显示错误提示但不开始拖动
-          this._showToolError();
-          return true; // 拦截事件，防止后续处理
+      // cloth 和 broom 现在走 Z 字绘制模式，优先由污垢点击逻辑处理
+      if (this.activeTool.id !== 'cloth' && this.activeTool.id !== 'broom') {
+        const dx = x - this.toolPosition.x;
+        const dy = y - this.toolPosition.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        // 工具大小为 120 * s，检测范围稍微大一点
+        if (distance < 80 * s) {
+          // 验证工具使用条件
+          if (!this._validateToolUsage(this.activeTool)) {
+            // 验证失败，显示错误提示但不开始拖动
+            this._showToolError();
+            return true; // 拦截事件，防止后续处理
+          }
+          // 开始拖动工具
+          this.isDraggingTool = true;
+          this.dragStartPos = { x, y };
+          return true;
         }
-        // 开始拖动工具
-        this.isDraggingTool = true;
-        this.dragStartPos = { x, y };
-        return true;
       }
     }
     
@@ -2501,8 +2507,8 @@ class GameplayScene extends Scene {
     // 检查污垢圆圈点击
     const clickedDirt = this._findDirtAt(x, y);
     if (clickedDirt) {
-      // 选中/取消选中圆圈
-      this._selectDirt(clickedDirt);
+      // 选中/取消选中圆圈（传入坐标用于 Z 字绘制模式）
+      this._selectDirt(clickedDirt, x, y);
       return true;
     }
 
@@ -2536,13 +2542,9 @@ class GameplayScene extends Scene {
       // 更新工具位置（跟随手指，但有边界限制）
       this.toolPosition = { x, y: clampedY };
       
-      // cloth 工具特殊处理：拖动时检测附近 wipe 类型污垢并高亮
-      if (this.activeTool.id === 'cloth') {
-        this._updateClothDrag(x, clampedY);
-      }
-      // broom 工具特殊处理：拖动时检测附近 sweep 类型污垢
-      else if (this.activeTool.id === 'broom') {
-        this._updateBroomDrag(x, clampedY);
+      // cloth / broom 工具：进入 Z 字绘制模式
+      if (this.activeTool.id === 'cloth' || this.activeTool.id === 'broom') {
+        this._updateZDraw(x, clampedY);
       } else {
         // 其他工具原有逻辑
         const nearbyDirt = this._findNearbyDirt(x, y);
@@ -2602,6 +2604,7 @@ class GameplayScene extends Scene {
       this.isDraggingTool = false;
       this.clothInDirt = false; // 重置 cloth 进入污垢状态
       this.broomInDirt = false; // 重置 broom 进入污垢状态
+      this.zDrawState.active = false; // 重置 Z 字绘制状态
       
       // 重置所有污垢的高亮状态
       this.dirtObjects.forEach(dirt => {
@@ -2712,6 +2715,11 @@ class GameplayScene extends Scene {
         nearbyDirt.highlightScale = 1; // 不再放大，只显示白光
       }
       
+      // 被动引导：用户开始正确擦拭时，立即隐藏 Z 字形提示
+      if (this.tutorial.isActive) {
+        this.tutorial.showClothDirtHint = false;
+      }
+      
       // 处理擦拭进度
       this._updateWipeProgress(nearbyDirt);
       this.selectedDirt = nearbyDirt;
@@ -2776,6 +2784,21 @@ class GameplayScene extends Scene {
     }
     
     console.log(`[GameplayScene] ${dirt.name} 擦拭完成，清洁度 +10`);
+    
+    // 清理 Z 字绘制状态并弹回工具
+    this.isDraggingTool = false;
+    this.selectedDirt = null;
+    this.zDrawState.active = false;
+    if (this.activeTool) {
+      this._spawnTool();
+    }
+    
+    // 被动引导：标记 cloth 已正确使用
+    if (this.tutorial.isActive) {
+      this.tutorial.clothUsed = true;
+      this.tutorial.showClothDirtHint = false;
+      this._checkTutorialComplete();
+    }
     
     // 检查是否全部完成
     this._checkAllCleaned();
@@ -2891,6 +2914,14 @@ class GameplayScene extends Scene {
     
     console.log(`[GameplayScene] ${dirt.name} 清扫完成，清洁度 +10`);
     
+    // 清理 Z 字绘制状态并弹回工具
+    this.isDraggingTool = false;
+    this.selectedDirt = null;
+    this.zDrawState.active = false;
+    if (this.activeTool) {
+      this._spawnTool();
+    }
+    
     // 检查是否全部完成
     this._checkAllCleaned();
   }
@@ -2907,33 +2938,98 @@ class GameplayScene extends Scene {
   }
 
   /**
-   * 选中/取消选中污垢圆圈
+   * 选中/取消选中污垢圆圈（被动引导核心逻辑 + Z 字绘制入口）
    */
-  _selectDirt(dirt) {
+  _selectDirt(dirt, x, y) {
     // 获取污垢类型配置
     const dirtType = DIRT_TYPES[dirt.type];
     if (!dirtType) return;
     
+    // ===== 被动新手引导处理 =====
+    if (this.tutorial.isActive && dirt.state !== 'clean') {
+      const recipes = dirtType.recipes || [];
+      const allTools = recipes.flat();
+      
+      // 1. 点击了需要 rubbish_bin 的污垢
+      if (allTools.includes('rubbish_bin')) {
+        if (!this.activeTool) {
+          // 熄灭其他金边，只保留当前提示
+          this.tutorial.showingDcBasketGlow = false;
+          this.tutorial.showingClothGlow = false;
+          // 没有任何工具选中：rubbish_bin 槽位金色闪烁
+          if (!this.tutorial.rubbishBinGlowShown) {
+            this.tutorial.showingRubbishBinGlow = true;
+            this.tutorial.rubbishBinGlowShown = true;
+            console.log('[GameplayScene] 引导：提示选择 rubbish_bin');
+          }
+        } else if (this.activeTool.id !== 'rubbish_bin') {
+          // 有非 rubbish_bin 的工具已弹出：生气 emoji
+          this._showAngryEmoji();
+        }
+      }
+      
+      // 2. 点击了需要 dc_basket 的污垢
+      if (allTools.includes('dc_basket')) {
+        if (!this.activeTool) {
+          // 熄灭其他金边，只保留当前提示
+          this.tutorial.showingRubbishBinGlow = false;
+          this.tutorial.showingClothGlow = false;
+          // 没有任何工具选中：dc_basket 槽位金色闪烁
+          if (!this.tutorial.dcBasketGlowShown) {
+            this.tutorial.showingDcBasketGlow = true;
+            this.tutorial.dcBasketGlowShown = true;
+            console.log('[GameplayScene] 引导：提示选择 dc_basket');
+          }
+        } else if (this.activeTool.id !== 'dc_basket') {
+          // 有非 dc_basket 的工具已弹出：生气 emoji
+          this._showAngryEmoji();
+        }
+      }
+      
+      // 3. 点击了需要 cloth 的污垢
+      if (allTools.includes('cloth')) {
+        if (!this.activeTool) {
+          // 熄灭其他金边，只保留当前提示
+          this.tutorial.showingRubbishBinGlow = false;
+          this.tutorial.showingDcBasketGlow = false;
+          // 没有任何工具选中：cloth 槽位金色闪烁
+          if (!this.tutorial.clothGlowShown) {
+            this.tutorial.showingClothGlow = true;
+            this.tutorial.clothGlowShown = true;
+            console.log('[GameplayScene] 引导：提示选择 cloth');
+          }
+        } else if (this.activeTool.id !== 'cloth') {
+          // 有非 cloth 的工具已弹出：生气 emoji
+          this._showAngryEmoji();
+        }
+      }
+    }
+    
     // 判断是否是 throw 类型的污垢
     if (dirtType.operate_type === 'throw') {
-      // throw 类型：检查当前弹出的工具是否是 rubbish_bin
-      if (this.activeTool && this.activeTool.id === 'rubbish_bin') {
-        // 是当前工具，执行飞行动画
+      const recipes = dirtType.recipes || [];
+      const allTools = recipes.flat();
+      // 只有当前弹出的工具在污垢的 recipes 中，才触发 throw
+      if (this.activeTool && allTools.includes(this.activeTool.id)) {
         this._throwDirtToBin(dirt);
       }
-      // 如果不是 rubbish_bin，无反应（不选中）
+      // 工具不匹配，无反应（不选中）
       return;
     }
     
-    // wipe 类型（如 stain）：不执行选中效果，通过 cloth 工具拖动交互
+    // wipe 类型：点击后如果 cloth 已弹出，自动进入 Z 字绘制模式
     if (dirtType.operate_type === 'wipe') {
-      // 不选中，无反应
+      if (this.activeTool && this.activeTool.id === 'cloth') {
+        this._startZDraw(dirt, x, y);
+      }
       return;
     }
     
-    // sweep 类型（如 leaves）：不执行选中效果，通过 broom 工具拖动交互
+    // sweep 类型：点击后如果 broom 已弹出，自动进入 Z 字绘制模式
     if (dirtType.operate_type === 'sweep') {
-      // 不选中，无反应
+      if (this.activeTool && this.activeTool.id === 'broom') {
+        this._startZDraw(dirt, x, y);
+      }
       return;
     }
     
@@ -2985,6 +3081,82 @@ class GameplayScene extends Scene {
     // 可以在这里添加更多错误提示，比如文字提示或音效
     console.log('[GameplayScene] 工具使用错误提示');
   }
+  
+  /**
+   * 开始 Z 字绘制模式（用于 sweep 和 wipe）
+   * 点击目标污垢后，工具自动跳到手指位置并进入拖动状态
+   */
+  _startZDraw(dirt, x, y) {
+    this.isDraggingTool = true;
+    this.toolPosition = { x, y };
+    this.selectedDirt = dirt;
+    
+    const gameAreaY = this.screenHeight * 0.08;
+    this.zDrawState = {
+      active: true,
+      dirt: dirt,
+      phase: 0,
+      startX: x,
+      startY: y - gameAreaY
+    };
+    
+    // 高亮显示目标污垢
+    dirt.isHighlighted = true;
+    dirt.highlightScale = 1;
+    
+    console.log(`[GameplayScene] 开始 Z 字绘制: ${dirt.name}`);
+  }
+  
+  /**
+   * 更新 Z 字绘制进度
+   * 检测手指是否画出了 Z 字形的三段路径
+   */
+  _updateZDraw(x, y) {
+    if (!this.zDrawState.active || !this.zDrawState.dirt) return;
+    
+    const dirt = this.zDrawState.dirt;
+    const gameAreaY = this.screenHeight * 0.08;
+    const relX = x - dirt.x;
+    const relY = (y - gameAreaY) - dirt.y;
+    const size = dirt.size;
+    const state = this.zDrawState;
+    
+    // 计算相对于当前 phase 起点的位移
+    const startRelX = state.startX - dirt.x;
+    const startRelY = state.startY - dirt.y;
+    const dx = relX - startRelX;
+    const dy = relY - startRelY;
+    
+    if (state.phase === 0) {
+      // 第一横：从左到右，y 变化不太大
+      if (dx > size / 3 && Math.abs(dy) < size / 2) {
+        state.phase = 1;
+        state.startX = relX + dirt.x;
+        state.startY = relY + dirt.y;
+        console.log('[GameplayScene] Z字绘制：完成第一横');
+      }
+    } else if (state.phase === 1) {
+      // 斜线：从右上到左下（x 减小，y 增大）
+      if (dx < -size / 3 && dy > size / 3) {
+        state.phase = 2;
+        state.startX = relX + dirt.x;
+        state.startY = relY + dirt.y;
+        console.log('[GameplayScene] Z字绘制：完成斜线');
+      }
+    } else if (state.phase === 2) {
+      // 第二横：从左到右，y 变化不太大
+      if (dx > size / 3 && Math.abs(dy) < size / 2) {
+        state.phase = 3;
+        console.log('[GameplayScene] Z字绘制：完成Z字，清洁完成');
+        // 根据工具类型完成清洁
+        if (this.activeTool && this.activeTool.id === 'cloth') {
+          this._completeWipeClean(dirt);
+        } else if (this.activeTool && this.activeTool.id === 'broom') {
+          this._completeSweepClean(dirt);
+        }
+      }
+    }
+  }
 
   /**
    * throw 类型污垢飞向垃圾桶的动画
@@ -2994,26 +3166,27 @@ class GameplayScene extends Scene {
     if (dirt.isFlying) return; // 防止重复点击
     dirt.isFlying = true;
     
-    // 新手引导：检查是否点击了正确的污垢
-    if (this.tutorial.isActive && this.tutorial.step === 2) {
-      if (dirt.id === this.tutorial.targetDirtId) {
-        console.log('[GameplayScene] 引导：已选中目标paper污垢，进入步骤3');
-        this.tutorial.step = 3; // 进入第三步：选择cloth工具
-      }
+    // 被动引导：点击目标污垢后，立即隐藏白色光圈和手指提示
+    if (this.tutorial.isActive) {
+      this.tutorial.showRubbishBinDirtHint = false;
+      this.tutorial.showDcBasketDirtHint = false;
     }
     
     const s = this.screenWidth / 750; // 屏幕缩放比例
     const baseSize = 60 * s; // 基础尺寸
     
-    // 获取垃圾桶工具的位置（屏幕底部工具槽位置）
-    const toolSlotY = this.screenHeight * 0.88; // 工具槽在底部 12%
-    const targetX = this.screenWidth / 2;
-    const targetY = toolSlotY;
+    // 获取当前弹出工具的位置作为飞行终点
+    const targetX = this.toolPosition.x;
+    const targetY = this.toolPosition.y;
     
     // 起始位置（转换为屏幕绝对坐标）
     const gameAreaY = this.screenHeight * 0.08;
     const startX = dirt.x;
     const startY = dirt.y + gameAreaY;
+    
+    // 记录污垢原始位置，用于亮晶晶特效
+    const originalX = dirt.x;
+    const originalY = dirt.y;
     
     // 动画参数
     const duration = 500; // 动画时长 500ms
@@ -3053,12 +3226,28 @@ class GameplayScene extends Scene {
         dirt.isFlying = false;
         console.log(`[GameplayScene] ${dirt.name} 已扔进垃圾桶`);
         
-        // 触发活动工具（垃圾桶）摇晃动画（不倒翁效果）
+        // 添加亮晶晶特效（在污垢原位置）
+        const s = this.screenWidth / 750;
+        this._addShineEffect(originalX, originalY + gameAreaY, s);
+        
+        // 触发活动工具摇晃动画（不倒翁效果）
         if (this.activeTool && this.activeTool.id === 'rubbish_bin') {
           this.toolShakeAnim.active = true;
           this.toolShakeAnim.targetToolId = 'rubbish_bin';
           this.toolShakeAnim.angle = 0;
           this.toolShakeAnim.velocity = 0.07; // 初始角速度（更小的幅度）
+        }
+        
+        // 被动引导：标记 throw 工具已正确使用
+        if (this.tutorial.isActive) {
+          if (this.activeTool && this.activeTool.id === 'rubbish_bin') {
+            this.tutorial.rubbishBinUsed = true;
+            this.tutorial.showRubbishBinDirtHint = false;
+          } else if (this.activeTool && this.activeTool.id === 'dc_basket') {
+            this.tutorial.dcBasketUsed = true;
+            this.tutorial.showDcBasketDirtHint = false;
+          }
+          this._checkTutorialComplete();
         }
       }
     };
@@ -3118,15 +3307,6 @@ class GameplayScene extends Scene {
     this.wipeStartAngle = null;
     this.totalWipeAngle = 0;
     this.clockwiseWipes = 0;
-    
-    // 新手引导步骤4：工具弹出后进入步骤5（拖拽箭头动画）
-    if (this.tutorial.isActive && this.tutorial.step === 4) {
-      console.log('[GameplayScene] 引导：cloth工具已弹出，进入步骤5');
-      this.tutorial.step = 5;
-      // 重置箭头动画状态
-      this.tutorial.arrowAnim.time = 0;
-      this.tutorial.arrowAnim.repeatCount = 0;
-    }
   }
   
   /**
@@ -3141,7 +3321,7 @@ class GameplayScene extends Scene {
   }
   
   /**
-   * 选择工具时回调
+   * 选择工具时回调（被动引导）
    */
   _selectTool(index) {
     const tool = this.tools[index];
@@ -3157,26 +3337,53 @@ class GameplayScene extends Scene {
       this.toolSlot.setEmptySlot(index);
     }
     
-    // 新手引导：检查是否选中了正确的工具（在 _spawnTool 之前，确保步骤正确）
-    if (this.tutorial.isActive && this.tutorial.step === 1) {
-      console.log('[GameplayScene] 引导：检查工具选择', { toolId: tool?.id, target: this.tutorial.targetToolId });
-      if (tool && tool.id === this.tutorial.targetToolId) {
-        console.log('[GameplayScene] 引导：已选中正确工具，进入步骤2');
-        this.tutorial.step = 2; // 进入第二步：选择污垢
+    // ===== 被动新手引导处理 =====
+    if (this.tutorial.isActive && tool) {
+      // 2. 点击了 rubbish_bin：显示目标污垢的白色光圈+手指
+      if (tool.id === 'rubbish_bin') {
+        this.tutorial.showingRubbishBinGlow = false;
+        this.tutorial.showRubbishBinDirtHint = true;
+        this.tutorial.showDcBasketDirtHint = false;
+        this.tutorial.showClothDirtHint = false;
+        this.tutorial.showAngryEmoji = false;
+        console.log('[GameplayScene] 引导：选中 rubbish_bin，提示目标污垢');
+      }
+      
+      // 3. 点击了 dc_basket：显示目标污垢的白色光圈+手指
+      else if (tool.id === 'dc_basket') {
+        this.tutorial.showingDcBasketGlow = false;
+        this.tutorial.showDcBasketDirtHint = true;
+        this.tutorial.showRubbishBinDirtHint = false;
+        this.tutorial.showClothDirtHint = false;
+        this.tutorial.showAngryEmoji = false;
+        console.log('[GameplayScene] 引导：选中 dc_basket，提示目标污垢');
+      }
+      
+      // 4. 点击了 cloth：显示目标污垢的 Z 字形动画
+      else if (tool.id === 'cloth') {
+        this.tutorial.showingClothGlow = false;
+        this.tutorial.showClothDirtHint = true;
+        this.tutorial.showRubbishBinDirtHint = false;
+        this.tutorial.showDcBasketDirtHint = false;
+        this.tutorial.showAngryEmoji = false;
+        // 重置 Z 字形动画
+        this.tutorial.circularAnim.time = 0;
+        this.tutorial.circularAnim.repeatCount = 0;
+        console.log('[GameplayScene] 引导：选中 cloth，提示 Z 字形拖地');
+      }
+      
+      // 点击了其他工具：隐藏所有提示
+      else {
+        this.tutorial.showingRubbishBinGlow = false;
+        this.tutorial.showingDcBasketGlow = false;
+        this.tutorial.showingClothGlow = false;
+        this.tutorial.showRubbishBinDirtHint = false;
+        this.tutorial.showDcBasketDirtHint = false;
+        this.tutorial.showClothDirtHint = false;
       }
     }
     
-    // 新手引导步骤3：检查是否选中了cloth工具（在 _spawnTool 之前）
-    if (this.tutorial.isActive && this.tutorial.step === 3) {
-      console.log('[GameplayScene] 引导：检查cloth工具选择', { toolId: tool?.id });
-      if (tool && tool.id === 'cloth') {
-        console.log('[GameplayScene] 引导：已选中cloth工具，进入步骤4');
-        this.tutorial.step = 4; // 进入第四步：工具弹出
-      }
-    }
-    
-    // 点击工具槽直接弹出活动工具（不再依赖选中的圆圈）
-    // 注意：必须在步骤检查之后调用，因为 _spawnTool 中会根据步骤4切换到步骤5
+    // 点击工具槽直接弹出活动工具
     this._spawnTool();
     
     this.showToolTip = true;
@@ -3271,6 +3478,13 @@ class GameplayScene extends Scene {
         life: 1,
         size: (5 + Math.random() * 10) * s
       });
+    }
+    
+    // 被动引导：标记 cloth 已正确使用
+    if (this.tutorial.isActive) {
+      this.tutorial.clothUsed = true;
+      this.tutorial.showClothDirtHint = false;
+      this._checkTutorialComplete();
     }
     
     // 检查是否全部清洁完成

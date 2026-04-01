@@ -24,7 +24,7 @@ export const BASE_TOOLS = [
     description: '可以清理稀碎的固体垃圾，碎纸屑',
     efficiency: 1.2,
     type: 'base',
-    unlockLevel: 1
+    unlockLevel: 3
   },
   {
     id: 'rubbish_bin',
@@ -33,6 +33,17 @@ export const BASE_TOOLS = [
     imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_rubbish_bin.png',
     color: '#66BB6A',
     description: '纸团，包装纸类的垃圾扔进去',
+    efficiency: 1.2,
+    type: 'base',
+    unlockLevel: 1
+  },
+  {
+    id: 'dc_basket',
+    name: '脏衣篓',
+    icon: '👖',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_dc_basket.png',
+    color: '#66BB6A',
+    description: '放脏衣服',
     efficiency: 1.2,
     type: 'base',
     unlockLevel: 1

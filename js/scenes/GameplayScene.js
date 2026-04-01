@@ -973,15 +973,15 @@ class GameplayScene extends Scene {
     ctx.save();
     ctx.lineWidth = 4 * s;
     
-    // 绘制4层向外扩散的白色波纹（效果加大）
+    // 绘制4层向外扩散的白色波纹（效果加强）
     for (let i = 0; i < 4; i++) {
       const ringProgress = (progress + i * 0.25) % 1; // 每层错开25%
-      const radius = baseRadius + ringProgress * 22 * s; // 向外扩散22px（加大）
-      const alpha = (1 - ringProgress) * 0.75; // 越外越透明，最大透明度0.75（更亮）
+      const radius = baseRadius + ringProgress * 28 * s; // 向外扩散28px（加强）
+      const alpha = (1 - ringProgress) * 0.85; // 越外越透明，最大透明度0.85（更亮）
       
       ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-      ctx.shadowBlur = 10 * s; // 发光加强
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
+      ctx.shadowBlur = 12 * s; // 发光加强
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       ctx.stroke();
@@ -1028,15 +1028,15 @@ class GameplayScene extends Scene {
     ctx.save();
     ctx.lineWidth = 4 * s;
     
-    // 绘制4层向外扩散的白色波纹
+    // 绘制4层向外扩散的白色波纹（效果加强）
     for (let i = 0; i < 4; i++) {
       const ringProgress = (progress + i * 0.25) % 1;
-      const radius = baseRadius + ringProgress * 22 * s;
-      const alpha = (1 - ringProgress) * 0.75;
+      const radius = baseRadius + ringProgress * 28 * s;
+      const alpha = (1 - ringProgress) * 0.85;
       
       ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-      ctx.shadowBlur = 10 * s;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
+      ctx.shadowBlur = 12 * s;
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       ctx.stroke();
@@ -1058,7 +1058,7 @@ class GameplayScene extends Scene {
   
   /**
    * 渲染拖拽箭头动画（步骤5）
-   * 尾部固定在 cloth 工具位置，尖端沿曲线指向 wipe 污垢
+   * 从 cloth 工具位置指向 wipe 污垢的箭头
    */
   _renderTutorialDragArrow(ctx, s) {
     if (this.tutorial.step !== 5) return;
@@ -1069,72 +1069,76 @@ class GameplayScene extends Scene {
     
     const gameAreaY = this.screenHeight * 0.08;
     
-    // 尾部固定在 cloth 工具弹出的位置
-    const tailX = this.screenWidth / 2;
-    const tailY = this.screenHeight * 0.82;
+    // 起始位置（cloth工具位置）
+    let startX = this.screenWidth / 2;
+    let startY = this.screenHeight * 0.82;
+    if (this.toolPosition) {
+      startX = this.toolPosition.x;
+      startY = this.toolPosition.y;
+    }
     
-    // 污垢目标位置
+    // 目标位置（wipe污垢）
     const endX = wipeDirt.x;
     const endY = wipeDirt.y + gameAreaY;
     
-    // 动画参数
+    // 动画进度
     const anim = this.tutorial.arrowAnim;
-    const cycle = anim.duration;
-    const progress = (anim.time % cycle) / cycle;
+    const cycle = 2500;
+    let t = (anim.time % cycle) / cycle;
+    t = 1 - Math.pow(1 - t, 3); // ease-out
     
     // 箭头参数
-    const headLength = 20 * s;
-    const lineWidth = 16 * s;
+    const lineWidth = 20 * s;
+    const headLength = 35 * s;
     
-    // 透明度：逐渐淡出
-    const opacity = 1 - progress;
-    if (opacity <= 0) return;
+    // 计算当前箭头尖端位置（从起点向终点移动）
+    const tipX = startX + (endX - startX) * t;
+    const tipY = startY + (endY - startY) * t;
     
-    // 计算曲线上的点 - 使用二次贝塞尔曲线
-    // 控制点在中点上方，形成弧线
-    const controlX = (tailX + endX) / 2;
-    const controlY = Math.min(tailY, endY) - 120 * s;
+    // 计算箭头方向
+    const angle = Math.atan2(endY - startY, endX - startX);
     
-    // 计算箭头尖端位置（沿曲线从尾部向目标移动）
-    const t = progress;
-    const invT = 1 - t;
-    // 二次贝塞尔曲线: B(t) = (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
-    // P0 = 尾部(工具位置), P1 = 控制点, P2 = 目标(污垢位置)
-    const tipX = invT * invT * tailX + 2 * invT * t * controlX + t * t * endX;
-    const tipY = invT * invT * tailY + 2 * invT * t * controlY + t * t * endY;
-    
-    // 计算箭头方向（从尾部指向尖端）
-    const angle = Math.atan2(tipY - tailY, tipX - tailX);
+    // 计算尾部位置（固定长度，跟随尖端）
+    const arrowLength = 100 * s;
+    const tailX = tipX - Math.cos(angle) * arrowLength;
+    const tailY = tipY - Math.sin(angle) * arrowLength;
     
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    
+    // 强发光效果
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+    ctx.shadowBlur = 25 * s;
+    
+    // 绘制箭头主体（直线）
+    ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
     ctx.lineWidth = lineWidth;
-    
-    // 白色发光效果
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-    ctx.shadowBlur = 12 * s;
-    
-    // 绘制箭头主体（曲线）
-    ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
-    ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-    
     ctx.beginPath();
     ctx.moveTo(tailX, tailY);
-    ctx.quadraticCurveTo(controlX, controlY, tipX, tipY);
+    ctx.lineTo(tipX, tipY);
     ctx.stroke();
     
-    // 绘制箭头头部
+    // 绘制箭头头部（更大的实心三角形）
+    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
     ctx.beginPath();
+    // 垂直于箭头方向的向量
+    const perpX = -Math.sin(angle);
+    const perpY = Math.cos(angle);
+    // 箭头两翼宽度
+    const wingWidth = headLength * 0.6;
+    // 箭头底部中心点
+    const baseX = tipX - Math.cos(angle) * headLength;
+    const baseY = tipY - Math.sin(angle) * headLength;
+    // 两翼点
+    const wingX1 = baseX + perpX * wingWidth;
+    const wingY1 = baseY + perpY * wingWidth;
+    const wingX2 = baseX - perpX * wingWidth;
+    const wingY2 = baseY - perpY * wingWidth;
+    
     ctx.moveTo(tipX, tipY);
-    ctx.lineTo(
-      tipX - headLength * Math.cos(angle - Math.PI / 6),
-      tipY - headLength * Math.sin(angle - Math.PI / 6)
-    );
-    ctx.lineTo(
-      tipX - headLength * Math.cos(angle + Math.PI / 6),
-      tipY - headLength * Math.sin(angle + Math.PI / 6)
-    );
+    ctx.lineTo(wingX1, wingY1);
+    ctx.lineTo(wingX2, wingY2);
     ctx.closePath();
     ctx.fill();
     
@@ -1142,8 +1146,8 @@ class GameplayScene extends Scene {
   }
   
   /**
-   * 渲染环绕箭头动画（步骤6）
-   * 围绕wipe污垢顺时针旋转的白色柔和弧形箭头，重复2次，每次1秒
+   * 渲染Z字形拖地路径动画（步骤6）
+   * 在wipe污垢上画出Z字形，模拟拖地动作
    */
   _renderTutorialCircularArrow(ctx, s) {
     if (this.tutorial.step !== 6) return;
@@ -1155,68 +1159,64 @@ class GameplayScene extends Scene {
     const gameAreaY = this.screenHeight * 0.08;
     const centerX = wipeDirt.x;
     const centerY = wipeDirt.y + gameAreaY;
-    const baseRadius = wipeDirt.size / 2 + 25 * s;
+    const size = wipeDirt.size * 0.8; // Z字形范围略小于污垢大小
     
-    // 动画参数
+    // 动画参数 - Z字形分三段绘制
     const anim = this.tutorial.circularAnim;
     const cycle = anim.duration;
-    const progress = (anim.time % cycle) / cycle;
+    let progress = (anim.time % cycle) / cycle;
     
-    // 顺时针旋转
-    const rotationAngle = progress * Math.PI * 2;
+    // Z字形的四个点
+    const zPoints = [
+      { x: centerX - size/2, y: centerY - size/3 }, // 左上
+      { x: centerX + size/2, y: centerY - size/3 }, // 右上
+      { x: centerX - size/2, y: centerY + size/3 }, // 左下
+      { x: centerX + size/2, y: centerY + size/3 }  // 右下
+    ];
     
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.lineWidth = 8 * s;
     
-    const arcSpan = Math.PI * 1.3; // 234度弧形
-    const arcStartAngle = rotationAngle;
-    const arcEndAngle = rotationAngle - arcSpan;
-    
-    // 柔和的白色发光效果
+    // 强发光效果
     ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-    ctx.shadowBlur = 12 * s;
-    
-    // 绘制白色弧形主体
+    ctx.shadowBlur = 15 * s;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.lineWidth = 4 * s;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, baseRadius, arcStartAngle, arcEndAngle, false);
-    ctx.stroke();
     
-    // 绘制柔和的灰色边框
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
-    ctx.lineWidth = 1.5 * s;
-    ctx.stroke();
-    
-    // 计算箭头头部位置
-    const tipX = centerX + baseRadius * Math.cos(arcEndAngle);
-    const tipY = centerY + baseRadius * Math.sin(arcEndAngle);
-    
-    // 箭头方向（切线方向，顺时针）
-    const arrowOrientationAngle = arcEndAngle - Math.PI / 2;
-    
-    // 绘制圆润的白色箭头头部
-    const headLength = 12 * s;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
-    ctx.shadowBlur = 8 * s;
-    
-    ctx.beginPath();
-    ctx.moveTo(tipX, tipY);
-    ctx.lineTo(
-      tipX - headLength * Math.cos(arrowOrientationAngle - Math.PI / 5),
-      tipY - headLength * Math.sin(arrowOrientationAngle - Math.PI / 5)
-    );
-    ctx.quadraticCurveTo(
-      tipX - headLength * 0.5 * Math.cos(arrowOrientationAngle),
-      tipY - headLength * 0.5 * Math.sin(arrowOrientationAngle),
-      tipX - headLength * Math.cos(arrowOrientationAngle + Math.PI / 5),
-      tipY - headLength * Math.sin(arrowOrientationAngle + Math.PI / 5)
-    );
-    ctx.closePath();
-    ctx.fill();
+    // 根据进度绘制Z字形的不同阶段
+    if (progress < 0.33) {
+      // 第一段：左上到右上
+      const p = progress / 0.33;
+      const x = zPoints[0].x + (zPoints[1].x - zPoints[0].x) * p;
+      const y = zPoints[0].y + (zPoints[1].y - zPoints[0].y) * p;
+      ctx.beginPath();
+      ctx.moveTo(zPoints[0].x, zPoints[0].y);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    } else if (progress < 0.66) {
+      // 第二段：右上到左下
+      const p = (progress - 0.33) / 0.33;
+      const x = zPoints[1].x + (zPoints[2].x - zPoints[1].x) * p;
+      const y = zPoints[1].y + (zPoints[2].y - zPoints[1].y) * p;
+      ctx.beginPath();
+      ctx.moveTo(zPoints[0].x, zPoints[0].y);
+      ctx.lineTo(zPoints[1].x, zPoints[1].y);
+      ctx.moveTo(zPoints[1].x, zPoints[1].y);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    } else {
+      // 第三段：左下到右下
+      const p = (progress - 0.66) / 0.34;
+      const x = zPoints[2].x + (zPoints[3].x - zPoints[2].x) * p;
+      const y = zPoints[2].y + (zPoints[3].y - zPoints[2].y) * p;
+      ctx.beginPath();
+      ctx.moveTo(zPoints[0].x, zPoints[0].y);
+      ctx.lineTo(zPoints[1].x, zPoints[1].y);
+      ctx.lineTo(zPoints[2].x, zPoints[2].y);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
     
     ctx.restore();
   }
@@ -1236,8 +1236,8 @@ class GameplayScene extends Scene {
     const gameAreaY = this.screenHeight * 0.08;
     const cx = wipeDirt.x;
     const cy = wipeDirt.y + gameAreaY;
-    // 变大1.2倍后的半径
-    const baseRadius = (wipeDirt.size / 2) * 1.2 + 10 * s;
+    // 污垢半径
+    const baseRadius = wipeDirt.size / 2 + 10 * s;
     
     ctx.save();
     
@@ -1295,15 +1295,15 @@ class GameplayScene extends Scene {
     ctx.save();
     ctx.lineWidth = 4 * s;
     
-    // 绘制3层向外扩散的白色波纹（折中）
+    // 绘制3层向外扩散的白色波纹（效果加强）
     for (let i = 0; i < 3; i++) {
       const ringProgress = (progress + i * 0.33) % 1; // 每层错开33%
-      const radius = baseRadius + ringProgress * 20 * s; // 向外扩散20px（折中）
-      const alpha = (1 - ringProgress) * 0.6; // 越外越透明，最大透明度0.6（折中）
+      const radius = baseRadius + ringProgress * 26 * s; // 向外扩散26px（加强）
+      const alpha = (1 - ringProgress) * 0.7; // 越外越透明，最大透明度0.7（加强）
       
       ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
-      ctx.shadowBlur = 8 * s; // 发光折中
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+      ctx.shadowBlur = 10 * s; // 发光加强
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.stroke();
@@ -1861,11 +1861,6 @@ class GameplayScene extends Scene {
   _renderDirts(ctx, gameAreaY, s) {
     const now = Date.now();
     
-    // 检查是否处于引导步骤5或6，需要放大wipe污垢
-    const isGuideStep5Or6 = this.tutorial.isActive && 
-                            (this.tutorial.step === 5 || this.tutorial.step === 6) &&
-                            this.tutorial.targetWipeDirtId;
-    
     this.dirtObjects.forEach(dirt => {
       if (dirt.state === 'clean') return;
       
@@ -1874,9 +1869,7 @@ class GameplayScene extends Scene {
       
       // 计算高亮缩放（cloth 工具拖动时）
       const highlightScale = dirt.highlightScale || 1;
-      // 引导步骤5/6时，wipe污垢放大1.2倍
-      const guideScale = (isGuideStep5Or6 && dirt.id === this.tutorial.targetWipeDirtId) ? 1.2 : 1;
-      const radius = (dirt.width / 2) * highlightScale * guideScale;
+      const radius = (dirt.width / 2) * highlightScale;
       
       // 绘制高亮背景（淡白光）
       if (dirt.isHighlighted) {

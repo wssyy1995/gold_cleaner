@@ -99,12 +99,25 @@ class GameplayScene extends Scene {
     // 新手引导状态
     this.tutorial = {
       isActive: false,        // 是否正在引导中
-      step: 0,                // 当前步骤：0=未开始, 1=选工具, 2=选污垢, 3=完成
+      step: 0,                // 当前步骤：0=未开始, 1=选rubbish_bin工具, 2=选paper污垢, 3=选cloth工具, 4=cloth工具弹出, 5=拖拽箭头指向wipe污垢, 6=环绕箭头, 7=完成
       targetToolId: null,     // 目标工具ID
-      targetDirtId: null,     // 目标污垢ID
+      targetDirtId: null,     // 目标污垢ID（paper类型）
+      targetWipeDirtId: null, // 目标wipe类型污垢ID
       handAnim: {             // 小手动画状态
         offset: 0,
         time: 0
+      },
+      arrowAnim: {            // 箭头动画状态
+        time: 0,              // 动画时间
+        repeatCount: 0,       // 当前重复次数
+        maxRepeats: 2,        // 最大重复次数
+        duration: 1500        // 每次动画持续时间（毫秒）- 1.5秒更慢
+      },
+      circularAnim: {         // 环绕箭头动画状态
+        time: 0,              // 动画时间
+        repeatCount: 0,       // 当前重复次数
+        maxRepeats: 2,        // 最大重复次数
+        duration: 1000        // 每次动画持续时间（毫秒）
       }
     };
     
@@ -239,12 +252,23 @@ class GameplayScene extends Scene {
       return;
     }
     
+    // 找到第一个 operate_type 为 wipe 的污垢作为目标
+    const wipeDirt = this.dirtObjects.find(d => {
+      const dirtType = DIRT_TYPES[d.type];
+      return dirtType && dirtType.operate_type === 'wipe';
+    });
+    if (!wipeDirt) {
+      console.warn('[GameplayScene] 未找到 wipe 类型污垢，无法开启引导');
+      return;
+    }
+    
     // 开启引导
-    console.log('[GameplayScene] 开启新手引导，目标污垢:', paperDirt.id);
+    console.log('[GameplayScene] 开启新手引导，目标paper:', paperDirt.id, '目标wipe:', wipeDirt.id);
     this.tutorial.isActive = true;
-    this.tutorial.step = 1; // 第一步：选择工具
+    this.tutorial.step = 1; // 第一步：选择 rubbish_bin 工具
     this.tutorial.targetToolId = 'rubbish_bin';
     this.tutorial.targetDirtId = paperDirt.id;
+    this.tutorial.targetWipeDirtId = wipeDirt.id;
   }
   
   /**
@@ -253,7 +277,7 @@ class GameplayScene extends Scene {
   _completeTutorial() {
     console.log('[GameplayScene] 完成新手引导');
     this.tutorial.isActive = false;
-    this.tutorial.step = 3;
+    this.tutorial.step = 7; // 更新为7表示完全完成
     
     const game = getGame();
     const dataManager = game ? game.dataManager : null;
@@ -266,6 +290,58 @@ class GameplayScene extends Scene {
         wx.setStorageSync('tutorial_completed', true);
       } catch (e) {
         // 忽略错误
+      }
+    }
+  }
+  
+  /**
+   * 强制开始新手引导（调试用）
+   * 重置所有引导状态并从头开始
+   */
+  _forceStartTutorial() {
+    console.log('[GameplayScene] 强制开始新手引导');
+    
+    // 重置引导完成状态
+    const game = getGame();
+    const dataManager = game ? game.dataManager : null;
+    if (dataManager && dataManager.setTutorialCompleted) {
+      dataManager.tutorialCompleted = false;
+    }
+    try {
+      wx.setStorageSync('tutorial_completed', false);
+    } catch (e) {}
+    
+    // 重置所有工具槽状态
+    if (this.toolSlot) {
+      this.toolSlot.emptySlots.clear();
+      this.toolSlot.selectedIndex = -1;
+    }
+    this.activeTool = null;
+    this.toolAnim = { active: false };
+    
+    // 重新检查并启动引导
+    this._checkTutorial();
+    
+    // 如果引导未激活（可能因为找不到污垢），手动设置
+    if (!this.tutorial.isActive) {
+      const paperDirt = this.dirtObjects.find(d => d.type === 'paper');
+      const wipeDirt = this.dirtObjects.find(d => {
+        const dirtType = DIRT_TYPES[d.type];
+        return dirtType && dirtType.operate_type === 'wipe';
+      });
+      
+      if (paperDirt && wipeDirt) {
+        this.tutorial.isActive = true;
+        this.tutorial.step = 1;
+        this.tutorial.targetToolId = 'rubbish_bin';
+        this.tutorial.targetDirtId = paperDirt.id;
+        this.tutorial.targetWipeDirtId = wipeDirt.id;
+        this.tutorial.handAnim = { offset: 0, time: 0 };
+        this.tutorial.arrowAnim = { time: 0, repeatCount: 0, maxRepeats: 2, duration: 1000 };
+        this.tutorial.circularAnim = { time: 0, repeatCount: 0, maxRepeats: 2, duration: 1000 };
+        console.log('[GameplayScene] 手动启动引导:', { paperId: paperDirt.id, wipeId: wipeDirt.id });
+      } else {
+        console.warn('[GameplayScene] 无法启动引导：缺少必要的污垢类型');
       }
     }
   }
@@ -398,6 +474,20 @@ class GameplayScene extends Scene {
         }
       }
     });
+    
+    // 引导按钮（调试用，仅在第1关显示）- 点击强制触发新人引导
+    this.guideBtn = null;
+    if (this.levelId === 1) {
+      this.guideBtn = new Button({
+        x: 20 * s, y: 290 * s, width: 100 * s, height: 50 * s,
+        text: '引导', fontSize: 24 * s,
+        bgColor: 'rgba(255,152,0,0.8)', textColor: '#FFFFFF',
+        borderRadius: 8 * s,
+        onClick: () => {
+          this._forceStartTutorial();
+        }
+      });
+    }
 
     // 创建 ToolSlot 组件（默认不选中任何工具）
     this.toolSlot = new ToolSlot({
@@ -797,6 +887,44 @@ class GameplayScene extends Scene {
     // 更新小手摆动动画（正弦波，周期2秒）
     this.tutorial.handAnim.time += dt;
     this.tutorial.handAnim.offset = Math.sin(this.tutorial.handAnim.time * 0.003) * 10;
+    
+    // 更新步骤5的拖拽箭头动画
+    if (this.tutorial.step === 5) {
+      const anim = this.tutorial.arrowAnim;
+      anim.time += dt;
+      
+      // 检查是否完成一次动画周期
+      if (anim.time >= anim.duration) {
+        anim.time = 0;
+        anim.repeatCount++;
+        
+        // 完成2次重复后进入步骤6
+        if (anim.repeatCount >= anim.maxRepeats) {
+          console.log('[GameplayScene] 引导：拖拽箭头动画完成，进入步骤6');
+          this.tutorial.step = 6;
+          anim.repeatCount = 0;
+          anim.time = 0;
+        }
+      }
+    }
+    
+    // 更新步骤6的环绕箭头动画
+    if (this.tutorial.step === 6) {
+      const anim = this.tutorial.circularAnim;
+      anim.time += dt;
+      
+      // 检查是否完成一次动画周期
+      if (anim.time >= anim.duration) {
+        anim.time = 0;
+        anim.repeatCount++;
+        
+        // 完成2次重复后完成引导
+        if (anim.repeatCount >= anim.maxRepeats) {
+          console.log('[GameplayScene] 引导：环绕箭头动画完成，引导结束');
+          this._completeTutorial();
+        }
+      }
+    }
   }
   
   /**
@@ -807,13 +935,13 @@ class GameplayScene extends Scene {
   _renderTutorial(ctx, s) {
     if (!this.tutorial.isActive) return;
     
-    // 调试信息（开发调试用）
-    ctx.save();
-    ctx.fillStyle = '#FF0000';
-    ctx.font = `bold ${16 * s}px Arial`;
-    ctx.textAlign = 'left';
-    ctx.fillText(`引导步骤: ${this.tutorial.step}, targetDirt: ${this.tutorial.targetDirtId}`, 10 * s, 200 * s);
-    ctx.restore();
+    // 调试信息（开发调试用）- 已注释
+    // ctx.save();
+    // ctx.fillStyle = '#FF0000';
+    // ctx.font = `bold ${16 * s}px Arial`;
+    // ctx.textAlign = 'left';
+    // ctx.fillText(`引导步骤: ${this.tutorial.step}, targetDirt: ${this.tutorial.targetDirtId}`, 10 * s, 200 * s);
+    // ctx.restore();
   }
   
   /**
@@ -838,30 +966,30 @@ class GameplayScene extends Scene {
     
     console.log('[GameplayScene] 引导：渲染工具高亮', { toolIndex, centerX, centerY, baseRadius });
     
-    // 波纹扩散动画（周期1.75秒，折中）
-    const cycle = 1750;
+    // 波纹扩散动画（周期1.5秒，稍快）
+    const cycle = 1500;
     const progress = (this.tutorial.handAnim.time % cycle) / cycle;
     
     ctx.save();
     ctx.lineWidth = 4 * s;
     
-    // 绘制3层向外扩散的白色波纹（折中）
-    for (let i = 0; i < 3; i++) {
-      const ringProgress = (progress + i * 0.33) % 1; // 每层错开33%
-      const radius = baseRadius + ringProgress * 16 * s; // 向外扩散16px（折中）
-      const alpha = (1 - ringProgress) * 0.6; // 越外越透明，最大透明度0.6（折中）
+    // 绘制4层向外扩散的白色波纹（效果加大）
+    for (let i = 0; i < 4; i++) {
+      const ringProgress = (progress + i * 0.25) % 1; // 每层错开25%
+      const radius = baseRadius + ringProgress * 22 * s; // 向外扩散22px（加大）
+      const alpha = (1 - ringProgress) * 0.75; // 越外越透明，最大透明度0.75（更亮）
       
       ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
-      ctx.shadowBlur = 8 * s; // 发光折中
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+      ctx.shadowBlur = 10 * s; // 发光加强
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       ctx.stroke();
     }
     
-    // 中心固定白圈
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.shadowBlur = 12 * s;
+    // 中心固定白圈（更亮）
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.shadowBlur = 15 * s;
     ctx.beginPath();
     ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
     ctx.stroke();
@@ -871,6 +999,268 @@ class GameplayScene extends Scene {
     // 绘制手指（在槽位上方，指尖向下指向槽位）
     const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 6; // 频率加快
     this._renderHandBig(ctx, s, centerX, y - 10 * s, handOffset, false);
+  }
+  
+  /**
+   * 渲染cloth工具槽位高亮引导（步骤3）
+   * 白色光圈+小手指指向
+   */
+  _renderTutorialClothHighlight(ctx, s) {
+    // 只在步骤3渲染cloth高亮
+    if (this.tutorial.step !== 3) return;
+    
+    // 找到cloth工具的槽位索引
+    const toolIndex = this.tools.findIndex(t => t.id === 'cloth');
+    if (toolIndex === -1 || !this.toolSlot) return;
+    
+    const slotPos = this.toolSlot.slotPositions[toolIndex];
+    if (!slotPos) return;
+    
+    const { x, y, size } = slotPos;
+    const centerX = x + size / 2;
+    const centerY = y + size / 2;
+    const baseRadius = size / 2 + 5 * s;
+    
+    // 波纹扩散动画（周期1.5秒）
+    const cycle = 1500;
+    const progress = (this.tutorial.handAnim.time % cycle) / cycle;
+    
+    ctx.save();
+    ctx.lineWidth = 4 * s;
+    
+    // 绘制4层向外扩散的白色波纹
+    for (let i = 0; i < 4; i++) {
+      const ringProgress = (progress + i * 0.25) % 1;
+      const radius = baseRadius + ringProgress * 22 * s;
+      const alpha = (1 - ringProgress) * 0.75;
+      
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+      ctx.shadowBlur = 10 * s;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    
+    // 中心固定白圈
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.shadowBlur = 15 * s;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.restore();
+    
+    // 绘制手指（在槽位上方，指尖向下指向槽位）
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 6;
+    this._renderHandBig(ctx, s, centerX, y - 10 * s, handOffset, false);
+  }
+  
+  /**
+   * 渲染拖拽箭头动画（步骤5）
+   * 尾部固定在 cloth 工具位置，尖端沿曲线指向 wipe 污垢
+   */
+  _renderTutorialDragArrow(ctx, s) {
+    if (this.tutorial.step !== 5) return;
+    
+    // 获取wipe污垢位置
+    const wipeDirt = this.dirtObjects.find(d => d.id === this.tutorial.targetWipeDirtId);
+    if (!wipeDirt) return;
+    
+    const gameAreaY = this.screenHeight * 0.08;
+    
+    // 尾部固定在 cloth 工具弹出的位置
+    const tailX = this.screenWidth / 2;
+    const tailY = this.screenHeight * 0.82;
+    
+    // 污垢目标位置
+    const endX = wipeDirt.x;
+    const endY = wipeDirt.y + gameAreaY;
+    
+    // 动画参数
+    const anim = this.tutorial.arrowAnim;
+    const cycle = anim.duration;
+    const progress = (anim.time % cycle) / cycle;
+    
+    // 箭头参数
+    const headLength = 20 * s;
+    const lineWidth = 16 * s;
+    
+    // 透明度：逐渐淡出
+    const opacity = 1 - progress;
+    if (opacity <= 0) return;
+    
+    // 计算曲线上的点 - 使用二次贝塞尔曲线
+    // 控制点在中点上方，形成弧线
+    const controlX = (tailX + endX) / 2;
+    const controlY = Math.min(tailY, endY) - 120 * s;
+    
+    // 计算箭头尖端位置（沿曲线从尾部向目标移动）
+    const t = progress;
+    const invT = 1 - t;
+    // 二次贝塞尔曲线: B(t) = (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+    // P0 = 尾部(工具位置), P1 = 控制点, P2 = 目标(污垢位置)
+    const tipX = invT * invT * tailX + 2 * invT * t * controlX + t * t * endX;
+    const tipY = invT * invT * tailY + 2 * invT * t * controlY + t * t * endY;
+    
+    // 计算箭头方向（从尾部指向尖端）
+    const angle = Math.atan2(tipY - tailY, tipX - tailX);
+    
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = lineWidth;
+    
+    // 白色发光效果
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+    ctx.shadowBlur = 12 * s;
+    
+    // 绘制箭头主体（曲线）
+    ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+    ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+    
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.quadraticCurveTo(controlX, controlY, tipX, tipY);
+    ctx.stroke();
+    
+    // 绘制箭头头部
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(
+      tipX - headLength * Math.cos(angle - Math.PI / 6),
+      tipY - headLength * Math.sin(angle - Math.PI / 6)
+    );
+    ctx.lineTo(
+      tipX - headLength * Math.cos(angle + Math.PI / 6),
+      tipY - headLength * Math.sin(angle + Math.PI / 6)
+    );
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.restore();
+  }
+  
+  /**
+   * 渲染环绕箭头动画（步骤6）
+   * 围绕wipe污垢顺时针旋转的白色柔和弧形箭头，重复2次，每次1秒
+   */
+  _renderTutorialCircularArrow(ctx, s) {
+    if (this.tutorial.step !== 6) return;
+    
+    // 获取wipe污垢位置
+    const wipeDirt = this.dirtObjects.find(d => d.id === this.tutorial.targetWipeDirtId);
+    if (!wipeDirt) return;
+    
+    const gameAreaY = this.screenHeight * 0.08;
+    const centerX = wipeDirt.x;
+    const centerY = wipeDirt.y + gameAreaY;
+    const baseRadius = wipeDirt.size / 2 + 25 * s;
+    
+    // 动画参数
+    const anim = this.tutorial.circularAnim;
+    const cycle = anim.duration;
+    const progress = (anim.time % cycle) / cycle;
+    
+    // 顺时针旋转
+    const rotationAngle = progress * Math.PI * 2;
+    
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    const arcSpan = Math.PI * 1.3; // 234度弧形
+    const arcStartAngle = rotationAngle;
+    const arcEndAngle = rotationAngle - arcSpan;
+    
+    // 柔和的白色发光效果
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+    ctx.shadowBlur = 12 * s;
+    
+    // 绘制白色弧形主体
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.lineWidth = 4 * s;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, baseRadius, arcStartAngle, arcEndAngle, false);
+    ctx.stroke();
+    
+    // 绘制柔和的灰色边框
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+    ctx.lineWidth = 1.5 * s;
+    ctx.stroke();
+    
+    // 计算箭头头部位置
+    const tipX = centerX + baseRadius * Math.cos(arcEndAngle);
+    const tipY = centerY + baseRadius * Math.sin(arcEndAngle);
+    
+    // 箭头方向（切线方向，顺时针）
+    const arrowOrientationAngle = arcEndAngle - Math.PI / 2;
+    
+    // 绘制圆润的白色箭头头部
+    const headLength = 12 * s;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
+    ctx.shadowBlur = 8 * s;
+    
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(
+      tipX - headLength * Math.cos(arrowOrientationAngle - Math.PI / 5),
+      tipY - headLength * Math.sin(arrowOrientationAngle - Math.PI / 5)
+    );
+    ctx.quadraticCurveTo(
+      tipX - headLength * 0.5 * Math.cos(arrowOrientationAngle),
+      tipY - headLength * 0.5 * Math.sin(arrowOrientationAngle),
+      tipX - headLength * Math.cos(arrowOrientationAngle + Math.PI / 5),
+      tipY - headLength * Math.sin(arrowOrientationAngle + Math.PI / 5)
+    );
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.restore();
+  }
+  
+  /**
+   * 渲染wipe污垢高亮背景（步骤5和6）
+   * 黄色半透明背景，突出显示目标污垢
+   */
+  _renderTutorialWipeDirtHighlight(ctx, s) {
+    if (!this.tutorial.isActive) return;
+    if (this.tutorial.step !== 5 && this.tutorial.step !== 6) return;
+    
+    // 获取wipe污垢位置
+    const wipeDirt = this.dirtObjects.find(d => d.id === this.tutorial.targetWipeDirtId);
+    if (!wipeDirt || wipeDirt.state === 'clean') return;
+    
+    const gameAreaY = this.screenHeight * 0.08;
+    const cx = wipeDirt.x;
+    const cy = wipeDirt.y + gameAreaY;
+    // 变大1.2倍后的半径
+    const baseRadius = (wipeDirt.size / 2) * 1.2 + 10 * s;
+    
+    ctx.save();
+    
+    // 脉动效果
+    const pulse = Math.sin(this.tutorial.handAnim.time * 0.004) * 0.2 + 0.8;
+    
+    // 内层发光（变淡）
+    ctx.shadowColor = 'rgba(255, 255, 220, 0.6)';
+    ctx.shadowBlur = 20 * s * pulse;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 外层发光（更淡更柔和）
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
+    ctx.shadowBlur = 35 * s * pulse;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, baseRadius + 15 * s, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
   }
   
   /**
@@ -1346,6 +1736,14 @@ class GameplayScene extends Scene {
     
     // 渲染结算弹窗（在最上层）
     this._renderSettlementDialog(ctx);
+    
+    // 在最顶层渲染新手引导步骤5和步骤6（拖拽箭头和环绕箭头）
+    if (this.tutorial.isActive && this.tutorial.step === 5) {
+      this._renderTutorialDragArrow(ctx, s);
+    }
+    if (this.tutorial.isActive && this.tutorial.step === 6) {
+      this._renderTutorialCircularArrow(ctx, s);
+    }
   }
 
   /**
@@ -1387,10 +1785,15 @@ class GameplayScene extends Scene {
     // 检查UI是否已初始化
     if (!this.dirtObjects) return;
     
-    // 3. 绘制污垢圆圈（y 坐标相对于游戏区域）
+    // 3. 先绘制wipe污垢背后的发光（步骤5和6）
+    if (this.tutorial.isActive && (this.tutorial.step === 5 || this.tutorial.step === 6)) {
+      this._renderTutorialWipeDirtHighlight(ctx, s);
+    }
+    
+    // 3.1 绘制污垢圆圈（y 坐标相对于游戏区域）
     this._renderDirts(ctx, gameAreaY, s);
     
-    // 3.5 渲染新手引导（在污垢之上，确保光圈可见）
+    // 3.5 渲染新手引导步骤2的污垢高亮（在污垢之上）
     if (this.tutorial.isActive && this.tutorial.step === 2) {
       this._renderTutorialDirtHighlight(ctx, s);
     }
@@ -1407,6 +1810,7 @@ class GameplayScene extends Scene {
     // UI元素（调试按钮）
     if (this.backBtn) this.backBtn.onRender(ctx);
     if (this.winBtn) this.winBtn.onRender(ctx);
+    if (this.guideBtn) this.guideBtn.onRender(ctx);
 
     // 6. 绘制 ToolSlot 组件（在底部区域）
     if (this.toolSlot) {
@@ -1417,6 +1821,12 @@ class GameplayScene extends Scene {
     if (this.tutorial.isActive && this.tutorial.step === 1) {
       this._renderTutorialToolHighlight(ctx, s);
     }
+    
+    // 6.6 渲染新手引导步骤3（cloth工具高亮）
+    if (this.tutorial.isActive && this.tutorial.step === 3) {
+      this._renderTutorialClothHighlight(ctx, s);
+    }
+    
   }
 
   /**
@@ -1451,6 +1861,11 @@ class GameplayScene extends Scene {
   _renderDirts(ctx, gameAreaY, s) {
     const now = Date.now();
     
+    // 检查是否处于引导步骤5或6，需要放大wipe污垢
+    const isGuideStep5Or6 = this.tutorial.isActive && 
+                            (this.tutorial.step === 5 || this.tutorial.step === 6) &&
+                            this.tutorial.targetWipeDirtId;
+    
     this.dirtObjects.forEach(dirt => {
       if (dirt.state === 'clean') return;
       
@@ -1459,7 +1874,9 @@ class GameplayScene extends Scene {
       
       // 计算高亮缩放（cloth 工具拖动时）
       const highlightScale = dirt.highlightScale || 1;
-      const radius = (dirt.width / 2) * highlightScale;
+      // 引导步骤5/6时，wipe污垢放大1.2倍
+      const guideScale = (isGuideStep5Or6 && dirt.id === this.tutorial.targetWipeDirtId) ? 1.2 : 1;
+      const radius = (dirt.width / 2) * highlightScale * guideScale;
       
       // 绘制高亮背景（淡白光）
       if (dirt.isHighlighted) {
@@ -2058,6 +2475,7 @@ class GameplayScene extends Scene {
     
     if (this.backBtn && this.backBtn.onTouchStart(x, y)) return true;
     if (this.winBtn && this.winBtn.onTouchStart(x, y)) return true;
+    if (this.guideBtn && this.guideBtn.onTouchStart(x, y)) return true;
     
     // 检查是否正在拖动活动工具
     if (this.activeTool && !this.isDraggingTool) {
@@ -2178,6 +2596,7 @@ class GameplayScene extends Scene {
     
     if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
     if (this.winBtn && this.winBtn.onTouchEnd(x, y)) return true;
+    if (this.guideBtn && this.guideBtn.onTouchEnd(x, y)) return true;
     
     // 处理 ToolSlot 的触摸结束（用于选中工具）
     if (this.toolSlot && this.toolSlot.onTouchEnd(x, y)) {
@@ -2585,8 +3004,8 @@ class GameplayScene extends Scene {
     // 新手引导：检查是否点击了正确的污垢
     if (this.tutorial.isActive && this.tutorial.step === 2) {
       if (dirt.id === this.tutorial.targetDirtId) {
-        console.log('[GameplayScene] 引导：已选中目标污垢，完成引导');
-        this._completeTutorial();
+        console.log('[GameplayScene] 引导：已选中目标paper污垢，进入步骤3');
+        this.tutorial.step = 3; // 进入第三步：选择cloth工具
       }
     }
     
@@ -2706,6 +3125,15 @@ class GameplayScene extends Scene {
     this.wipeStartAngle = null;
     this.totalWipeAngle = 0;
     this.clockwiseWipes = 0;
+    
+    // 新手引导步骤4：工具弹出后进入步骤5（拖拽箭头动画）
+    if (this.tutorial.isActive && this.tutorial.step === 4) {
+      console.log('[GameplayScene] 引导：cloth工具已弹出，进入步骤5');
+      this.tutorial.step = 5;
+      // 重置箭头动画状态
+      this.tutorial.arrowAnim.time = 0;
+      this.tutorial.arrowAnim.repeatCount = 0;
+    }
   }
   
   /**
@@ -2736,10 +3164,7 @@ class GameplayScene extends Scene {
       this.toolSlot.setEmptySlot(index);
     }
     
-    // 点击工具槽直接弹出活动工具（不再依赖选中的圆圈）
-    this._spawnTool();
-    
-    // 新手引导：检查是否选中了正确的工具
+    // 新手引导：检查是否选中了正确的工具（在 _spawnTool 之前，确保步骤正确）
     if (this.tutorial.isActive && this.tutorial.step === 1) {
       console.log('[GameplayScene] 引导：检查工具选择', { toolId: tool?.id, target: this.tutorial.targetToolId });
       if (tool && tool.id === this.tutorial.targetToolId) {
@@ -2747,6 +3172,19 @@ class GameplayScene extends Scene {
         this.tutorial.step = 2; // 进入第二步：选择污垢
       }
     }
+    
+    // 新手引导步骤3：检查是否选中了cloth工具（在 _spawnTool 之前）
+    if (this.tutorial.isActive && this.tutorial.step === 3) {
+      console.log('[GameplayScene] 引导：检查cloth工具选择', { toolId: tool?.id });
+      if (tool && tool.id === 'cloth') {
+        console.log('[GameplayScene] 引导：已选中cloth工具，进入步骤4');
+        this.tutorial.step = 4; // 进入第四步：工具弹出
+      }
+    }
+    
+    // 点击工具槽直接弹出活动工具（不再依赖选中的圆圈）
+    // 注意：必须在步骤检查之后调用，因为 _spawnTool 中会根据步骤4切换到步骤5
+    this._spawnTool();
     
     this.showToolTip = true;
     // 重置提示框定时器

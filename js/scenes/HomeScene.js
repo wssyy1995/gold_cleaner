@@ -634,9 +634,9 @@ class HomeScene extends Scene {
       { x: 665, y: 1250 },
       { x: 540, y: 1180 },
       { x: 450, y: 1120 },
-      { x: 300, y: 1050 },
-      { x: 220, y: 900 },
-      { x: 180, y: 800 },
+      { x: 300, y: 1060 },
+      { x: 145, y: 1000 },
+      { x: 130, y: 800 },
       { x: 530, y: 650 },
       { x: 570, y: 500 },
       { x: 610, y: 550 },
@@ -1641,8 +1641,32 @@ class HomeScene extends Scene {
     const cardHeight = 324 * s;
     const iconX = level.x * s;
     const iconY = level.y * s;
-    const cardX = iconX + 50 * s;
-    const cardY = iconY - cardHeight / 2;
+    
+    // 判断关卡图标位置：如果在屏幕右侧，则卡片显示在左侧；否则显示在右侧
+    const screenCenterX = this.screenWidth / 2;
+    const cardOffset = 50 * s; // 卡片与图标的间距
+    let cardX;
+    if (iconX > screenCenterX) {
+      // 图标在屏幕右侧，卡片显示在左侧
+      cardX = iconX - cardWidth - cardOffset;
+    } else {
+      // 图标在屏幕左侧，卡片显示在右侧
+      cardX = iconX + cardOffset;
+    }
+    
+    // 特殊关卡 Y 轴位置处理
+    const verticalOffset = 40 * s; // 垂直方向偏移量
+    let cardY;
+    if (level.id === 1) {
+      // 关卡 1：卡片显示在图标上方
+      cardY = iconY - cardHeight - verticalOffset;
+    } else if (level.id === 9 || level.id === 10) {
+      // 关卡 9 和 10：卡片显示在图标下方
+      cardY = iconY + verticalOffset;
+    } else {
+      // 其他关卡：卡片垂直居中于图标
+      cardY = iconY - cardHeight / 2;
+    }
     
     const sphereRadius = cardWidth * 0.12;
     const cardBorderRadius = cardWidth * 0.08;

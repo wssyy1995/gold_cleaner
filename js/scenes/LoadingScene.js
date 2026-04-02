@@ -14,6 +14,7 @@ import { getAllDirtTypes, GlobalDirtImageCache } from '../config/dirtyConfig';
 import { ALL_TOOLS, GlobalToolImageCache } from '../config/ToolConfig';
 import { GlobalPreviewCache } from './HomeScene';
 
+
 // 全局手指引导图片缓存
 export const GlobalFingerImageCache = {
   _image: null,
@@ -830,6 +831,12 @@ class LoadingScene extends Scene {
         console.log(`[LoadingScene] 同步预览图到全局缓存: ${key}`);
       }
     });
+    
+    // 同步 sad 表情图片到全局缓存
+    if (this.cachedImages['ui_icon_sad']) {
+      GlobalToolImageCache.set('ui_icon_sad', this.cachedImages['ui_icon_sad']);
+      console.log('[LoadingScene] 同步 sad 表情到全局缓存');
+    }
   }
 
   /**

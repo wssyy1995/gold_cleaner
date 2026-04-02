@@ -114,6 +114,12 @@ class GameplayScene extends Scene {
       // 生气 emoji
       showAngryEmoji: false,
       angryEmojiEndTime: 0,
+      sadAnim: {                      // sad 表情动画状态
+        startTime: 0,                 // 动画开始时间
+        jumpCount: 0,                 // 已跳跃次数
+        maxJumps: 3,                  // 最大跳跃次数
+        jumpDuration: 400             // 每次跳跃时长(ms)
+      },
       
       // 工具选中后的目标污垢提示
       showRubbishBinDirtHint: false, // 是否显示 rubbish_bin 目标污垢的白色光圈+手指
@@ -928,29 +934,33 @@ class GameplayScene extends Scene {
   
   /**
    * 显示生气 emoji（错误工具提示）
+   * 全局可用：任何关卡中选错工具都会触发
    */
   _showAngryEmoji() {
-    if (!this.tutorial.isActive) return;
     this.tutorial.showAngryEmoji = true;
-    this.tutorial.angryEmojiEndTime = Date.now() + 1200; // 显示 1.2 秒
+    this.tutorial.angryEmojiEndTime = Date.now() + 1500; // 显示 1.5 秒（3次跳跃）
+    // 重置 sad 动画状态
+    this.tutorial.sadAnim.startTime = Date.now();
+    this.tutorial.sadAnim.jumpCount = 0;
   }
   
   /**
    * 更新新手引导动画（被动式）
    */
   _updateTutorial(dt) {
-    if (!this.tutorial.isActive) return;
-    
-    // 更新小手摆动动画（正弦波，周期2秒）
-    this.tutorial.handAnim.time += dt;
-    this.tutorial.handAnim.offset = Math.sin(this.tutorial.handAnim.time * 0.003) * 10;
-    
-    // 更新生气 emoji 定时器
+    // 更新生气 emoji 定时器（全局生效，不限于引导）
     if (this.tutorial.showAngryEmoji) {
       if (Date.now() >= this.tutorial.angryEmojiEndTime) {
         this.tutorial.showAngryEmoji = false;
       }
     }
+    
+    // 以下逻辑只在引导模式下执行
+    if (!this.tutorial.isActive) return;
+    
+    // 更新小手摆动动画（正弦波，周期2秒）
+    this.tutorial.handAnim.time += dt;
+    this.tutorial.handAnim.offset = Math.sin(this.tutorial.handAnim.time * 0.003) * 10;
     
     // 更新 Z 字形动画（用于 cloth 选中后的提示）
     if (this.tutorial.showClothDirtHint) {
@@ -1175,28 +1185,60 @@ class GameplayScene extends Scene {
   }
   
   /**
-   * 渲染生气 emoji（在弹出的工具左上角）
+   * 渲染 sad 表情（错误工具提示，在弹出的工具左上角）
    */
   _renderAngryEmoji(ctx, s) {
     if (!this.tutorial.showAngryEmoji || !this.activeTool) return;
     
-    const x = this.toolPosition.x - 40 * s;
-    const y = this.toolPosition.y - 50 * s;
+    const x = this.toolPosition.x - 43 * s;
+    const y = this.toolPosition.y - 47 * s;
     
-    ctx.save();
-    ctx.font = `bold ${40 * s}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    // 尝试获取 sad 图片
+    const sadImg = GlobalToolImageCache.get('ui_icon_sad');
     
-    // 小弹跳动画
-    const bounce = Math.sin(Date.now() * 0.02) * 3 * s;
+    // 计算跳跃动画（只跳 3 次）
+    const elapsed = Date.now() - this.tutorial.sadAnim.startTime;
+    const maxBounceTime = this.tutorial.sadAnim.maxJumps * this.tutorial.sadAnim.jumpDuration; // 1200ms
+    let bounce = 0;
     
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-    ctx.fillText('😠', x + 2 * s, y + bounce + 2 * s);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText('😠', x, y + bounce);
+    if (elapsed < maxBounceTime) {
+      // 还在跳跃次数内，计算弹跳偏移
+      const progress = (elapsed % this.tutorial.sadAnim.jumpDuration) / this.tutorial.sadAnim.jumpDuration;
+      // 使用正弦波的一个完整周期，但只在波峰部分显示弹跳
+      bounce = Math.sin(progress * Math.PI) * 5 * s;
+    }
+    // 超过 3 次后 bounce = 0，不再弹跳
     
-    ctx.restore();
+    if (sadImg) {
+      // 使用 sad 图片
+      const size = 50 * s; // 图片大小（变小）
+      
+      ctx.save();
+      
+      // 绘制阴影
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = 8 * s;
+      ctx.shadowOffsetX = 2 * s;
+      ctx.shadowOffsetY = 2 * s;
+      
+      // 绘制图片（居中，带弹跳）
+      ctx.drawImage(sadImg, x - size / 2, y + bounce - size / 2, size, size);
+      
+      ctx.restore();
+    } else {
+      // 降级：使用 emoji
+      ctx.save();
+      ctx.font = `bold ${35 * s}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.fillText('😠', x + 2 * s, y + bounce + 2 * s);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText('😠', x, y + bounce);
+      
+      ctx.restore();
+    }
   }
   
   /**
@@ -1831,10 +1873,8 @@ class GameplayScene extends Scene {
     // 渲染结算弹窗（在最上层）
     this._renderSettlementDialog(ctx);
     
-    // 在最顶层渲染生气 emoji
-    if (this.tutorial.isActive) {
-      this._renderAngryEmoji(ctx, s);
-    }
+    // 在最顶层渲染生气 emoji（全局生效）
+    this._renderAngryEmoji(ctx, s);
   }
 
   /**
@@ -3125,7 +3165,20 @@ class GameplayScene extends Scene {
     const dirtType = DIRT_TYPES[dirt.type];
     if (!dirtType) return;
     
-    // ===== 被动新手引导处理 =====
+    // ===== 全局错误工具检测（任何关卡都生效）=====
+    // 如果已弹出工具，且工具不匹配该污垢的 recipe，显示生气 emoji
+    if (this.activeTool && dirt.state !== 'clean') {
+      const recipes = dirtType.recipes || [];
+      const allTools = recipes.flat();
+      
+      // 检查当前弹出的工具是否在该污垢的 recipe 中
+      if (!allTools.includes(this.activeTool.id)) {
+        // 工具不匹配：显示生气 emoji
+        this._showAngryEmoji();
+      }
+    }
+    
+    // ===== 被动新手引导处理（仅限第一关）=====
     if (this.tutorial.isActive && dirt.state !== 'clean') {
       const recipes = dirtType.recipes || [];
       const allTools = recipes.flat();
@@ -3143,8 +3196,7 @@ class GameplayScene extends Scene {
             console.log('[GameplayScene] 引导：提示选择 rubbish_bin');
           }
         } else if (this.activeTool.id !== 'rubbish_bin') {
-          // 有非 rubbish_bin 的工具已弹出：生气 emoji
-          this._showAngryEmoji();
+          // 有非 rubbish_bin 的工具已弹出：生气 emoji（已在上面全局检测中处理）
         }
       }
       
@@ -3161,8 +3213,7 @@ class GameplayScene extends Scene {
             console.log('[GameplayScene] 引导：提示选择 dc_basket');
           }
         } else if (this.activeTool.id !== 'dc_basket') {
-          // 有非 dc_basket 的工具已弹出：生气 emoji
-          this._showAngryEmoji();
+          // 有非 dc_basket 的工具已弹出：生气 emoji（已在上面全局检测中处理）
         }
       }
       
@@ -3179,8 +3230,7 @@ class GameplayScene extends Scene {
             console.log('[GameplayScene] 引导：提示选择 cloth');
           }
         } else if (this.activeTool.id !== 'cloth') {
-          // 有非 cloth 的工具已弹出：生气 emoji
-          this._showAngryEmoji();
+          // 有非 cloth 的工具已弹出：生气 emoji（已在上面全局检测中处理）
         }
       }
     }
@@ -3451,11 +3501,11 @@ class GameplayScene extends Scene {
         this._addShineEffect(originalX, originalY + gameAreaY, s);
         
         // 触发活动工具摇晃动画（不倒翁效果）
-        if (this.activeTool && this.activeTool.id === 'rubbish_bin') {
+        if (this.activeTool && (this.activeTool.id === 'rubbish_bin' || this.activeTool.id === 'dc_basket')) {
           this.toolShakeAnim.active = true;
-          this.toolShakeAnim.targetToolId = 'rubbish_bin';
+          this.toolShakeAnim.targetToolId = this.activeTool.id;
           this.toolShakeAnim.angle = 0;
-          this.toolShakeAnim.velocity = 0.07; // 初始角速度（更小的幅度）
+          this.toolShakeAnim.velocity = 0.05; // 初始角速度（轻微的幅度）
         }
         
         // 被动引导：标记 throw 工具已正确使用

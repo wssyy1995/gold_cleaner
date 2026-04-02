@@ -1870,6 +1870,10 @@ class HomeScene extends Scene {
     if (this._pressedStartBtn) {
       const btnLevel = this._checkStartBtnClick(x, y);
       if (btnLevel) {
+        // 按钮点击震动反馈
+        if (typeof wx !== 'undefined' && wx.vibrateShort) {
+          wx.vibrateShort({ type: 'medium' });
+        }
         // 使用 scene:push 保留 HomeScene，返回时可以恢复状态
         globalEvent.emit('scene:push', 'GameplayScene', { 
           levelId: btnLevel.id, stage: this.currentStage 

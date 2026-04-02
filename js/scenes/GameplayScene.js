@@ -1246,9 +1246,9 @@ class GameplayScene extends Scene {
     
     ctx.restore();
     
-    // 手指（指尖朝上）- 更靠近光圈，摆动幅度更小
-    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 4;
-    this._renderHandBig(ctx, s, cx, cy + baseRadius + 45 * s, handOffset, true);
+    // 手指（指尖朝上）- 更靠近光圈，频率适中
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.008) * 4;  // 频率 0.008
+    this._renderHandBig(ctx, s, cx, cy + baseRadius + 32 * s, handOffset, true);  // 距离更近（45 -> 32）
   }
   
   /**
@@ -1298,9 +1298,9 @@ class GameplayScene extends Scene {
     
     ctx.restore();
     
-    // 手指（指尖朝上）- 更靠近光圈，摆动幅度更小
-    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 4;
-    this._renderHandBig(ctx, s, cx, cy + baseRadius + 45 * s, handOffset, true);
+    // 手指（指尖朝上）- 更靠近光圈，频率适中
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.008) * 4;  // 频率 0.008
+    this._renderHandBig(ctx, s, cx, cy + baseRadius + 32 * s, handOffset, true);  // 距离更近（45 -> 32）
   }
   
   /**
@@ -2089,13 +2089,13 @@ class GameplayScene extends Scene {
    * @param {number} s - 屏幕缩放比例
    */
   _renderStrokeProgress(ctx, cx, cy, radius, strokeCount, maxStrokes, s) {
-    const barWidth = radius * 2.4;      // 进度条总宽度（更大）
-    const barHeight = 16 * s;           // 进度条高度（更大）
-    const gap = 8 * s;                  // 格子之间的间隙（更大）
+    const barWidth = radius * 2.6;      // 进度条总宽度（更大）
+    const barHeight = 18 * s;           // 进度条高度（更大）
+    const gap = 9 * s;                  // 格子之间的间隙（更大）
     const cellWidth = (barWidth - gap * (maxStrokes - 1)) / maxStrokes;  // 每个格子的宽度
     const startX = cx - barWidth / 2;   // 起始X坐标
-    const startY = cy - radius - 40 * s; // 在污垢上方显示，距离更大
-    const cornerRadius = 5 * s;         // 圆角半径（更大）
+    const startY = cy - radius - 50 * s; // 在污垢上方显示，距离更大
+    const cornerRadius = 6 * s;         // 圆角半径（更大）
     
     ctx.save();
     
@@ -2124,13 +2124,6 @@ class GameplayScene extends Scene {
       // 重置阴影
       ctx.shadowBlur = 0;
     }
-    
-    // 显示数字进度（如 "1/3"）
-    ctx.fillStyle = '#4A90D9';
-    ctx.font = `bold ${12 * s}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${strokeCount}/${maxStrokes}`, cx, startY + barHeight + 12 * s);
     
     ctx.restore();
   }

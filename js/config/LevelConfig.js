@@ -21,7 +21,9 @@ const STAGE_1_LEVELS = [
       { type: 'paper', x: 300, y: 420 },
       { type: 'socks', x: 500, y: 800 },
       { type: 'stain', x: 500, y: 1100 },
-      { type: 'shred_paper', x: 200, y: 1000 },{ type: 'stain', x: 500, y: 1300 }
+      { type: 'stain', x: 200, y: 1100 },
+      { type: 'shred_paper', x: 200, y: 1000 },
+      { type: 'stain', x: 400, y: 1200 }
     ],
     dirts_deep: [
       { image:'images/game/stage1_level1_bookshelf.png',type: 'stain', x: 300, y: 400 },
@@ -42,6 +44,8 @@ const STAGE_1_LEVELS = [
       { type: 'shred_paper', x: 400, y: 1100 },
       { type: 'shred_paper', x: 600, y: 1200 },
       { type: 'paper', x: 300, y: 420 },
+      { type: 'stain', x: 500, y: 1100 },
+      { type: 'stain', x: 700, y: 1200 },
       { type: 'socks', x: 500, y: 800 },
       { type: 'stain', x: 500, y: 1100 },
       { type: 'shred_paper', x: 200, y: 1000 },{ type: 'stain', x: 100, y: 1100 }

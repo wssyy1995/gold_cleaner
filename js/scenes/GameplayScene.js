@@ -137,13 +137,16 @@ class GameplayScene extends Scene {
       }
     };
     
-    // Z 字绘制状态（用于 sweep 和 wipe 新玩法）
-    this.zDrawState = {
+    // 划动清洁状态（用于 sweep 和 wipe 新玩法）
+    this.strokeState = {
       active: false,
       dirt: null,
-      phase: 0,
-      startX: 0,
-      startY: 0
+      strokeCount: 0,        // 已完成划动次数（0-3）
+      maxStrokes: 3,         // 需要划动的总次数
+      lastPos: null,         // 上一次位置
+      totalDistance: 0,      // 本次划动的累计距离
+      minStrokeDistance: 60, // 算作一次有效划动的最小距离（像素）
+      lastCountTime: 0       // 上次计数时间，300ms防重复
     };
     
     // 云存储
@@ -644,8 +647,8 @@ class GameplayScene extends Scene {
         state: 'dirty',             // dirty, selected, cleaning, clean
         selected: false,            // 是否被选中（闪烁）
         cleaning: false,            // 是否正在清洁中
-        wipeCount: 0,               // 涂抹次数
-        lastAngle: null,            // 上一次拖动的角度（用于检测顺时针）
+        strokeCount: 0,             // 划动清洁次数（0-3）
+        maxStrokes: 3,              // 需要划动的总次数
         currentRecipe: dirtType.recipes[0],
         currentStep: 0,
         recipes: dirtType.recipes,
@@ -678,8 +681,8 @@ class GameplayScene extends Scene {
         width: 100 * s,
         height: 100 * s,
         state: 'dirty',
-        cleanProgress: 0,
-        maxProgress: dirtConfig.recipes[0].length * 100,
+        strokeCount: 0,
+        maxStrokes: 3,
         currentRecipe: dirtConfig.recipes[0],
         currentStep: 0,
         color: dirtConfig.color,
@@ -1197,7 +1200,7 @@ class GameplayScene extends Scene {
   }
   
   /**
-   * 渲染 rubbish_bin 目标污垢提示：白色光圈波纹扩散 + 手指图标（指尖朝上）
+   * 渲染 rubbish_bin 目标污垢提示：极简现代金色轮廓光圈
    */
   _renderTutorialRubbishBinDirtHint(ctx, s) {
     if (!this.tutorial.showRubbishBinDirtHint) return;
@@ -1208,43 +1211,48 @@ class GameplayScene extends Scene {
     const gameAreaY = this.screenHeight * 0.08;
     const cx = dirt.x;
     const cy = dirt.y + gameAreaY;
-    const baseRadius = dirt.size / 2 + 20 * s;
+    const baseRadius = dirt.size / 2 + 15 * s;
+    
+    // 白色光圈波纹扩散 + 手指图标（指尖朝上）
+    ctx.save();
     
     // 波纹扩散动画
     const cycle = 1750;
     const progress = (this.tutorial.handAnim.time % cycle) / cycle;
     
-    ctx.save();
-    ctx.lineWidth = 4 * s;
+    ctx.lineWidth = 3.5 * s;
     
-    for (let i = 0; i < 3; i++) {
-      const ringProgress = (progress + i * 0.33) % 1;
-      const radius = baseRadius + ringProgress * 26 * s;
-      const alpha = (1 - ringProgress) * 0.7;
+    // 2层波纹
+    for (let i = 0; i < 2; i++) {
+      const ringProgress = (progress + i * 0.5) % 1;
+      const radius = baseRadius + ringProgress * 20 * s;
+      const alpha = (1 - ringProgress) * 0.6;
       
       ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
       ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-      ctx.shadowBlur = 10 * s;
+      ctx.shadowBlur = 6 * s;
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.stroke();
     }
     
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.shadowBlur = 12 * s;
+    // 主光圈圈
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = 2.5 * s;
+    ctx.shadowBlur = 8 * s;
     ctx.beginPath();
     ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
     ctx.stroke();
     
     ctx.restore();
     
-    // 手指（指尖朝上）
-    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 8;
-    this._renderHandBig(ctx, s, cx, cy + baseRadius + 70 * s, handOffset, true);
+    // 手指（指尖朝上）- 更靠近光圈，摆动幅度更小
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 4;
+    this._renderHandBig(ctx, s, cx, cy + baseRadius + 45 * s, handOffset, true);
   }
   
   /**
-   * 渲染 dc_basket 目标污垢提示：白色光圈波纹扩散 + 手指图标（指尖朝上）
+   * 渲染 dc_basket 目标污垢提示：极简现代金色轮廓光圈
    */
   _renderTutorialDcBasketDirtHint(ctx, s) {
     if (!this.tutorial.showDcBasketDirtHint) return;
@@ -1255,43 +1263,49 @@ class GameplayScene extends Scene {
     const gameAreaY = this.screenHeight * 0.08;
     const cx = dirt.x;
     const cy = dirt.y + gameAreaY;
-    const baseRadius = dirt.size / 2 + 20 * s;
+    const baseRadius = dirt.size / 2 + 15 * s;
+    
+    // 白色光圈波纹扩散 + 手指图标（指尖朝上）
+    ctx.save();
     
     // 波纹扩散动画
     const cycle = 1750;
     const progress = (this.tutorial.handAnim.time % cycle) / cycle;
     
-    ctx.save();
-    ctx.lineWidth = 4 * s;
+    ctx.lineWidth = 3.5 * s;
     
-    for (let i = 0; i < 3; i++) {
-      const ringProgress = (progress + i * 0.33) % 1;
-      const radius = baseRadius + ringProgress * 26 * s;
-      const alpha = (1 - ringProgress) * 0.7;
+    // 2层波纹
+    for (let i = 0; i < 2; i++) {
+      const ringProgress = (progress + i * 0.5) % 1;
+      const radius = baseRadius + ringProgress * 20 * s;
+      const alpha = (1 - ringProgress) * 0.6;
       
       ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
       ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-      ctx.shadowBlur = 10 * s;
+      ctx.shadowBlur = 6 * s;
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.stroke();
     }
     
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.shadowBlur = 12 * s;
+    // 主光圈圈
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = 2.5 * s;
+    ctx.shadowBlur = 8 * s;
     ctx.beginPath();
     ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
     ctx.stroke();
     
     ctx.restore();
     
-    // 手指（指尖朝上）
-    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 8;
-    this._renderHandBig(ctx, s, cx, cy + baseRadius + 70 * s, handOffset, true);
+    // 手指（指尖朝上）- 更靠近光圈，摆动幅度更小
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.006) * 4;
+    this._renderHandBig(ctx, s, cx, cy + baseRadius + 45 * s, handOffset, true);
   }
   
   /**
-   * 渲染 cloth 目标污垢提示：Z 字形动画
+   * 渲染 cloth 目标污垢提示：Z 字形动画（逆时针旋转 30 度）
+   * 放大尺寸，带旋转效果更有动感
    */
   _renderTutorialClothDirtHint(ctx, s) {
     if (!this.tutorial.showClothDirtHint) return;
@@ -1302,55 +1316,123 @@ class GameplayScene extends Scene {
     const gameAreaY = this.screenHeight * 0.08;
     const centerX = dirt.x;
     const centerY = dirt.y + gameAreaY;
-    const size = dirt.size * 0.8;
     
-    const anim = this.tutorial.circularAnim;
-    const cycle = anim.duration;
-    let progress = (anim.time % cycle) / cycle;
+    // 放大尺寸：原来的 1.5 倍
+    const size = dirt.size * 1.2;
     
-    const zPoints = [
-      { x: centerX - size/2, y: centerY - size/3 },
-      { x: centerX + size/2, y: centerY - size/3 },
-      { x: centerX - size/2, y: centerY + size/3 },
-      { x: centerX + size/2, y: centerY + size/3 }
+    // 使用 handAnim.time 作为 Z 字动画的计时器（因为它一直在更新）
+    const animDuration = 1800;   // 动画时长 1.8 秒
+    const pauseDuration = 500;   // 停顿 0.5 秒
+    const cycle = animDuration + pauseDuration;
+    
+    // 计算整体进度 (0 - 1)
+    const timeInCycle = this.tutorial.handAnim.time % cycle;
+    const t = Math.min(1, timeInCycle / animDuration);
+    
+    // 定义 Z 字的 4 个关键点
+    const zPointsLocal = [
+      { x: -size * 0.5, y: -size * 0.4 },   // 左上起点
+      { x: size * 0.5, y: -size * 0.4 },    // 第一横终点
+      { x: -size * 0.5, y: size * 0.4 },    // 斜线终点
+      { x: size * 0.5, y: size * 0.4 }      // 第二横终点
     ];
+    
+    // 逆时针旋转 30 度
+    const angle = -30 * Math.PI / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    
+    const zPoints = zPointsLocal.map(pt => ({
+      x: centerX + (pt.x * cos - pt.y * sin),
+      y: centerY + (pt.x * sin + pt.y * cos)
+    }));
+    
+    // 计算旋转后各段的实际长度
+    const len1 = Math.hypot(zPoints[1].x - zPoints[0].x, zPoints[1].y - zPoints[0].y);
+    const len2 = Math.hypot(zPoints[2].x - zPoints[1].x, zPoints[2].y - zPoints[1].y);
+    const len3 = Math.hypot(zPoints[3].x - zPoints[2].x, zPoints[3].y - zPoints[2].y);
+    const totalLen = len1 + len2 + len3;
+    
+    // 根据实际长度计算各段占比
+    const ratio1 = len1 / totalLen;              // 第一横占比
+    const ratio2 = len2 / totalLen;              // 斜线占比  
+    const ratio3 = len3 / totalLen;              // 第二横占比
+    const threshold1 = ratio1;                   // 第一横结束点
+    const threshold2 = ratio1 + ratio2;          // 斜线结束点
     
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 8 * s;
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-    ctx.shadowBlur = 15 * s;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.shadowColor = '#FFFFFF';
+    ctx.shadowBlur = 20 * s;
     
-    if (progress < 0.33) {
-      const p = progress / 0.33;
-      const x = zPoints[0].x + (zPoints[1].x - zPoints[0].x) * p;
-      const y = zPoints[0].y + (zPoints[1].y - zPoints[0].y) * p;
-      ctx.beginPath();
-      ctx.moveTo(zPoints[0].x, zPoints[0].y);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    } else if (progress < 0.66) {
-      const p = (progress - 0.33) / 0.33;
-      const x = zPoints[1].x + (zPoints[2].x - zPoints[1].x) * p;
-      const y = zPoints[1].y + (zPoints[2].y - zPoints[1].y) * p;
-      ctx.beginPath();
-      ctx.moveTo(zPoints[0].x, zPoints[0].y);
+    // 背景虚线
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.setLineDash([4 * s, 4 * s]);
+    ctx.beginPath();
+    ctx.moveTo(zPoints[0].x, zPoints[0].y);
+    ctx.lineTo(zPoints[1].x, zPoints[1].y);
+    ctx.lineTo(zPoints[2].x, zPoints[2].y);
+    ctx.lineTo(zPoints[3].x, zPoints[3].y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // 动画 Z 字（使用实际长度比例）
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.shadowColor = '#FFFFFF';
+    ctx.shadowBlur = 18 * s;
+    
+    // 计算当前应该画到哪里（基于路径长度）
+    const currentLen = t * totalLen;
+    
+    ctx.beginPath();
+    ctx.moveTo(zPoints[0].x, zPoints[0].y);
+
+    if (currentLen <= len1) {
+      // 还在第一横
+      const p = currentLen / len1;
+      ctx.lineTo(
+        zPoints[0].x + (zPoints[1].x - zPoints[0].x) * p,
+        zPoints[0].y + (zPoints[1].y - zPoints[0].y) * p
+      );
+    } else if (currentLen <= len1 + len2) {
+      // 第一横完成，正在画斜线
       ctx.lineTo(zPoints[1].x, zPoints[1].y);
-      ctx.moveTo(zPoints[1].x, zPoints[1].y);
-      ctx.lineTo(x, y);
-      ctx.stroke();
+      const p = (currentLen - len1) / len2;
+      ctx.lineTo(
+        zPoints[1].x + (zPoints[2].x - zPoints[1].x) * p,
+        zPoints[1].y + (zPoints[2].y - zPoints[1].y) * p
+      );
     } else {
-      const p = (progress - 0.66) / 0.34;
-      const x = zPoints[2].x + (zPoints[3].x - zPoints[2].x) * p;
-      const y = zPoints[2].y + (zPoints[3].y - zPoints[2].y) * p;
-      ctx.beginPath();
-      ctx.moveTo(zPoints[0].x, zPoints[0].y);
+      // 第一横和斜线完成，正在画第二横
       ctx.lineTo(zPoints[1].x, zPoints[1].y);
       ctx.lineTo(zPoints[2].x, zPoints[2].y);
-      ctx.lineTo(x, y);
-      ctx.stroke();
+      const p = Math.min(1, (currentLen - len1 - len2) / len3);
+      
+      ctx.lineTo(
+        zPoints[2].x + (zPoints[3].x - zPoints[2].x) * p,
+        zPoints[2].y + (zPoints[3].y - zPoints[2].y) * p
+      );
+    }
+    
+    ctx.stroke();
+    
+    // 起点闪烁
+    const blink = (Math.sin(this.tutorial.handAnim.time * 0.01) + 1) / 2;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = '#FFFFFF';
+    ctx.shadowBlur = 15 * s;
+    ctx.beginPath();
+    ctx.arc(zPoints[0].x, zPoints[0].y, 5 * s, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 动画过半后终点闪烁
+    if (t > 0.5) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.6 + blink * 0.4})`;
+      ctx.beginPath();
+      ctx.arc(zPoints[3].x, zPoints[3].y, 6 * s, 0, Math.PI * 2);
+      ctx.fill();
     }
     
     ctx.restore();
@@ -1874,15 +1956,7 @@ class GameplayScene extends Scene {
       const highlightScale = dirt.highlightScale || 1;
       const radius = (dirt.width / 2) * highlightScale;
       
-      // 绘制高亮背景（淡白光）
-      if (dirt.isHighlighted) {
-        ctx.save();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; // 更淡的白光
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius + 15 * s, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
+      // 注：wipe/sweep 时的高亮圆形背景已去掉
       
       // 计算闪烁效果（选中状态）
       let pulseAlpha = 1;
@@ -1938,9 +2012,19 @@ class GameplayScene extends Scene {
       const x = cx - drawWidth / 2;
       const y = cy - drawHeight / 2;
       
-      // 根据擦拭/清扫进度裁切显示图片（从下往上消失）
-      const progress = dirt.wipeProgress || dirt.sweepProgress || 0;
-      const remainingRatio = 1 - progress; // 剩余显示比例
+      // 根据划动清洁进度裁切显示图片（从下往上消失）
+      // 3次滑动分别裁切: 1/4, 1/4, 2/4
+      const strokeCount = dirt.strokeCount || 0;
+      let remainingRatio = 1;
+      if (strokeCount >= 3) {
+        remainingRatio = 0;
+      } else if (strokeCount === 2) {
+        remainingRatio = 2 / 4; // 剩一半
+      } else if (strokeCount === 1) {
+        remainingRatio = 3 / 4; // 剩3/4
+      } else {
+        remainingRatio = 1; // 完整显示
+      }
       
       if (remainingRatio > 0) {
         // 计算裁切区域（从下往上消失）
@@ -1969,18 +2053,86 @@ class GameplayScene extends Scene {
       
       ctx.restore();
       
-      // 显示擦拭/清扫进度提示
-      if (progress > 0 && progress < 1) {
-        ctx.save();
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = `bold ${14 * s}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(0,0,0,0.5)';
-        ctx.shadowBlur = 4;
-        ctx.fillText(`${Math.floor(progress * 5)}/5`, cx, cy + radius + 20 * s);
-        ctx.restore();
+      // 渲染划动清洁进度条（三格蓝色能量条）
+      // 当前正在对该污垢进行划动清洁时显示
+      if (this.strokeState && this.strokeState.active && 
+          this.strokeState.dirt === dirt && dirt.strokeCount < dirt.maxStrokes) {
+        this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount || 0, dirt.maxStrokes || 3, s);
       }
+  }
+
+  /**
+   * 辅助方法：绘制圆角矩形（兼容小游戏Canvas API）
+   */
+  _drawRoundRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  }
+
+  /**
+   * 渲染划动清洁进度条（三格蓝色能量条）
+   * @param {CanvasRenderingContext2D} ctx - Canvas上下文
+   * @param {number} cx - 中心X坐标
+   * @param {number} cy - 中心Y坐标
+   * @param {number} radius - 污垢半径
+   * @param {number} strokeCount - 当前划动次数
+   * @param {number} maxStrokes - 最大划动次数
+   * @param {number} s - 屏幕缩放比例
+   */
+  _renderStrokeProgress(ctx, cx, cy, radius, strokeCount, maxStrokes, s) {
+    const barWidth = radius * 2.4;      // 进度条总宽度（更大）
+    const barHeight = 16 * s;           // 进度条高度（更大）
+    const gap = 8 * s;                  // 格子之间的间隙（更大）
+    const cellWidth = (barWidth - gap * (maxStrokes - 1)) / maxStrokes;  // 每个格子的宽度
+    const startX = cx - barWidth / 2;   // 起始X坐标
+    const startY = cy - radius - 40 * s; // 在污垢上方显示，距离更大
+    const cornerRadius = 5 * s;         // 圆角半径（更大）
+    
+    ctx.save();
+    
+    // 绘制背景（未填充的格子）
+    for (let i = 0; i < maxStrokes; i++) {
+      const x = startX + i * (cellWidth + gap);
+      
+      // 背景边框
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      this._drawRoundRect(ctx, x, startY, cellWidth, barHeight, cornerRadius);
+      ctx.fill();
+    }
+    
+    // 绘制已填充的蓝色格子
+    for (let i = 0; i < strokeCount; i++) {
+      const x = startX + i * (cellWidth + gap);
+      
+      // 蓝色填充，带发光效果
+      ctx.fillStyle = '#4A90D9';
+      ctx.shadowColor = 'rgba(74, 144, 217, 0.8)';
+      ctx.shadowBlur = 8 * s;
+      
+      this._drawRoundRect(ctx, x, startY, cellWidth, barHeight, cornerRadius);
+      ctx.fill();
+      
+      // 重置阴影
+      ctx.shadowBlur = 0;
+    }
+    
+    // 显示数字进度（如 "1/3"）
+    ctx.fillStyle = '#4A90D9';
+    ctx.font = `bold ${12 * s}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${strokeCount}/${maxStrokes}`, cx, startY + barHeight + 12 * s);
+    
+    ctx.restore();
   }
 
   /**
@@ -2026,9 +2178,19 @@ class GameplayScene extends Scene {
     // 应用 scale 配置
     const scaledRadius = radius * scale;
     
-    // 根据擦拭/清扫进度计算显示比例（从下往上消失）
-    const progress = dirt.wipeProgress || dirt.sweepProgress || 0;
-    const remainingRatio = 1 - progress;
+    // 根据划动清洁进度计算显示比例（从下往上消失）
+    // 3次滑动分别裁切: 1/4, 1/4, 2/4
+    const strokeCount = dirt.strokeCount || 0;
+    let remainingRatio = 1;
+    if (strokeCount >= 3) {
+      remainingRatio = 0;
+    } else if (strokeCount === 2) {
+      remainingRatio = 2 / 4;
+    } else if (strokeCount === 1) {
+      remainingRatio = 3 / 4;
+    } else {
+      remainingRatio = 1;
+    }
     
     if (remainingRatio <= 0) return; // 完全擦除后不显示
     
@@ -2059,17 +2221,9 @@ class GameplayScene extends Scene {
     
     ctx.restore();
     
-    // 显示擦拭/清扫进度
-    if (progress > 0 && progress < 1) {
-      ctx.save();
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = `bold ${14 * s}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0,0,0,0.5)';
-      ctx.shadowBlur = 4;
-      ctx.fillText(`${Math.floor(progress * 5)}/5`, cx, cy + radius + 20 * s);
-      ctx.restore();
+    // 渲染划动清洁进度条（三格蓝色能量条）
+    if (dirt.strokeCount !== undefined && dirt.strokeCount < dirt.maxStrokes) {
+      this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, dirt.maxStrokes, s);
     }
   }
 
@@ -2475,24 +2629,21 @@ class GameplayScene extends Scene {
     
     // 检查是否正在拖动活动工具
     if (this.activeTool && !this.isDraggingTool) {
-      // cloth 和 broom 现在走 Z 字绘制模式，优先由污垢点击逻辑处理
-      if (this.activeTool.id !== 'cloth' && this.activeTool.id !== 'broom') {
-        const dx = x - this.toolPosition.x;
-        const dy = y - this.toolPosition.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        // 工具大小为 120 * s，检测范围稍微大一点
-        if (distance < 80 * s) {
-          // 验证工具使用条件
-          if (!this._validateToolUsage(this.activeTool)) {
-            // 验证失败，显示错误提示但不开始拖动
-            this._showToolError();
-            return true; // 拦截事件，防止后续处理
-          }
-          // 开始拖动工具
-          this.isDraggingTool = true;
-          this.dragStartPos = { x, y };
-          return true;
+      const dx = x - this.toolPosition.x;
+      const dy = y - this.toolPosition.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      // 工具大小为 120 * s，检测范围稍微大一点
+      if (distance < 80 * s) {
+        // 验证工具使用条件
+        if (!this._validateToolUsage(this.activeTool)) {
+          // 验证失败，显示错误提示但不开始拖动
+          this._showToolError();
+          return true; // 拦截事件，防止后续处理
         }
+        // 开始拖动工具（cloth 和 broom 也可以拖动）
+        this.isDraggingTool = true;
+        this.dragStartPos = { x, y };
+        return true;
       }
     }
     
@@ -2533,6 +2684,27 @@ class GameplayScene extends Scene {
       }
     }
     
+    // 【新功能】手指直接滑动到 wipe/sweep 污垢上触发清洁
+    // 不需要点击，直接滑动即可开始划动清洁
+    if (!this.isDraggingTool && this.activeTool && 
+        (this.activeTool.id === 'cloth' || this.activeTool.id === 'broom')) {
+      const nearbyDirt = this._findNearbyDirt(x, y);
+      if (nearbyDirt && nearbyDirt.state !== 'clean') {
+        const dirtType = DIRT_TYPES[nearbyDirt.type];
+        // 检查工具是否匹配污垢类型
+        const isMatch = (this.activeTool.id === 'cloth' && dirtType.operate_type === 'wipe') ||
+                       (this.activeTool.id === 'broom' && dirtType.operate_type === 'sweep');
+        
+        if (isMatch && !this.strokeState.active) {
+          // 自动开始划动清洁模式（工具跳到手指上）
+          this.isDraggingTool = true;  // 重要：让工具跟随手指
+          // 开始划动（不立即更新，等下一次 touchmove 再计算距离）
+          this._startStrokeClean(nearbyDirt, x, y);
+          return true;
+        }
+      }
+    }
+    
     // 处理工具拖动
     if (this.isDraggingTool && this.activeTool) {
       // 限制工具不能拖动到工具槽下方
@@ -2542,9 +2714,24 @@ class GameplayScene extends Scene {
       // 更新工具位置（跟随手指，但有边界限制）
       this.toolPosition = { x, y: clampedY };
       
-      // cloth / broom 工具：进入 Z 字绘制模式
+      // cloth / broom 工具：进入划动清洁模式
       if (this.activeTool.id === 'cloth' || this.activeTool.id === 'broom') {
-        this._updateZDraw(x, clampedY);
+        // 如果还没有开始清洁，先检查是否在匹配的污垢上
+        if (!this.strokeState.active) {
+          const nearbyDirt = this._findNearbyDirt(x, y);
+          if (nearbyDirt && nearbyDirt.state !== 'clean') {
+            const dirtType = DIRT_TYPES[nearbyDirt.type];
+            const isMatch = (this.activeTool.id === 'cloth' && dirtType.operate_type === 'wipe') ||
+                           (this.activeTool.id === 'broom' && dirtType.operate_type === 'sweep');
+            if (isMatch) {
+              // 开始划动清洁（不立即更新，等下一次 touchmove）
+              this._startStrokeClean(nearbyDirt, x, clampedY);
+            }
+          }
+        } else {
+          // 已经在清洁中，继续更新划动进度
+          this._updateStrokeClean(x, clampedY);
+        }
       } else {
         // 其他工具原有逻辑
         const nearbyDirt = this._findNearbyDirt(x, y);
@@ -2604,7 +2791,7 @@ class GameplayScene extends Scene {
       this.isDraggingTool = false;
       this.clothInDirt = false; // 重置 cloth 进入污垢状态
       this.broomInDirt = false; // 重置 broom 进入污垢状态
-      this.zDrawState.active = false; // 重置 Z 字绘制状态
+      this.strokeState.active = false; // 重置 Z 字绘制状态
       
       // 重置所有污垢的高亮状态
       this.dirtObjects.forEach(dirt => {
@@ -2788,7 +2975,7 @@ class GameplayScene extends Scene {
     // 清理 Z 字绘制状态并弹回工具
     this.isDraggingTool = false;
     this.selectedDirt = null;
-    this.zDrawState.active = false;
+    this.strokeState.active = false;
     if (this.activeTool) {
       this._spawnTool();
     }
@@ -2917,7 +3104,7 @@ class GameplayScene extends Scene {
     // 清理 Z 字绘制状态并弹回工具
     this.isDraggingTool = false;
     this.selectedDirt = null;
-    this.zDrawState.active = false;
+    this.strokeState.active = false;
     if (this.activeTool) {
       this._spawnTool();
     }
@@ -3020,7 +3207,7 @@ class GameplayScene extends Scene {
     // wipe 类型：点击后如果 cloth 已弹出，自动进入 Z 字绘制模式
     if (dirtType.operate_type === 'wipe') {
       if (this.activeTool && this.activeTool.id === 'cloth') {
-        this._startZDraw(dirt, x, y);
+        this._startStrokeClean(dirt, x, y);
       }
       return;
     }
@@ -3028,7 +3215,7 @@ class GameplayScene extends Scene {
     // sweep 类型：点击后如果 broom 已弹出，自动进入 Z 字绘制模式
     if (dirtType.operate_type === 'sweep') {
       if (this.activeTool && this.activeTool.id === 'broom') {
-        this._startZDraw(dirt, x, y);
+        this._startStrokeClean(dirt, x, y);
       }
       return;
     }
@@ -3083,77 +3270,117 @@ class GameplayScene extends Scene {
   }
   
   /**
-   * 开始 Z 字绘制模式（用于 sweep 和 wipe）
+   * 开始划动清洁模式（用于 sweep 和 wipe）
    * 点击目标污垢后，工具自动跳到手指位置并进入拖动状态
+   * 在污垢上随意划动 3 次即可完成清洁
    */
-  _startZDraw(dirt, x, y) {
+  _startStrokeClean(dirt, x, y) {
     this.isDraggingTool = true;
     this.toolPosition = { x, y };
     this.selectedDirt = dirt;
     
     const gameAreaY = this.screenHeight * 0.08;
-    this.zDrawState = {
+    this.strokeState = {
       active: true,
       dirt: dirt,
-      phase: 0,
-      startX: x,
-      startY: y - gameAreaY
+      strokeCount: 0,
+      maxStrokes: 3,
+      lastPos: { x, y: y - gameAreaY },
+      totalDistance: 0,
+      minStrokeDistance: 60 * (this.screenWidth / 750)  // 增加距离阈值，需要划动更多距离才算一次
     };
+    
+    // 在污垢对象上记录当前划动次数，用于渲染进度条
+    dirt.strokeCount = 0;
+    dirt.maxStrokes = 3;
     
     // 高亮显示目标污垢
     dirt.isHighlighted = true;
     dirt.highlightScale = 1;
     
-    console.log(`[GameplayScene] 开始 Z 字绘制: ${dirt.name}`);
+    console.log(`[GameplayScene] 开始划动清洁: ${dirt.name}, 需要划动 3 次`);
   }
   
   /**
-   * 更新 Z 字绘制进度
-   * 检测手指是否画出了 Z 字形的三段路径
+   * 更新划动清洁进度
+   * 检测手指在污垢上的划动，累计距离达到阈值算作一次有效划动
+   * 必须保持在污垢范围内划动才有效
    */
-  _updateZDraw(x, y) {
-    if (!this.zDrawState.active || !this.zDrawState.dirt) return;
+  _updateStrokeClean(x, y) {
+    if (!this.strokeState.active || !this.strokeState.dirt) return;
     
-    const dirt = this.zDrawState.dirt;
+    const dirt = this.strokeState.dirt;
     const gameAreaY = this.screenHeight * 0.08;
-    const relX = x - dirt.x;
-    const relY = (y - gameAreaY) - dirt.y;
-    const size = dirt.size;
-    const state = this.zDrawState;
+    const relY = y - gameAreaY;
+    const state = this.strokeState;
     
-    // 计算相对于当前 phase 起点的位移
-    const startRelX = state.startX - dirt.x;
-    const startRelY = state.startY - dirt.y;
-    const dx = relX - startRelX;
-    const dy = relY - startRelY;
+    const now = Date.now();
     
-    if (state.phase === 0) {
-      // 第一横：从左到右，y 变化不太大
-      if (dx > size / 3 && Math.abs(dy) < size / 2) {
-        state.phase = 1;
-        state.startX = relX + dirt.x;
-        state.startY = relY + dirt.y;
-        console.log('[GameplayScene] Z字绘制：完成第一横');
+    // 防重复：200ms内不重复计数
+    if (now - state.lastCountTime < 200) {
+      state.lastPos = { x, y: relY };
+      return;
+    }
+    
+    // 检查手指是否还在污垢范围内（圆圈半径 + 30px 容差，稍微宽松）
+    const dx = x - dirt.x;
+    const dy = relY - dirt.y;
+    const distanceFromCenter = Math.sqrt(dx * dx + dy * dy);
+    const inRange = distanceFromCenter <= dirt.size / 2 + 30;
+    
+    if (!inRange) {
+      // 手指离开污垢范围，重置本次划动进度
+      if (state.totalDistance > 0) {
+        state.totalDistance = 0;
+        console.log('[GameplayScene] 手指离开污垢范围，重置划动进度');
       }
-    } else if (state.phase === 1) {
-      // 斜线：从右上到左下（x 减小，y 增大）
-      if (dx < -size / 3 && dy > size / 3) {
-        state.phase = 2;
-        state.startX = relX + dirt.x;
-        state.startY = relY + dirt.y;
-        console.log('[GameplayScene] Z字绘制：完成斜线');
+      state.lastPos = { x, y: relY };
+      return;
+    }
+    
+    // 计算与上一次位置的距离
+    const moveDx = x - state.lastPos.x;
+    const moveDy = relY - state.lastPos.y;
+    const distance = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
+    
+    // 累计划动距离
+    state.totalDistance += distance;
+    
+    // 更新上一次位置
+    state.lastPos = { x, y: relY };
+    
+    // 调试日志：每划动一定距离记录一次
+    if (state.totalDistance > 0 && Math.floor(state.totalDistance) % 20 === 0) {
+      console.log(`[GameplayScene] 划动中... 累计距离: ${Math.round(state.totalDistance)}/${Math.round(state.minStrokeDistance)}px`);
+    }
+    
+    // 检查是否完成有效划动（使用while循环处理可能超过阈值多次的情况）
+    while (state.totalDistance >= state.minStrokeDistance && state.strokeCount < state.maxStrokes) {
+      state.totalDistance = 0;  // 重置距离计数
+      state.lastCountTime = now; // 记录计数时间
+      state.strokeCount++;
+      dirt.strokeCount = state.strokeCount;
+      
+      console.log(`[GameplayScene] ✅ 划动计数: ${state.strokeCount}/${state.maxStrokes}`);
+      
+      // 触发震动反馈（每完成一次划动）
+      if (typeof wx !== 'undefined' && wx.vibrateShort) {
+        wx.vibrateShort({ type: 'light' });
       }
-    } else if (state.phase === 2) {
-      // 第二横：从左到右，y 变化不太大
-      if (dx > size / 3 && Math.abs(dy) < size / 2) {
-        state.phase = 3;
-        console.log('[GameplayScene] Z字绘制：完成Z字，清洁完成');
+      
+      // 检查是否完成所有划动
+      if (state.strokeCount >= state.maxStrokes) {
+        console.log('[GameplayScene] 划动完成，清洁完成');
+        state.active = false;
+        state.totalDistance = 0;
+        
         // 根据工具类型完成清洁
         if (this.activeTool && this.activeTool.id === 'cloth') {
           this._completeWipeClean(dirt);
         } else if (this.activeTool && this.activeTool.id === 'broom') {
           this._completeSweepClean(dirt);
         }
+        return;
       }
     }
   }

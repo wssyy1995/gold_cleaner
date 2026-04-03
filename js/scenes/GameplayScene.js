@@ -157,6 +157,29 @@ class GameplayScene extends Scene {
     
     // 云存储
     this.cloudStorage = new CloudStorage();
+    
+    // ========== 二级背景（dirts_deep_area）状态 ==========
+    this.deepArea = {
+      isActive: false,              // 是否正在二级背景中
+      currentAreaId: null,          // 当前二级背景ID
+      areas: [],                    // 所有二级区域配置
+      images: {},                   // 缓存的二级背景图片 { areaId: img }
+      originalDirts: [],            // 主关卡原始污垢（用于回退时恢复）
+      originalBgImage: null,        // 主关卡原始背景图
+      transition: {                 // 淡入淡出动画状态
+        active: false,
+        progress: 0,                // 0-1
+        duration: 300,              // 动画时长ms
+        fadingIn: true              // true=淡入, false=淡出
+      },
+      lastClick: {                  // 双击检测状态
+        time: 0,
+        areaId: null
+      }
+    };
+    
+    // 回退按钮
+    this.backBtnDeepArea = null;
   }
 
   async onLoad(data = {}) {
@@ -187,6 +210,9 @@ class GameplayScene extends Scene {
     this._initUI();
     this._generateDirts();
     await this._loadBackground();
+    
+    // 加载二级背景资源（dirts_deep_area）
+    await this._loadDeepAreaResources();
     
     // 检查是否需要显示新手引导（第一关且未完成引导）
     // 注意：必须在 _generateDirts 之后调用，因为需要污垢数据
@@ -253,6 +279,53 @@ class GameplayScene extends Scene {
       img.onerror = () => reject(new Error('本地图片不存在'));
       img.src = localPath;
     });
+  }
+  
+  /**
+   * 下载图片（从云存储URL）
+   */
+  _downloadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = wx.createImage();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('图片下载失败'));
+      img.src = url;
+    });
+  }
+  
+  /**
+   * 加载二级背景资源（dirts_deep_area）
+   */
+  async _loadDeepAreaResources() {
+    const deepAreas = this.levelConfig?.dirts_deep_area || [];
+    if (deepAreas.length === 0) return;
+    
+    console.log(`[GameplayScene] 开始加载 ${deepAreas.length} 个二级背景资源`);
+    
+    // 保存二级区域配置
+    this.deepArea.areas = deepAreas.map(area => ({
+      ...area,
+      cleanedDirts: [] // 记录已清洁的污垢ID
+    }));
+    
+    // 并行加载所有二级背景图片
+    const loadTasks = deepAreas.map(async (area) => {
+      if (!area.image) return;
+      
+      try {
+        const tempURL = await this.cloudStorage.getTempFileURL(area.image);
+        if (tempURL) {
+          const img = await this._downloadImage(tempURL);
+          this.deepArea.images[area.id] = img;
+          console.log(`[GameplayScene] 二级背景加载成功: ${area.id}`);
+        }
+      } catch (e) {
+        console.error(`[GameplayScene] 二级背景加载失败: ${area.id}`, e.message);
+      }
+    });
+    
+    await Promise.allSettled(loadTasks);
+    console.log('[GameplayScene] 二级背景资源加载完成');
   }
 
   /**
@@ -1743,6 +1816,7 @@ class GameplayScene extends Scene {
     if (this.backBtn) this.backBtn.update(deltaTime);
     if (this.winBtn) this.winBtn.update(deltaTime);
     if (this.exitZoomBtn) this.exitZoomBtn.update(deltaTime);
+    if (this.backBtnDeepArea) this.backBtnDeepArea.update(deltaTime);
     
     // 更新工具槽（滑动惯性）
     if (this.toolSlot) this.toolSlot.update(deltaTime);
@@ -1830,12 +1904,16 @@ class GameplayScene extends Scene {
       this.toolAnim.alpha = Math.min(1, t * 2); // 快速淡入
     }
     
-    // 检查是否全部完成
-    if (this.dirtObjects && this.dirtObjects.length > 0 && 
-        this.dirtObjects.every(d => d.state === 'clean') && 
-        !this._completed) {
-      this._completed = true;
-      setTimeout(() => this._showSettlement(), 500);
+    // 更新二级背景过渡动画
+    this._updateTransition(deltaTime);
+    
+    // 检查是否全部完成（主关卡 + 所有二级背景的污垢）
+    if (!this.deepArea.transition.active && !this._completed) {
+      const allCleaned = this._checkAllDirtsCleaned();
+      if (allCleaned) {
+        this._completed = true;
+        setTimeout(() => this._showSettlement(), 500);
+      }
     }
     
     // 更新工具解锁弹窗
@@ -1867,11 +1945,17 @@ class GameplayScene extends Scene {
     // 渲染新手引导
     this._renderTutorial(ctx, s);
     
+    // 渲染二级背景金色圆圈提示（只在主关卡显示）
+    this._renderDeepAreaHints(ctx, s);
+    
     // 渲染工具解锁弹窗
     this._renderToolUnlockDialog(ctx);
     
     // 渲染结算弹窗（在最上层）
     this._renderSettlementDialog(ctx);
+    
+    // 渲染过渡动画遮罩
+    this._renderTransition(ctx);
     
     // 在最顶层渲染生气 emoji（全局生效）
     this._renderAngryEmoji(ctx, s);
@@ -1939,6 +2023,9 @@ class GameplayScene extends Scene {
     if (this.backBtn) this.backBtn.onRender(ctx);
     if (this.winBtn) this.winBtn.onRender(ctx);
     if (this.guideBtn) this.guideBtn.onRender(ctx);
+    
+    // 绘制回退按钮（在二级背景中）
+    if (this.backBtnDeepArea) this.backBtnDeepArea.onRender(ctx);
 
     // 6. 绘制 ToolSlot 组件（在底部区域）
     if (this.toolSlot) {
@@ -2695,6 +2782,21 @@ class GameplayScene extends Scene {
       this._selectDirt(clickedDirt, x, y);
       return true;
     }
+    
+    // 检查回退按钮点击（在二级背景中）
+    if (this.deepArea.isActive && this.backBtnDeepArea && this.backBtnDeepArea.onTouchStart(x, y)) {
+      return true;
+    }
+    
+    // 检查二级背景区域双击（只在主关卡且没有弹窗时）
+    if (!this.deepArea.isActive && !this.deepArea.transition.active) {
+      const deepArea = this._checkDeepAreaDoubleClick(x, y);
+      if (deepArea) {
+        // 进入二级背景
+        this._enterDeepArea(deepArea);
+        return true;
+      }
+    }
 
     return false;
   }
@@ -3310,6 +3412,350 @@ class GameplayScene extends Scene {
     
     // 可以在这里添加更多错误提示，比如文字提示或音效
     console.log('[GameplayScene] 工具使用错误提示');
+  }
+  
+  // ==================== 二级背景（dirts_deep_area）功能 ====================
+  
+  /**
+   * 检查是否双击了二级背景区域
+   * 使用 200px 半径的圆作为检测范围
+   * 双击时间间隔必须在 300ms 内
+   */
+  _checkDeepAreaDoubleClick(x, y) {
+    const gameAreaY = this.screenHeight * 0.08;
+    const gameY = y - gameAreaY;
+    const s = this.screenWidth / 750;
+    const DETECT_RADIUS = 50 * s; // 50px 检测半径
+    const DOUBLE_CLICK_TIME = 300; // 双击时间间隔 ms
+    
+    const now = Date.now();
+    let clickedArea = null;
+    
+    // 检查是否在某个二级区域内（且未完全清洁）
+    for (const area of this.deepArea.areas) {
+      // 计算当前区域剩余的污垢数量
+      const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
+      if (remainingDirts === 0) continue; // 已清洁完的区域不再可进入
+      
+      const dx = x - area.x;
+      const dy = gameY - area.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance <= DETECT_RADIUS) {
+        clickedArea = area;
+        break;
+      }
+    }
+    
+    if (!clickedArea) {
+      // 点击不在任何区域内，重置双击状态
+      this.deepArea.lastClick.time = 0;
+      this.deepArea.lastClick.areaId = null;
+      return null;
+    }
+    
+    // 检查是否是双击（同一区域，300ms内）
+    const isDoubleClick = (
+      this.deepArea.lastClick.areaId === clickedArea.id &&
+      now - this.deepArea.lastClick.time < DOUBLE_CLICK_TIME
+    );
+    
+    if (isDoubleClick) {
+      // 双击成功，重置状态并返回区域
+      this.deepArea.lastClick.time = 0;
+      this.deepArea.lastClick.areaId = null;
+      return clickedArea;
+    } else {
+      // 第一次点击，记录状态
+      this.deepArea.lastClick.time = now;
+      this.deepArea.lastClick.areaId = clickedArea.id;
+      return null;
+    }
+  }
+  
+  /**
+   * 进入二级背景
+   */
+  _enterDeepArea(area) {
+    console.log(`[GameplayScene] 进入二级背景: ${area.id}`);
+    
+    // 保存当前主关卡状态
+    this.deepArea.originalDirts = [...this.dirtObjects];
+    this.deepArea.originalBgImage = this.bgImage;
+    
+    // 设置当前二级区域
+    this.deepArea.isActive = true;
+    this.deepArea.currentAreaId = area.id;
+    
+    // 切换背景图
+    const newBgImage = this.deepArea.images[area.id];
+    if (newBgImage) {
+      this.bgImage = newBgImage;
+    }
+    
+    // 生成二级区域的污垢（过滤掉已清洁的）
+    this._generateDeepAreaDirts(area);
+    
+    // 开始淡入动画
+    this._startTransition(true);
+    
+    // 创建回退按钮
+    this._createBackButton();
+  }
+  
+  /**
+   * 退出二级背景，回到主关卡
+   */
+  _exitDeepArea() {
+    console.log('[GameplayScene] 退出二级背景，返回主关卡');
+    
+    // 保存当前二级区域的污垢状态到对应区域配置
+    const currentArea = this.deepArea.areas.find(a => a.id === this.deepArea.currentAreaId);
+    if (currentArea) {
+      // 记录已清洁的污垢
+      this.dirtObjects.forEach(dirt => {
+        if (dirt.state === 'clean') {
+          const dirtId = dirt.id || `${dirt.originalX}-${dirt.originalY}`;
+          if (!currentArea.cleanedDirts.includes(dirtId)) {
+            currentArea.cleanedDirts.push(dirtId);
+          }
+        }
+      });
+    }
+    
+    // 恢复主关卡状态
+    this.deepArea.isActive = false;
+    this.deepArea.currentAreaId = null;
+    this.bgImage = this.deepArea.originalBgImage;
+    this.dirtObjects = this.deepArea.originalDirts;
+    
+    // 开始淡出动画
+    this._startTransition(false);
+    
+    // 移除回退按钮
+    this.backBtnDeepArea = null;
+  }
+  
+  /**
+   * 生成二级区域的污垢
+   */
+  _generateDeepAreaDirts(area) {
+    const s = this.screenWidth / 750;
+    const gameAreaY = this.screenHeight * 0.08;
+    
+    this.dirtObjects = area.dirts
+      .filter((d, index) => {
+        // 过滤掉已清洁的污垢
+        const dirtId = d.id || `${d.x}-${d.y}`;
+        return !area.cleanedDirts.includes(dirtId);
+      })
+      .map((dirtConfig, index) => {
+        const dirtType = DIRT_TYPES[dirtConfig.type];
+        if (!dirtType) {
+          console.warn(`[GameplayScene] 未知污垢类型: ${dirtConfig.type}`);
+          return null;
+        }
+        
+        const circleSize = 60 * s;
+        
+        return {
+          id: dirtConfig.id || `deep_${area.id}_${index}`,
+          originalX: dirtConfig.x, // 保存原始坐标用于标识
+          originalY: dirtConfig.y,
+          type: dirtConfig.type,
+          name: dirtType.name,
+          x: dirtConfig.x * s,
+          y: dirtConfig.y * s,
+          width: circleSize,
+          height: circleSize,
+          size: circleSize,
+          state: 'dirty',
+          selected: false,
+          cleaning: false,
+          strokeCount: 0,
+          maxStrokes: 3,
+          currentRecipe: dirtType.recipes[0],
+          currentStep: 0,
+          recipes: dirtType.recipes,
+          score: 10,
+          coinReward: 5
+        };
+      })
+      .filter(d => d !== null);
+    
+    console.log(`[GameplayScene] 二级区域生成 ${this.dirtObjects.length} 个污垢`);
+  }
+  
+  /**
+   * 开始背景切换过渡动画
+   * @param {boolean} fadingIn - true=淡入, false=淡出
+   */
+  _startTransition(fadingIn) {
+    this.deepArea.transition.active = true;
+    this.deepArea.transition.progress = 0;
+    this.deepArea.transition.fadingIn = fadingIn;
+    
+    // 动画在 update 中处理
+  }
+  
+  /**
+   * 更新过渡动画
+   */
+  _updateTransition(dt) {
+    if (!this.deepArea.transition.active) return;
+    
+    const { duration } = this.deepArea.transition;
+    const progressDelta = dt / duration;
+    
+    if (this.deepArea.transition.fadingIn) {
+      // 淡入
+      this.deepArea.transition.progress += progressDelta;
+      if (this.deepArea.transition.progress >= 1) {
+        this.deepArea.transition.progress = 1;
+        this.deepArea.transition.active = false;
+      }
+    } else {
+      // 淡出
+      this.deepArea.transition.progress += progressDelta;
+      if (this.deepArea.transition.progress >= 1) {
+        this.deepArea.transition.progress = 1;
+        this.deepArea.transition.active = false;
+      }
+    }
+  }
+  
+  /**
+   * 渲染过渡遮罩（淡入淡出效果）
+   */
+  _renderTransition(ctx) {
+    if (!this.deepArea.transition.active) return;
+    
+    const { progress, fadingIn } = this.deepArea.transition;
+    let alpha;
+    
+    if (fadingIn) {
+      // 淡入：从黑到透明
+      alpha = 1 - progress;
+    } else {
+      // 淡出：从透明到黑
+      alpha = progress;
+    }
+    
+    ctx.save();
+    ctx.fillStyle = `rgba(0, 0, 0, ${alpha * 0.5})`;
+    ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
+    ctx.restore();
+  }
+  
+  /**
+   * 渲染二级背景区域的金色圆圈提示
+   */
+  _renderDeepAreaHints(ctx, s) {
+    // 只在主关卡且不在过渡动画中显示
+    if (this.deepArea.isActive || this.deepArea.transition.active) return;
+    
+    const gameAreaY = this.screenHeight * 0.08;
+    const DETECT_RADIUS = 50 * s;
+    
+    ctx.save();
+    
+    this.deepArea.areas.forEach(area => {
+      // 检查区域是否还有未清洁的污垢
+      const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
+      if (remainingDirts === 0) return; // 已清洁完的区域不显示提示
+      
+      const cx = area.x;
+      const cy = area.y + gameAreaY;
+      
+      // 呼吸动画
+      const breath = (Math.sin(Date.now() * 0.003) + 1) / 2;
+      const alpha = 0.3 + breath * 0.4;
+      const lineWidth = 2 + breath * 2;
+      
+      // 绘制金色虚线圆圈
+      ctx.beginPath();
+      ctx.arc(cx, cy, DETECT_RADIUS, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 215, 0, ${alpha})`;
+      ctx.lineWidth = lineWidth;
+      ctx.setLineDash([10 * s, 10 * s]);
+      ctx.stroke();
+      
+      // 内圈（更淡）
+      ctx.beginPath();
+      ctx.arc(cx, cy, DETECT_RADIUS - 15 * s, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 215, 0, ${alpha * 0.5})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      
+      // 中心小圆点
+      ctx.beginPath();
+      ctx.arc(cx, cy, 6 * s, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 215, 0, ${0.6 + breath * 0.4})`;
+      ctx.fill();
+    });
+    
+    ctx.restore();
+  }
+  
+  /**
+   * 创建回退按钮
+   */
+  _createBackButton() {
+    const s = this.screenWidth / 750;
+    
+    const Button = require('../ui/components/Button').default;
+    this.backBtnDeepArea = new Button({
+      x: 20 * s, 
+      y: 100 * s, 
+      width: 100 * s, 
+      height: 50 * s, 
+      text: '← 返回', 
+      fontSize: 24 * s, 
+      bgColor: 'rgba(0,0,0,0.5)', 
+      textColor: '#FFFFFF', 
+      borderRadius: 8 * s,
+      onClick: () => {
+        this._exitDeepArea();
+      }
+    });
+  }
+  
+  /**
+   * 检查所有污垢是否清洁完成（主关卡 + 所有二级背景）
+   */
+  _checkAllDirtsCleaned() {
+    // 1. 检查当前显示的污垢是否全部清洁
+    if (this.dirtObjects.length === 0 || !this.dirtObjects.every(d => d.state === 'clean')) {
+      return false;
+    }
+    
+    // 2. 检查所有二级背景的污垢是否清洁完成
+    for (const area of this.deepArea.areas) {
+      const totalDirts = area.dirts.length;
+      const cleanedDirts = area.cleanedDirts.length;
+      
+      // 如果当前在二级背景中，需要额外检查当前区域的污垢
+      if (this.deepArea.isActive && area.id === this.deepArea.currentAreaId) {
+        const currentCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+        if (cleanedDirts + currentCleaned < totalDirts) {
+          return false;
+        }
+      } else {
+        // 不在该区域，只检查已保存的清洁记录
+        if (cleanedDirts < totalDirts) {
+          return false;
+        }
+      }
+    }
+    
+    // 3. 检查主关卡原始污垢（只在不在二级背景中时）
+    if (!this.deepArea.isActive && this.deepArea.originalDirts.length > 0) {
+      const mainCleaned = this.deepArea.originalDirts.every(d => d.state === 'clean');
+      if (!mainCleaned) return false;
+    }
+    
+    console.log('[GameplayScene] 所有污垢清洁完成（主关卡 + 二级背景）');
+    return true;
   }
   
   /**

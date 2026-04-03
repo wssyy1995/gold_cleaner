@@ -1,23 +1,206 @@
-  <!-- 10. 极简现代光圈 -->
-            <div class="circle-container" onclick="showPreview('极简现代', '极简现代UI金色轮廓光圈，干净线条，专业设计')">
-                <div class="w-32 h-32 rounded-full minimal-circle flex items-center justify-center">
-                    <span class="text-yellow-300 font-bold text-xl">极简</span>
-                </div>
-                <div class="circle-label">10. 极简现代</div>
-            </div>
-        </div>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>弹跳放大镜 - 独立组件</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a1a; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+        canvas { box-shadow: 0 0 20px rgba(0,0,0,0.5); border-radius: 12px; }
+        .hint { position: absolute; top: 20px; color: #aaa; text-align: center; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="hint">独立组件演示：弹跳放大镜 (双击提示)<br>点击屏幕任意位置可在该处生成提示，中心位置为常驻循环提示</div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <script>
+        /**
+         * 弹跳放大镜 - 通用双击提示组件
+         * 适用于游戏主循环 (update / draw 模式)
+         */
+        class BouncyMagnifier {
+            constructor(options = {}) {
+                this.x = options.x || 0;
+                this.y = options.y || 0;
+                this.baseSize = options.size || 40;
+                this.color = options.color || '#FFD700'; // 默认黄金主题色，呼应你之前的黄金边框设计
+                this.duration = options.duration || 1500; // 一个完整的动画周期(毫秒)
+                
+                this.age = 0; // 当前存活时间
+                this.isFinished = false; // 是否播放完毕(对于一次性提示)
+                this.loop = options.loop !== false; // 是否循环播放，默认true
+            }
+
+            // 在游戏主循环中更新状态
+            update(deltaTime) {
+                if (this.isFinished) return;
+                
+                this.age += deltaTime;
+                if (this.age >= this.duration) {
+                    if (this.loop) {
+                        this.age %= this.duration; // 循环播放
+                    } else {
+                        this.isFinished = true; // 结束标记
+                    }
+                }
+            }
+
+            // 核心动画算法：两次心跳式弹跳 (映射到 0.0 ~ 1.0 的缩放比例)
+            getBounceScale(progress) {
+                // 将动画进度分为：第一跳(0-15%)、第二跳(15%-30%)、静止等待(30%-100%)
+                if (progress < 0.15) {
+                    // 第1跳 (放大)
+                    return 1 + Math.sin(progress / 0.15 * Math.PI) * 0.4;
+                } else if (progress < 0.3) {
+                    // 第2跳 (放大)
+                    let p2 = (progress - 0.15) / 0.15;
+                    return 1 + Math.sin(p2 * Math.PI) * 0.4;
+                }
+                return 1; // 休息阶段，保持原大小
+            }
+
+            // 获取透明度：优雅的渐入渐出
+            getOpacity(progress) {
+                if (progress < 0.1) return progress / 0.1; // 前10%极短的渐入
+                if (progress > 0.8) return 1 - (progress - 0.8) / 0.2; // 最后20%结尾渐出
+                return 1;
+            }
+
+            // 在游戏主循环中执行渲染
+            draw(ctx) {
+                if (this.isFinished) return;
+
+                const progress = this.age / this.duration;
+                const scale = this.getBounceScale(progress);
+                const opacity = this.getOpacity(progress);
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.scale(scale, scale);
+                ctx.globalAlpha = opacity;
+
+                // 1. 发光环境光晕
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 15;
+                
+                // 2. 绘制放大镜主体参数
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = this.baseSize * 0.15;
+                ctx.lineCap = 'round';
+                
+                // 3. 镜片外圈
+                ctx.beginPath();
+                ctx.arc(-this.baseSize * 0.1, -this.baseSize * 0.1, this.baseSize * 0.4, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // 4. 镜片内部的玻璃高光 (极大提升质感细节)
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; // 白色半透明
+                ctx.lineWidth = this.baseSize * 0.08;
+                ctx.arc(-this.baseSize * 0.1, -this.baseSize * 0.1, this.baseSize * 0.25, Math.PI, Math.PI * 1.5);
+                ctx.stroke();
+
+                // 5. 放大镜把手 (向右下方45度角)
+                ctx.beginPath();
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = this.baseSize * 0.18;
+                const handleStartX = -this.baseSize * 0.1 + Math.cos(Math.PI / 4) * (this.baseSize * 0.4);
+                const handleStartY = -this.baseSize * 0.1 + Math.sin(Math.PI / 4) * (this.baseSize * 0.4);
+                ctx.moveTo(handleStartX, handleStartY);
+                ctx.lineTo(this.baseSize * 0.4, this.baseSize * 0.4);
+                ctx.stroke();
+                
+                // 6. "双击"动作的额外强调反馈波纹 (仅在跳动时出现)
+                if (progress < 0.4) {
+                    const rippleOpacity = 1 - (progress / 0.4);
+                    const rippleScale = 1 + (progress / 0.4) * 0.8;
+                    
+                    ctx.shadowBlur = 0; // 取消波纹的阴影，避免脏乱
+                    ctx.beginPath();
+                    ctx.strokeStyle = `rgba(255, 215, 0, ${rippleOpacity * 0.5})`; // 金色逐渐透明
+                    ctx.lineWidth = 2;
+                    ctx.arc(-this.baseSize * 0.1, -this.baseSize * 0.1, this.baseSize * 0.5 * rippleScale, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // ==========================================
+        // 下方代码仅为演示环境 (模拟小游戏的渲染循环)
+        // ==========================================
         
-        <div id="preview-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
-            <div class="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4">
-                <h2 class="text-2xl font-bold text-yellow-300 mb-4" id="preview-title">光圈预览</h2>
-                <p class="text-gray-300 mb-6" id="preview-description">光圈描述</p>
-                <div class="flex justify-center mb-6">
-                    <div id="preview-circle" class="w-48 h-48 rounded-full bg-yellow-400 flex items-center justify-center border-4 border-yellow-300">
-                        <span class="text-white font-bold text-3xl">预览</span>
-                    </div>
-                </div>
-                <button onclick="closePreview()" class="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-3 px-6 rounded-lg transition-colors">
-                    关闭预览
-                </button>
-            </div>
-        </div>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 维护一个正在播放的动画实例列表
+        let activeAnimations = [];
+
+        // 场景1：初始化一个在屏幕中央常驻、循环播放的放大镜 (用于空闲时强制引导玩家)
+        const tutorialMagnifier = new BouncyMagnifier({
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            size: 55,
+            color: '#FFD700', // 呼应你设计的脉冲黄金边框
+            loop: true,
+            duration: 2000    // 稍慢的周期，给新手反应时间
+        });
+        activeAnimations.push(tutorialMagnifier);
+
+        // 场景2：点击屏幕时，在点击位置生成一个一次性的蓝色放大镜 (模拟玩家成功操作的反馈)
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            activeAnimations.push(new BouncyMagnifier({
+                x: x,
+                y: y,
+                size: 35,
+                color: '#00E5FF', // 科技感青色，表示反馈
+                loop: false,      // 播放一次后销毁
+                duration: 800     // 极短促的反馈时间
+            }));
+        });
+
+        // 游戏标准主循环 (Game Loop)
+        let lastTime = performance.now();
+        
+        function gameLoop(currentTime) {
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+
+            // 1. 擦除上一帧 (模拟你的游戏背景)
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制网格背景 (仅为装饰环境)
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 1;
+            for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+            for(let i=0; i<canvas.height; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke(); }
+
+            // 2. 更新并绘制所有存活的动画实例
+            for (let i = activeAnimations.length - 1; i >= 0; i--) {
+                const anim = activeAnimations[i];
+                
+                // 核心的两步：更新时间 -> 重新绘制
+                anim.update(deltaTime);
+                anim.draw(ctx);
+                
+                // 3. 垃圾回收：如果动画已播放完毕(非循环的)，将其从数组中移除
+                if (anim.isFinished) {
+                    activeAnimations.splice(i, 1);
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 启动！
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

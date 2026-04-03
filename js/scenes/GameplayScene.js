@@ -25,6 +25,106 @@ import ToolUnlockDialog from '../ui/dialogs/ToolUnlockDialog';
 import { GlobalFingerImageCache } from './LoadingScene';
 import haptic from '../utils/HapticFeedback';
 
+/**
+ * 弹跳放大镜 - 双击提示组件
+ * 用于二级背景区域的金圈中心提示
+ */
+class BouncyMagnifier {
+  constructor(options = {}) {
+    this.x = options.x || 0;
+    this.y = options.y || 0;
+    this.baseSize = options.size || 40;
+    this.color = options.color || '#FFD700'; // 默认黄金主题色
+    this.duration = options.duration || 1500; // 动画周期(毫秒)
+    
+    this.age = 0; // 当前存活时间
+    this.isFinished = false;
+    this.loop = options.loop !== false; // 是否循环播放，默认true
+  }
+
+  // 在游戏主循环中更新状态
+  update(deltaTime) {
+    if (this.isFinished) return;
+    
+    this.age += deltaTime;
+    if (this.age >= this.duration) {
+      if (this.loop) {
+        this.age %= this.duration;
+      } else {
+        this.isFinished = true;
+      }
+    }
+  }
+
+  // 核心动画算法：两次心跳式弹跳
+  getBounceScale(progress) {
+    // 第一跳(0-15%)、第二跳(15%-30%)、静止等待(30%-100%)
+    if (progress < 0.15) {
+      // 第1跳 (放大)
+      return 1 + Math.sin(progress / 0.15 * Math.PI) * 0.4;
+    } else if (progress < 0.3) {
+      // 第2跳 (放大)
+      let p2 = (progress - 0.15) / 0.15;
+      return 1 + Math.sin(p2 * Math.PI) * 0.4;
+    }
+    return 1; // 休息阶段
+  }
+
+  // 获取透明度：优雅的渐入渐出
+  getOpacity(progress) {
+    if (progress < 0.05) return 0.3 + progress / 0.05 * 0.7;  // 前5%从0.3渐到1
+    if (progress > 0.8) return 1 - (progress - 0.8) / 0.2;
+    return 1;
+  }
+
+  // 在游戏主循环中执行渲染
+  draw(ctx) {
+    if (this.isFinished) return;
+
+    const progress = this.age / this.duration;
+    const scale = this.getBounceScale(progress);
+    const opacity = this.getOpacity(progress);
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = opacity;
+
+    // 1. 发光环境光晕
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur = 15;
+    
+    // 2. 绘制放大镜主体参数
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = this.baseSize * 0.15;
+    ctx.lineCap = 'round';
+    
+    // 3. 镜片外圈
+    ctx.beginPath();
+    ctx.arc(-this.baseSize * 0.1, -this.baseSize * 0.1, this.baseSize * 0.4, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // 4. 镜片内部的玻璃高光
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.lineWidth = this.baseSize * 0.08;
+    ctx.arc(-this.baseSize * 0.1, -this.baseSize * 0.1, this.baseSize * 0.25, Math.PI, Math.PI * 1.5);
+    ctx.stroke();
+
+    // 5. 放大镜把手 (向右下方45度角)
+    ctx.beginPath();
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = this.baseSize * 0.18;
+    const handleStartX = -this.baseSize * 0.1 + Math.cos(Math.PI / 4) * (this.baseSize * 0.4);
+    const handleStartY = -this.baseSize * 0.1 + Math.sin(Math.PI / 4) * (this.baseSize * 0.4);
+    ctx.moveTo(handleStartX, handleStartY);
+    ctx.lineTo(this.baseSize * 0.4, this.baseSize * 0.4);
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+}
+
 class GameplayScene extends Scene {
   constructor() {
     super({ name: 'GameplayScene' });
@@ -175,7 +275,13 @@ class GameplayScene extends Scene {
       lastClick: {                  // 双击检测状态
         time: 0,
         areaId: null
-      }
+      },
+      magnifiers: [],               // 放大镜动画实例数组
+      hintsVisible: false,          // 金圈提示是否可见（默认不显示）
+      firstHintShown: false,        // 第一个金圈是否已显示（用于新人引导）
+      hintShowTimer: null,          // 延迟显示金圈的定时器
+      visitedAreas: [],             // 已访问过的二级背景区域ID列表
+      secondHintShown: false        // 是否已显示过"再找找别的隐藏垃圾"提示
     };
     
     // 回退按钮
@@ -187,6 +293,39 @@ class GameplayScene extends Scene {
     this.stage = data.stage || 1;
     this.bgImage = null;
     this.bgLoaded = false;
+    this._completed = false; // 重置结算标记
+    this._mainLevelCleanLogged = false; // 重置一级背景清洁完成标记
+    
+    // 清理上一关的定时器和状态
+    if (this.deepArea.hintShowTimer) {
+      clearTimeout(this.deepArea.hintShowTimer);
+      this.deepArea.hintShowTimer = null;
+    }
+    this.deepArea.hintsVisible = false;
+    this.deepArea.firstHintShown = false;
+    this.deepArea.isActive = false;
+    this.deepArea.currentAreaId = null;
+    this.deepArea.areas = [];
+    this.deepArea.magnifiers = [];
+    this.deepArea.visitedAreas = []; // 重置已访问列表
+    this.deepArea.secondHintShown = false; // 重置第二次提示标记
+    
+    // 重置新手引导状态（每关都重置，只有第一关会根据hasCompletedTutorial决定是否开启）
+    this.tutorial.isActive = false;
+    this.tutorial.rubbishBinGlowShown = false;
+    this.tutorial.dcBasketGlowShown = false;
+    this.tutorial.clothGlowShown = false;
+    this.tutorial.showingRubbishBinGlow = false;
+    this.tutorial.showingDcBasketGlow = false;
+    this.tutorial.showingClothGlow = false;
+    this.tutorial.showRubbishBinDirtHint = false;
+    this.tutorial.showDcBasketDirtHint = false;
+    this.tutorial.showClothDirtHint = false;
+    this.tutorial.rubbishBinUsed = false;
+    this.tutorial.dcBasketUsed = false;
+    this.tutorial.clothUsed = false;
+    this.tutorial.handAnim.time = 0;
+    this.tutorial.handAnim.offset = 0;
     
     // 从 LevelConfig 获取关卡配置
     this.levelConfig = getLevel(this.stage, this.levelId);
@@ -325,7 +464,32 @@ class GameplayScene extends Scene {
     });
     
     await Promise.allSettled(loadTasks);
+    
+    // 初始化放大镜动画实例
+    this._initDeepAreaMagnifiers();
+    
     console.log('[GameplayScene] 二级背景资源加载完成');
+  }
+  
+  /**
+   * 初始化二级区域的放大镜提示动画
+   */
+  _initDeepAreaMagnifiers() {
+    const s = this.screenWidth / 750;
+    const gameAreaY = this.screenHeight * 0.08;
+    
+    this.deepArea.magnifiers = this.deepArea.areas.map(area => {
+      return new BouncyMagnifier({
+        x: area.x * s,
+        y: area.y * s + gameAreaY,
+        size: 35 * s,                    // 根据屏幕比例缩放
+        color: '#FFD700',                // 金色主题
+        loop: true,                      // 循环播放
+        duration: 2000                   // 2秒一个周期，给玩家足够反应时间
+      });
+    });
+    
+    console.log(`[GameplayScene] 初始化 ${this.deepArea.magnifiers.length} 个放大镜动画`);
   }
 
   /**
@@ -333,20 +497,29 @@ class GameplayScene extends Scene {
    * 条件：第一关 + 新玩家 + 未展示过引导
    */
   _checkTutorial() {
-    // 只有第一关才显示引导
-    if (this.levelId !== 1) return;
+    // 只有第一关才显示引导（注意类型转换，levelId可能是字符串）
+    if (Number(this.levelId) !== 1) {
+      console.log('[GameplayScene] 引导检查: 不是第一关, levelId=', this.levelId);
+      return;
+    }
     
     const game = getGame();
     const dataManager = game ? game.dataManager : null;
     
     // 检查是否已完成引导
     if (dataManager && dataManager.hasCompletedTutorial) {
-      if (dataManager.hasCompletedTutorial()) return;
+      if (dataManager.hasCompletedTutorial()) {
+        console.log('[GameplayScene] 引导检查: dataManager显示已完成引导');
+        return;
+      }
     } else {
       // 降级检查：使用本地存储
       try {
         const hasShown = wx.getStorageSync('tutorial_completed');
-        if (hasShown) return;
+        if (hasShown) {
+          console.log('[GameplayScene] 引导检查: 本地存储显示已完成引导');
+          return;
+        }
       } catch (e) {
         // 忽略错误
       }
@@ -372,11 +545,16 @@ class GameplayScene extends Scene {
     
     if (!rubbishBinDirt && !dcBasketDirt && !clothDirt) {
       console.warn('[GameplayScene] 未找到适合引导的污垢，无法开启引导');
+      console.log('[GameplayScene] 污垢类型:', this.dirtObjects.map(d => d.type));
       return;
     }
     
     // 开启引导
-    console.log('[GameplayScene] 开启被动式新手引导');
+    console.log('[GameplayScene] 开启被动式新手引导, 目标污垢:', {
+      rubbishBin: rubbishBinDirt?.type,
+      dcBasket: dcBasketDirt?.type,
+      cloth: clothDirt?.type
+    });
     this.tutorial.isActive = true;
     this.tutorial.targetRubbishBinDirt = rubbishBinDirt || null;
     this.tutorial.targetDcBasketDirt = dcBasketDirt || null;
@@ -823,6 +1001,11 @@ class GameplayScene extends Scene {
   _completeCleanDirt(dirt) {
     dirt.state = 'clean';
     
+    // 打印清洁进度
+    const mainTotal = this.dirtObjects.length;
+    const mainCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+    console.log('[GameplayScene] 清洁完成:', dirt.name, 'mainTotal:', mainTotal, 'mainCleaned:', mainCleaned);
+    
     // 添加闪光粒子效果
     const s = this.screenWidth / 750;
     for (let i = 0; i < 8; i++) {
@@ -836,8 +1019,8 @@ class GameplayScene extends Scene {
       });
     }
     
-    // 检查是否全部清洁完成
-    if (this.dirtObjects.every(d => d.state === 'clean')) {
+    // 检查是否全部清洁完成（包括二级背景）
+    if (this._checkAllDirtsCleaned()) {
       setTimeout(() => {
         this._showSettlement();
       }, 1000);
@@ -1798,6 +1981,11 @@ class GameplayScene extends Scene {
     // 更新新手引导动画
     this._updateTutorial(deltaTime);
     
+    // 更新二级区域放大镜动画（只在主关卡显示时更新）
+    if (!this.deepArea.isActive && !this.deepArea.transition.active) {
+      this.deepArea.magnifiers.forEach(magnifier => magnifier.update(deltaTime));
+    }
+    
     // 更新按钮
     if (this.backBtn) this.backBtn.update(deltaTime);
     if (this.winBtn) this.winBtn.update(deltaTime);
@@ -1807,16 +1995,8 @@ class GameplayScene extends Scene {
     // 更新工具槽（滑动惯性）
     if (this.toolSlot) this.toolSlot.update(deltaTime);
     
-    // 更新清洁度
-    if (this.dirtObjects && this.dirtObjects.length > 0) {
-      const cleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
-      this.cleanProgress = (cleaned / this.dirtObjects.length) * 100;
-      
-      // 更新 TopBar 的进度
-      if (this.topBar) {
-        this.topBar.updateData({ progress: this.cleanProgress });
-      }
-    }
+    // 更新清洁度（包含一级背景和二级背景的所有污垢）
+    this._updateCleanProgress();
     
     // 更新粒子
     this.sparkles.forEach((p, i) => {
@@ -3090,6 +3270,11 @@ class GameplayScene extends Scene {
     dirt.state = 'clean';
     dirt.isHighlighted = false;
     
+    // 打印清洁进度
+    const mainTotal = this.dirtObjects.length;
+    const mainCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+    console.log('[GameplayScene] 清洁完成:', dirt.name, 'mainTotal:', mainTotal, 'mainCleaned:', mainCleaned);
+    
     // 添加亮晶晶特效
     const s = this.screenWidth / 750;
     const gameAreaY = this.screenHeight * 0.08;
@@ -3219,6 +3404,11 @@ class GameplayScene extends Scene {
     dirt.state = 'clean';
     dirt.isHighlighted = false;
     
+    // 打印清洁进度
+    const mainTotal = this.dirtObjects.length;
+    const mainCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+    console.log('[GameplayScene] 清洁完成:', dirt.name, 'mainTotal:', mainTotal, 'mainCleaned:', mainCleaned);
+    
     // 添加亮晶晶特效
     const s = this.screenWidth / 750;
     const gameAreaY = this.screenHeight * 0.08;
@@ -3247,10 +3437,10 @@ class GameplayScene extends Scene {
   }
 
   /**
-   * 检查是否全部清洁完成
+   * 检查是否全部清洁完成（包括二级背景）
    */
   _checkAllCleaned() {
-    const allCleaned = this.dirtObjects.every(d => d.state === 'clean');
+    const allCleaned = this._checkAllDirtsCleaned();
     if (allCleaned && !this._completed) {
       this._completed = true;
       setTimeout(() => this._showSettlement(), 500);
@@ -3485,6 +3675,14 @@ class GameplayScene extends Scene {
     this.deepArea.isActive = true;
     this.deepArea.currentAreaId = area.id;
     
+    // 记录该区域已被访问过（进入后不再显示金圈）
+    if (!this.deepArea.visitedAreas.includes(area.id)) {
+      this.deepArea.visitedAreas.push(area.id);
+    }
+    
+    // 隐藏金圈提示（进入二级背景后立即隐藏）
+    this.deepArea.hintsVisible = false;
+    
     // 切换背景图
     const newBgImage = this.deepArea.images[area.id];
     if (newBgImage) {
@@ -3532,6 +3730,26 @@ class GameplayScene extends Scene {
     
     // 移除回退按钮
     this.backBtnDeepArea = null;
+    
+    // 检查是否还有其他未访问、未清洁的二级背景
+    const hasOtherUncleanedArea = this.deepArea.areas.some(area => {
+      // 排除已访问过的区域
+      if (this.deepArea.visitedAreas.includes(area.id)) return false;
+      // 检查是否还有未清洁的污垢
+      const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
+      return remainingDirts > 0;
+    });
+    
+    // 第一关且未显示过第二次提示时，显示"再找找别的隐藏垃圾"提示
+    if (hasOtherUncleanedArea && Number(this.levelId) === 1 && !this.deepArea.secondHintShown) {
+      this.deepArea.secondHintShown = true; // 标记已显示
+      // 显示提示引导用户寻找其他隐藏垃圾
+      setTimeout(() => {
+        this._showToast('再找找别的隐藏垃圾，双击可疑之处检查！', 3000);
+        // 显示第一个未访问的二级背景金圈
+        this.deepArea.hintsVisible = true;
+      }, 500); // 等过渡动画开始后再显示
+    }
   }
   
   /**
@@ -3652,12 +3870,42 @@ class GameplayScene extends Scene {
     // 只在主关卡且不在过渡动画中显示
     if (this.deepArea.isActive || this.deepArea.transition.active) return;
     
+    // 默认不显示金圈，除非满足条件
+    let areasToShow = [];
+    
+    // 条件1：新人引导首次提示（firstHintShown）
+    // 条件2：从二级背景退出后提示其他区域（hintsVisible，仅第一关）
+    const shouldShowHint = (Number(this.levelId) === 1) && (this.deepArea.firstHintShown || this.deepArea.hintsVisible);
+    
+    if (shouldShowHint) {
+      // 找到第一个未访问、未清洁的区域
+      const firstUncleanedIndex = this.deepArea.areas.findIndex((area, index) => {
+        // 排除已访问过的区域
+        if (this.deepArea.visitedAreas.includes(area.id)) return false;
+        // 检查是否还有未清洁的污垢
+        const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
+        return remainingDirts > 0;
+      });
+      if (firstUncleanedIndex !== -1) {
+        areasToShow = [firstUncleanedIndex];
+      }
+    }
+    
+    // 如果没有需要显示的区域，直接返回
+    if (areasToShow.length === 0) return;
+    
     const gameAreaY = this.screenHeight * 0.08;
     const DETECT_RADIUS = 50 * s;
     
     ctx.save();
     
-    this.deepArea.areas.forEach(area => {
+    areasToShow.forEach(index => {
+      const area = this.deepArea.areas[index];
+      if (!area) return;
+      
+      // 检查区域是否已被访问过（进入过二级背景后不再显示金圈）
+      if (this.deepArea.visitedAreas.includes(area.id)) return;
+      
       // 检查区域是否还有未清洁的污垢
       const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
       if (remainingDirts === 0) return; // 已清洁完的区域不显示提示
@@ -3670,12 +3918,18 @@ class GameplayScene extends Scene {
       const alpha = 0.3 + breath * 0.4;
       const lineWidth = 2 + breath * 2;
       
-      // 绘制金色虚线圆圈
+      // 绘制白色半透明背景圆
+      ctx.beginPath();
+      ctx.arc(cx, cy, DETECT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fill();
+      
+      // 绘制金色实线圆圈
       ctx.beginPath();
       ctx.arc(cx, cy, DETECT_RADIUS, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(255, 215, 0, ${alpha})`;
       ctx.lineWidth = lineWidth;
-      ctx.setLineDash([10 * s, 10 * s]);
+      ctx.setLineDash([]); // 实线
       ctx.stroke();
       
       // 内圈（更淡）
@@ -3685,11 +3939,21 @@ class GameplayScene extends Scene {
       ctx.lineWidth = 1;
       ctx.stroke();
       
-      // 中心小圆点
-      ctx.beginPath();
-      ctx.arc(cx, cy, 6 * s, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255, 215, 0, ${0.6 + breath * 0.4})`;
-      ctx.fill();
+      // 绘制弹跳放大镜动画（替代原来的中心圆点）
+      let magnifier = this.deepArea.magnifiers[index];
+      if (!magnifier) {
+        // 如果放大镜未初始化，即时创建一个
+        magnifier = new BouncyMagnifier({
+          x: cx,
+          y: cy,
+          size: 35 * s,
+          color: '#FFD700',
+          loop: true,
+          duration: 2000
+        });
+        this.deepArea.magnifiers[index] = magnifier;
+      }
+      magnifier.draw(ctx);
     });
     
     ctx.restore();
@@ -3716,6 +3980,141 @@ class GameplayScene extends Scene {
         this._exitDeepArea();
       }
     });
+  }
+  
+  /**
+   * 检查一级背景是否全部清洁完成，触发新人引导提示二级背景
+   * 条件：新人 + 第一关 + 一级背景全部清洁 + 有未清洁的二级背景
+   */
+  /**
+   * 更新清洁度（包含一级背景和二级背景的所有污垢）
+   */
+  _updateCleanProgress() {
+    // 计算主关卡污垢总数和已清洁数
+    let mainTotal = 0;
+    let mainCleaned = 0;
+    
+    if (this.deepArea.isActive) {
+      // 在二级背景中，使用保存的主关卡原始污垢
+      mainTotal = this.deepArea.originalDirts.length;
+      mainCleaned = this.deepArea.originalDirts.filter(d => d.state === 'clean').length;
+    } else {
+      // 在主关卡中，使用当前污垢
+      mainTotal = this.dirtObjects.length;
+      mainCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+    }
+    
+    // 计算二级背景污垢总数和已清洁数
+    let deepTotal = 0;
+    let deepCleaned = 0;
+    
+    for (const area of this.deepArea.areas) {
+      deepTotal += area.dirts.length;
+      deepCleaned += area.cleanedDirts.length;
+      
+      // 如果当前在这个二级背景中，加上当前清洁的
+      if (this.deepArea.isActive && area.id === this.deepArea.currentAreaId) {
+        const currentCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+        deepCleaned += currentCleaned;
+      }
+    }
+    
+    // 总清洁度
+    const totalDirts = mainTotal + deepTotal;
+    const totalCleaned = mainCleaned + deepCleaned;
+    
+    if (totalDirts > 0) {
+      this.cleanProgress = (totalCleaned / totalDirts) * 100;
+      
+      // 更新 TopBar 的进度
+      if (this.topBar) {
+        this.topBar.updateData({ progress: this.cleanProgress });
+      }
+    }
+    
+    // 检测一级背景污垢是否全部清理完成（用于新人引导提示二级背景）
+    const shouldTrigger = !this.deepArea.isActive && mainTotal > 0 && mainCleaned >= mainTotal;
+    if (shouldTrigger && !this._mainLevelCleanLogged) {
+      this._mainLevelCleanLogged = true;
+      console.log('[GameplayScene] 一级背景清洁完成，准备触发二级背景提示');
+      this._checkMainLevelCompleteForDeepAreaHint();
+    }
+  }
+  
+  /**
+   * 检测一级背景全部清洁完成，触发新人引导提示二级背景
+   * 条件：新人 + 第一关 + 一级背景全部清洁 + 有未清洁的二级背景
+   */
+  _checkMainLevelCompleteForDeepAreaHint() {
+    // 只在主关卡且不在过渡动画中检测
+    if (this.deepArea.isActive) {
+      console.log('[GameplayScene] 二级背景提示: isActive=true, 返回');
+      return;
+    }
+    if (this.deepArea.transition.active) {
+      console.log('[GameplayScene] 二级背景提示: transition.active=true, 返回');
+      return;
+    }
+    
+    // 必须是第一关
+    if (Number(this.levelId) !== 1) {
+      console.log('[GameplayScene] 二级背景提示: levelId不是1, 返回');
+      return;
+    }
+    
+    // 检查用户之前是否已经看过二级背景提示
+    try {
+      const hasShownDeepAreaHint = wx.getStorageSync('deep_area_hint_shown');
+      if (hasShownDeepAreaHint) {
+        console.log('[GameplayScene] 二级背景提示: 用户已看过提示, 返回');
+        return;
+      }
+    } catch (e) {
+      // 忽略错误，继续执行
+    }
+    
+    // 必须有二级背景区域
+    if (this.deepArea.areas.length === 0) {
+      console.log('[GameplayScene] 二级背景提示: areas.length=0, 返回');
+      return;
+    }
+    
+    // 检查是否还有未清洁的二级背景
+    const hasUncleanedDeepArea = this.deepArea.areas.some(area => {
+      const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
+      return remainingDirts > 0;
+    });
+    if (!hasUncleanedDeepArea) {
+      console.log('[GameplayScene] 二级背景提示: 没有未清洁的二级背景, 返回');
+      return;
+    }
+    
+    // 避免重复触发
+    if (this.deepArea.hintShowTimer) {
+      console.log('[GameplayScene] 二级背景提示: hintShowTimer已设置, 返回');
+      return;
+    }
+    if (this.deepArea.firstHintShown) {
+      console.log('[GameplayScene] 二级背景提示: firstHintShown=true, 返回');
+      return;
+    }
+    
+    // 显示 toast 提示
+    this._showToast('看不见的地方，可能会藏着垃圾哦，双击看看！', 3000);
+    
+    // 1秒后显示第一个金圈
+    this.deepArea.hintShowTimer = setTimeout(() => {
+      this.deepArea.firstHintShown = true;
+      this.deepArea.hintsVisible = true;
+      console.log('[GameplayScene] 新人引导：显示第一个二级背景金圈');
+      
+      // 保存标记，表示用户已看过二级背景提示
+      try {
+        wx.setStorageSync('deep_area_hint_shown', true);
+      } catch (e) {
+        // 忽略错误
+      }
+    }, 1000);
   }
   
   /**
@@ -3942,6 +4341,10 @@ class GameplayScene extends Scene {
         // 动画完成，标记为已清理
         dirt.state = 'clean';
         dirt.isFlying = false;
+        // 打印清洁进度
+        const mainTotal = this.dirtObjects.length;
+        const mainCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+        console.log('[GameplayScene] 清洁完成:', dirt.name, 'mainTotal:', mainTotal, 'mainCleaned:', mainCleaned);
         console.log(`[GameplayScene] ${dirt.name} 已扔进垃圾桶`);
         
         // 添加亮晶晶特效（在污垢原位置）
@@ -4174,6 +4577,11 @@ class GameplayScene extends Scene {
     dirt.selected = false;
     dirt.cleaning = false;
     
+    // 打印清洁进度
+    const mainTotal = this.dirtObjects.length;
+    const mainCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+    console.log('[GameplayScene] 清洁完成:', dirt.name, 'mainTotal:', mainTotal, 'mainCleaned:', mainCleaned);
+    
     // 清除活动工具
     this.activeTool = null;
     this.isDraggingTool = false;
@@ -4205,8 +4613,8 @@ class GameplayScene extends Scene {
       this._checkTutorialComplete();
     }
     
-    // 检查是否全部清洁完成
-    if (this.dirtObjects.every(d => d.state === 'clean')) {
+    // 检查是否全部清洁完成（包括二级背景）
+    if (this._checkAllDirtsCleaned()) {
       setTimeout(() => {
         this._showSettlement();
       }, 1000);
@@ -4216,19 +4624,32 @@ class GameplayScene extends Scene {
   /**
    * 显示 Toast 提示
    */
-  _showToast(message) {
+  _showToast(message, duration) {
     // 使用事件系统显示 toast
     const { globalEvent } = require('../core/EventEmitter');
-    globalEvent.emit('game:toast', message);
+    globalEvent.emit('game:toast', message, duration);
     
     // 同时控制台输出
     console.log(`[GameplayScene] Toast: ${message}`);
+    
+    // 备用：直接使用微信 toast
+    if (typeof wx !== 'undefined' && wx.showToast) {
+      wx.showToast({
+        title: message,
+        icon: 'none',
+        duration: duration || 2000
+      });
+    }
   }
 
   _cleanDirt(dirt) {
     dirt.cleanProgress += 0.3;
     if (dirt.cleanProgress >= 1) {
       dirt.state = 'clean';
+      // 打印清洁进度
+      const mainTotal = this.dirtObjects.length;
+      const mainCleaned = this.dirtObjects.filter(d => d.state === 'clean').length;
+      console.log('[GameplayScene] 清洁完成:', dirt.name, 'mainTotal:', mainTotal, 'mainCleaned:', mainCleaned);
       // 检查是否全部清洁完成
       if (this.dirtObjects.every(d => d.state === 'clean')) {
         // 预加载下一关预览图

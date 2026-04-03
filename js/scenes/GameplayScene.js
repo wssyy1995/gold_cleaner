@@ -601,20 +601,6 @@ class GameplayScene extends Scene {
         }
       }
     });
-    
-    // 引导按钮（调试用，仅在第1关显示）- 点击强制触发新人引导
-    this.guideBtn = null;
-    if (this.levelId === 1) {
-      this.guideBtn = new Button({
-        x: 20 * s, y: 290 * s, width: 100 * s, height: 50 * s,
-        text: '引导', fontSize: 24 * s,
-        bgColor: 'rgba(255,152,0,0.8)', textColor: '#FFFFFF',
-        borderRadius: 8 * s,
-        onClick: () => {
-          this._forceStartTutorial();
-        }
-      });
-    }
 
     // 创建 ToolSlot 组件（默认不选中任何工具）
     this.toolSlot = new ToolSlot({
@@ -1907,6 +1893,15 @@ class GameplayScene extends Scene {
     // 更新二级背景过渡动画
     this._updateTransition(deltaTime);
     
+    // 检查二级背景是否全部清洁完成，自动返回主关卡
+    if (this.deepArea.isActive && !this.deepArea.transition.active) {
+      const currentAreaCleaned = this.dirtObjects.every(d => d.state === 'clean');
+      if (currentAreaCleaned && this.dirtObjects.length > 0) {
+        console.log('[GameplayScene] 二级背景全部清洁完成，自动返回主关卡');
+        setTimeout(() => this._exitDeepArea(), 500);
+      }
+    }
+    
     // 检查是否全部完成（主关卡 + 所有二级背景的污垢）
     if (!this.deepArea.transition.active && !this._completed) {
       const allCleaned = this._checkAllDirtsCleaned();
@@ -2022,7 +2017,6 @@ class GameplayScene extends Scene {
     // UI元素（调试按钮）
     if (this.backBtn) this.backBtn.onRender(ctx);
     if (this.winBtn) this.winBtn.onRender(ctx);
-    if (this.guideBtn) this.guideBtn.onRender(ctx);
     
     // 绘制回退按钮（在二级背景中）
     if (this.backBtnDeepArea) this.backBtnDeepArea.onRender(ctx);
@@ -2745,7 +2739,7 @@ class GameplayScene extends Scene {
     
     if (this.backBtn && this.backBtn.onTouchStart(x, y)) return true;
     if (this.winBtn && this.winBtn.onTouchStart(x, y)) return true;
-    if (this.guideBtn && this.guideBtn.onTouchStart(x, y)) return true;
+
     
     // 检查是否正在拖动活动工具
     if (this.activeTool && !this.isDraggingTool) {
@@ -2913,7 +2907,11 @@ class GameplayScene extends Scene {
     
     if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
     if (this.winBtn && this.winBtn.onTouchEnd(x, y)) return true;
-    if (this.guideBtn && this.guideBtn.onTouchEnd(x, y)) return true;
+    
+    // 检查回退按钮点击（在二级背景中）
+    if (this.deepArea.isActive && this.backBtnDeepArea && this.backBtnDeepArea.onTouchEnd(x, y)) {
+      return true;
+    }
     
     // 处理 ToolSlot 的触摸结束（用于选中工具）
     if (this.toolSlot && this.toolSlot.onTouchEnd(x, y)) {
@@ -3437,8 +3435,8 @@ class GameplayScene extends Scene {
       const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
       if (remainingDirts === 0) continue; // 已清洁完的区域不再可进入
       
-      const dx = x - area.x;
-      const dy = gameY - area.y;
+      const dx = x - area.x * s;
+      const dy = gameY - area.y * s;
       const distance = Math.sqrt(dx * dx + dy * dy);
       
       if (distance <= DETECT_RADIUS) {
@@ -3664,8 +3662,8 @@ class GameplayScene extends Scene {
       const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
       if (remainingDirts === 0) return; // 已清洁完的区域不显示提示
       
-      const cx = area.x;
-      const cy = area.y + gameAreaY;
+      const cx = area.x * s;
+      const cy = area.y * s + gameAreaY;
       
       // 呼吸动画
       const breath = (Math.sin(Date.now() * 0.003) + 1) / 2;
@@ -3707,9 +3705,9 @@ class GameplayScene extends Scene {
     this.backBtnDeepArea = new Button({
       x: 20 * s, 
       y: 100 * s, 
-      width: 100 * s, 
+      width: 140 * s, 
       height: 50 * s, 
-      text: '← 返回', 
+      text: '← 回到房间', 
       fontSize: 24 * s, 
       bgColor: 'rgba(0,0,0,0.5)', 
       textColor: '#FFFFFF', 
@@ -3724,10 +3722,20 @@ class GameplayScene extends Scene {
    * 检查所有污垢是否清洁完成（主关卡 + 所有二级背景）
    */
   _checkAllDirtsCleaned() {
-    // 1. 检查当前显示的污垢是否全部清洁
-    if (this.dirtObjects.length === 0 || !this.dirtObjects.every(d => d.state === 'clean')) {
-      return false;
+    // 1. 检查主关卡污垢是否全部清洁
+    // 如果当前在二级背景中，检查保存的原始主关卡污垢状态
+    // 如果不在二级背景中，检查当前的 dirtObjects（就是主关卡）
+    let mainDirtsCleaned = false;
+    if (this.deepArea.isActive) {
+      // 在二级背景中，检查保存的主关卡原始污垢
+      mainDirtsCleaned = this.deepArea.originalDirts.length === 0 || 
+                         this.deepArea.originalDirts.every(d => d.state === 'clean');
+    } else {
+      // 在主关卡中，检查当前污垢
+      mainDirtsCleaned = this.dirtObjects.length === 0 || 
+                         this.dirtObjects.every(d => d.state === 'clean');
     }
+    if (!mainDirtsCleaned) return false;
     
     // 2. 检查所有二级背景的污垢是否清洁完成
     for (const area of this.deepArea.areas) {
@@ -3746,12 +3754,6 @@ class GameplayScene extends Scene {
           return false;
         }
       }
-    }
-    
-    // 3. 检查主关卡原始污垢（只在不在二级背景中时）
-    if (!this.deepArea.isActive && this.deepArea.originalDirts.length > 0) {
-      const mainCleaned = this.deepArea.originalDirts.every(d => d.state === 'clean');
-      if (!mainCleaned) return false;
     }
     
     console.log('[GameplayScene] 所有污垢清洁完成（主关卡 + 二级背景）');

@@ -26,10 +26,10 @@ const STAGE_1_LEVELS = [
       { type: 'stain', x: 400, y: 1200 }
     ],
     dirts_deep_area: [
-      { id: 1,x: 150, y: 300,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
+      { id: 1,x: 100, y: 300,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
         { type: 'paper', x: 300, y: 420 }]},
         {id: 2, x: 400, y: 800,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bed.png`,dirts: [
-          { type: 'paper', x: 200, y: 500 }]}
+          { type: 'socks', x: 400, y: 600 }]}
     ],
     timeLimit: 120,
     targetScore: 100,

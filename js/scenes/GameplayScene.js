@@ -1652,8 +1652,8 @@ class GameplayScene extends Scene {
     const centerX = dirt.x;
     const centerY = dirt.y + gameAreaY;
     
-    // 放大尺寸：原来的 1.5 倍
-    const size = dirt.size * 1.2;
+    // Z 字尺寸：稍微小于污垢大小
+    const size = dirt.size * 0.8;
     
     // 使用 handAnim.time 作为 Z 字动画的计时器（因为它一直在更新）
     const animDuration = 1800;   // 动画时长 1.8 秒
@@ -1695,11 +1695,15 @@ class GameplayScene extends Scene {
     const threshold1 = ratio1;                   // 第一横结束点
     const threshold2 = ratio1 + ratio2;          // 斜线结束点
     
+    // Z 字动画颜色（白色）
+    const zColor = '#FFFFFF';
+    const zColorLight = '#FFFFFF';
+    
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 8 * s;
-    ctx.shadowColor = '#FFFFFF';
+    ctx.shadowColor = zColor;
     ctx.shadowBlur = 20 * s;
     
     // 背景虚线
@@ -1714,8 +1718,8 @@ class GameplayScene extends Scene {
     ctx.setLineDash([]);
     
     // 动画 Z 字（使用实际长度比例）
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.shadowColor = '#FFFFFF';
+    ctx.strokeStyle = zColor;
+    ctx.shadowColor = zColorLight;
     ctx.shadowBlur = 18 * s;
     
     // 计算当前应该画到哪里（基于路径长度）
@@ -1755,20 +1759,12 @@ class GameplayScene extends Scene {
     
     // 起点闪烁
     const blink = (Math.sin(this.tutorial.handAnim.time * 0.01) + 1) / 2;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.shadowColor = '#FFFFFF';
+    ctx.fillStyle = zColor;
+    ctx.shadowColor = zColorLight;
     ctx.shadowBlur = 15 * s;
     ctx.beginPath();
     ctx.arc(zPoints[0].x, zPoints[0].y, 5 * s, 0, Math.PI * 2);
     ctx.fill();
-    
-    // 动画过半后终点闪烁
-    if (t > 0.5) {
-      ctx.fillStyle = `rgba(255, 255, 255, ${0.6 + blink * 0.4})`;
-      ctx.beginPath();
-      ctx.arc(zPoints[3].x, zPoints[3].y, 6 * s, 0, Math.PI * 2);
-      ctx.fill();
-    }
     
     ctx.restore();
   }
@@ -2036,7 +2032,7 @@ class GameplayScene extends Scene {
     this._updateInvalidDoubleClickFeedback();
     
     // 更新待进入状态（放大镜呼吸闪烁）
-    this._updatePendingEnter();
+    this._updatePendingEnter(deltaTime);
     
     // 更新二级区域放大镜动画（只在主关卡显示时更新）
     if (!this.deepArea.isActive && !this.deepArea.transition.active) {
@@ -2051,6 +2047,25 @@ class GameplayScene extends Scene {
     
     // 更新工具槽（滑动惯性）
     if (this.toolSlot) this.toolSlot.update(deltaTime);
+    
+    // 检查划动清洁延迟完成
+    if (this.strokeState.pendingComplete) {
+      const now = Date.now();
+      if (now >= this.strokeState.pendingCompleteTime) {
+        const dirt = this.strokeState.dirt;
+        console.log('[GameplayScene] 延迟完成，执行清洁');
+        this.strokeState.active = false;
+        this.strokeState.pendingComplete = false;
+        this.strokeState.totalDistance = 0;
+        
+        // 根据工具类型完成清洁
+        if (this.activeTool && this.activeTool.id === 'cloth') {
+          this._completeWipeClean(dirt);
+        } else if (this.activeTool && this.activeTool.id === 'broom') {
+          this._completeSweepClean(dirt);
+        }
+      }
+    }
     
     // 更新清洁度（包含一级背景和二级背景的所有污垢）
     this._updateCleanProgress();
@@ -2462,8 +2477,8 @@ class GameplayScene extends Scene {
       ctx.restore();
       
       // 渲染划动清洁进度条（三格蓝色能量条）
-      // 只要有进度就常驻显示，方便玩家切换污垢后继续清洁
-      if (dirt.strokeCount > 0 && dirt.strokeCount < dirt.maxStrokes) {
+      // 只要有进度就常驻显示，包括完成时（pendingComplete 状态下也要显示）
+      if (dirt.strokeCount > 0 && dirt.strokeCount <= dirt.maxStrokes) {
         this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, dirt.maxStrokes, s);
       }
   }
@@ -2622,8 +2637,8 @@ class GameplayScene extends Scene {
     ctx.restore();
     
     // 渲染划动清洁进度条（三格蓝色能量条）
-    // 只要有进度就常驻显示
-    if (dirt.strokeCount > 0 && dirt.strokeCount < dirt.maxStrokes) {
+    // 只要有进度就常驻显示，包括完成时（pendingComplete 状态下也要显示）
+    if (dirt.strokeCount > 0 && dirt.strokeCount <= dirt.maxStrokes) {
       this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, dirt.maxStrokes, s);
     }
   }
@@ -3910,6 +3925,8 @@ class GameplayScene extends Scene {
   _startPendingEnter(area, x, y) {
     console.log('[GameplayScene] 启动放大镜呼吸闪烁，1.2s后进入二级背景:', area.id);
     
+    const s = this.screenWidth / 750;
+    
     this.deepArea.pendingEnter = {
       active: true,
       areaId: area.id,
@@ -3917,16 +3934,29 @@ class GameplayScene extends Scene {
       y: y,
       startTime: Date.now(),
       duration: 1200,
-      isFromHint: false
+      isFromHint: false,
+      magnifier: new BouncyMagnifier({
+        x: x,
+        y: y - 10 * s,
+        size: 45 * s,
+        color: '#FFD700',
+        loop: true,
+        duration: 1200
+      })
     };
   }
   
   /**
    * 更新待进入状态（放大镜呼吸闪烁动画）
    */
-  _updatePendingEnter() {
+  _updatePendingEnter(deltaTime) {
     const pending = this.deepArea.pendingEnter;
     if (!pending.active) return;
+    
+    // 更新放大镜动画
+    if (pending.magnifier) {
+      pending.magnifier.update(deltaTime);
+    }
     
     const elapsed = Date.now() - pending.startTime;
     
@@ -3945,15 +3975,10 @@ class GameplayScene extends Scene {
    */
   _renderPendingEnterMagnifier(ctx, s) {
     const pending = this.deepArea.pendingEnter;
-    if (!pending.active) return;
+    if (!pending.active || !pending.magnifier) return;
     
     const elapsed = Date.now() - pending.startTime;
     const progress = elapsed / pending.duration;
-    
-    // 呼吸动画：缩放 1.0 -> 1.12 -> 1.0，周期 600ms（更平缓）
-    const breathCycle = 600;
-    const breathProgress = (elapsed % breathCycle) / breathCycle;
-    const breathScale = 1 + Math.sin(breathProgress * Math.PI * 2) * 0.12; // 幅度从0.3减小到0.12
     
     // 淡出效果（最后 300ms 开始淡出）
     let alpha = 1;
@@ -3961,42 +3986,13 @@ class GameplayScene extends Scene {
       alpha = 1 - (progress - 0.75) / 0.25;
     }
     
-    const x = pending.x;
-    const y = pending.y;
-    const baseSize = 35 * s * breathScale; // 基础尺寸从40减小到35
+    // 使用 BouncyMagnifier 绘制，保持位置一致
+    pending.magnifier.x = pending.x;
+    pending.magnifier.y = pending.y;
     
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.translate(x, y);
-    ctx.scale(breathScale, breathScale);
-    
-    // 绘制放大镜图标（简化版）
-    ctx.strokeStyle = '#FFD700'; // 金色
-    ctx.lineWidth = 3 * s;
-    ctx.lineCap = 'round';
-    
-    // 镜片外圈
-    ctx.beginPath();
-    ctx.arc(-baseSize * 0.1, -baseSize * 0.1, baseSize * 0.4, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // 镜片内部的玻璃高光
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.lineWidth = 2 * s;
-    ctx.arc(-baseSize * 0.1, -baseSize * 0.1, baseSize * 0.25, Math.PI, Math.PI * 1.5);
-    ctx.stroke();
-    
-    // 放大镜把手 (向右下方45度角)
-    ctx.beginPath();
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth = 3 * s;
-    const handleStartX = -baseSize * 0.1 + Math.cos(Math.PI / 4) * (baseSize * 0.4);
-    const handleStartY = -baseSize * 0.1 + Math.sin(Math.PI / 4) * (baseSize * 0.4);
-    ctx.moveTo(handleStartX, handleStartY);
-    ctx.lineTo(baseSize * 0.4, baseSize * 0.4);
-    ctx.stroke();
-    
+    pending.magnifier.draw(ctx);
     ctx.restore();
   }
   
@@ -4634,6 +4630,9 @@ class GameplayScene extends Scene {
    * 在污垢上随意划动 3 次即可完成清洁
    */
   _startStrokeClean(dirt, x, y) {
+    // 如果正在等待完成，不要重新开始
+    if (this.strokeState.pendingComplete) return;
+    
     this.isDraggingTool = true;
     this.toolPosition = { x, y };
     this.selectedDirt = dirt;
@@ -4669,7 +4668,7 @@ class GameplayScene extends Scene {
    * 必须保持在污垢范围内划动才有效
    */
   _updateStrokeClean(x, y) {
-    if (!this.strokeState.active || !this.strokeState.dirt) return;
+    if (!this.strokeState.active || !this.strokeState.dirt || this.strokeState.pendingComplete) return;
     
     const dirt = this.strokeState.dirt;
     const gameAreaY = this.screenHeight * 0.08;
@@ -4732,16 +4731,10 @@ class GameplayScene extends Scene {
       
       // 检查是否完成所有划动（使用 dirt.strokeCount 判断）
       if (dirt.strokeCount >= state.maxStrokes) {
-        console.log('[GameplayScene] 划动完成，清洁完成');
-        state.active = false;
-        state.totalDistance = 0;
-        
-        // 根据工具类型完成清洁
-        if (this.activeTool && this.activeTool.id === 'cloth') {
-          this._completeWipeClean(dirt);
-        } else if (this.activeTool && this.activeTool.id === 'broom') {
-          this._completeSweepClean(dirt);
-        }
+        console.log('[GameplayScene] 划动完成，300ms后清洁完成');
+        // 延迟300ms后完成清洁，让用户看到第3个格子
+        state.pendingComplete = true;
+        state.pendingCompleteTime = now + 300;
         return;
       }
     }

@@ -80,7 +80,7 @@ export const DIRT_TYPES = {
     imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_waterstain.png',
     color: '#654321', 
     difficulty: 2,
-    scale: 2,
+    scale: 1.2,
     recipes: [['cloth']],
     operate_type: 'wipe'
   },

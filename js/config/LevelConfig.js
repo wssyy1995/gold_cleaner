@@ -43,7 +43,9 @@ const STAGE_1_LEVELS = [
     dirts: [
       { type: 'paper', x: 200, y: 350 },
       { type: 'paper', x: 300, y: 420 },
-      { type: 'waterstain', x: 500, y: 1100 }
+      { type: 'waterstain', x: 500, y: 1100 },
+      { type: 'waterstain', x: 400, y: 1200 },
+      { type: 'waterstain', x: 3300, y: 1150 }
 
     ],
     dirts_deep_area: [

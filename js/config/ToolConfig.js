@@ -49,6 +49,17 @@ export const BASE_TOOLS = [
     unlockLevel: 1
   },
   {
+    id: 'magnifier',
+    name: '放大镜',
+    icon: '🔍',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_magnifier.png',
+    color: '#4A90D9',
+    description: '特殊道具！可以帮助找到一处隐藏垃圾。',
+    efficiency: 1.0,
+    type: 'base',
+    unlockLevel: 2
+  },
+  {
     id: 'brush',
     name: '刷子',
     icon: '🪥',
@@ -68,7 +79,7 @@ export const BASE_TOOLS = [
     description: '喷洒清洁剂，对大部分污渍有效，对顽固污渍作用较弱',
     efficiency: 0.5, // 喷雾本身清洁力低，但可组合
     type: 'auxiliary',
-    unlockLevel: 2
+    unlockLevel: 3
   },
   {
     id: 'vacuum',

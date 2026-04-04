@@ -193,6 +193,9 @@ class GameplayScene extends Scene {
     // 工具解锁弹窗
     this.toolUnlockDialog = null;
     
+    // Toast 组件（波普风）
+    this.toast = null;
+    
     // 本关新解锁的工具列表
     this.newUnlockedTools = [];
     
@@ -281,7 +284,24 @@ class GameplayScene extends Scene {
       firstHintShown: false,        // 第一个金圈是否已显示（用于新人引导）
       hintShowTimer: null,          // 延迟显示金圈的定时器
       visitedAreas: [],             // 已访问过的二级背景区域ID列表
-      secondHintShown: false        // 是否已显示过"再找找别的隐藏垃圾"提示
+      secondHintShown: false,       // 是否已显示过"再找找别的隐藏垃圾"提示
+      secondHintTimer: null,        // 二次提示的定时器
+      invalidDoubleClick: {         // 无效双击反馈（双击非二级背景区域）
+        show: false,                // 是否显示emoji
+        x: 0,                       // 显示位置X
+        y: 0,                       // 显示位置Y
+        startTime: 0,               // 开始时间
+        duration: 800               // 显示时长(ms)
+      },
+      pendingEnter: {               // 待进入二级背景的过渡状态
+        active: false,              // 是否正在过渡
+        areaId: null,               // 待进入的区域ID
+        x: 0,                       // 放大镜显示位置X
+        y: 0,                       // 放大镜显示位置Y
+        startTime: 0,               // 开始时间
+        duration: 1200,             // 呼吸闪烁时长(ms)
+        isFromHint: false           // 是否来自金圈提示
+      }
     };
     
     // 回退按钮
@@ -301,6 +321,10 @@ class GameplayScene extends Scene {
       clearTimeout(this.deepArea.hintShowTimer);
       this.deepArea.hintShowTimer = null;
     }
+    if (this.deepArea.secondHintTimer) {
+      clearTimeout(this.deepArea.secondHintTimer);
+      this.deepArea.secondHintTimer = null;
+    }
     this.deepArea.hintsVisible = false;
     this.deepArea.firstHintShown = false;
     this.deepArea.isActive = false;
@@ -309,6 +333,8 @@ class GameplayScene extends Scene {
     this.deepArea.magnifiers = [];
     this.deepArea.visitedAreas = []; // 重置已访问列表
     this.deepArea.secondHintShown = false; // 重置第二次提示标记
+    this.deepArea.invalidDoubleClick = { show: false, x: 0, y: 0, startTime: 0, duration: 800 }; // 重置无效双击反馈
+    this.deepArea.pendingEnter = { active: false, areaId: null, x: 0, y: 0, startTime: 0, duration: 1200, isFromHint: false }; // 重置待进入状态
     
     // 重置新手引导状态（每关都重置，只有第一关会根据hasCompletedTutorial决定是否开启）
     this.tutorial.isActive = false;
@@ -326,6 +352,11 @@ class GameplayScene extends Scene {
     this.tutorial.clothUsed = false;
     this.tutorial.handAnim.time = 0;
     this.tutorial.handAnim.offset = 0;
+    
+    // 关闭当前显示的 Toast
+    if (this.toast) {
+      this.toast.close();
+    }
     
     // 从 LevelConfig 获取关卡配置
     this.levelConfig = getLevel(this.stage, this.levelId);
@@ -813,6 +844,13 @@ class GameplayScene extends Scene {
       bgColor: 'rgba(0,0,0,0.5)', textColor: '#FFFFFF',
       borderRadius: 20 * s,
       onClick: () => this._exitZoomView()
+    });
+    
+    // 初始化 Toast 组件（波普风）
+    const Toast = require('../ui/components/Toast').default;
+    this.toast = new Toast({
+      screenWidth: this.screenWidth,
+      screenHeight: this.screenHeight
     });
   }
 
@@ -1981,6 +2019,12 @@ class GameplayScene extends Scene {
     // 更新新手引导动画
     this._updateTutorial(deltaTime);
     
+    // 更新无效双击反馈动画
+    this._updateInvalidDoubleClickFeedback();
+    
+    // 更新待进入状态（放大镜呼吸闪烁）
+    this._updatePendingEnter();
+    
     // 更新二级区域放大镜动画（只在主关卡显示时更新）
     if (!this.deepArea.isActive && !this.deepArea.transition.active) {
       this.deepArea.magnifiers.forEach(magnifier => magnifier.update(deltaTime));
@@ -2052,7 +2096,7 @@ class GameplayScene extends Scene {
       }
     }
     
-    // 更新工具弹出动画
+    // 更新工具弹出/收回动画
     if (this.toolAnim.active) {
       this.toolAnim.progress += deltaTime * 0.003; // 动画速度
       if (this.toolAnim.progress >= 1) {
@@ -2061,13 +2105,26 @@ class GameplayScene extends Scene {
       }
       
       const t = this.toolAnim.progress;
-      const easeT = this._easeOutElastic(t);
       
-      // 计算当前位置和大小
-      this.toolPosition.x = this.toolAnim.startX + (this.toolAnim.targetX - this.toolAnim.startX) * t;
-      this.toolPosition.y = this.toolAnim.startY + (this.toolAnim.targetY - this.toolAnim.startY) * easeT;
-      this.toolAnim.scale = 0.3 + 0.7 * easeT; // 从0.3缩放到1
-      this.toolAnim.alpha = Math.min(1, t * 2); // 快速淡入
+      if (this.toolAnim.isDespawning) {
+        // 收回动画：果冻感（弹性回弹）
+        const easeT = this._easeOutElastic(t);
+        
+        // 计算当前位置和大小
+        this.toolPosition.x = this.toolAnim.startX + (this.toolAnim.targetX - this.toolAnim.startX) * t;
+        this.toolPosition.y = this.toolAnim.startY + (this.toolAnim.targetY - this.toolAnim.startY) * easeT;
+        this.toolAnim.scale = 1 - 0.7 * t; // 从1缩小到0.3
+        this.toolAnim.alpha = 1 - t; // 淡出
+      } else {
+        // 弹出动画：弹性效果
+        const easeT = this._easeOutElastic(t);
+        
+        // 计算当前位置和大小
+        this.toolPosition.x = this.toolAnim.startX + (this.toolAnim.targetX - this.toolAnim.startX) * t;
+        this.toolPosition.y = this.toolAnim.startY + (this.toolAnim.targetY - this.toolAnim.startY) * easeT;
+        this.toolAnim.scale = 0.3 + 0.7 * easeT; // 从0.3缩放到1
+        this.toolAnim.alpha = Math.min(1, t * 2); // 快速淡入
+      }
     }
     
     // 更新二级背景过渡动画
@@ -2096,6 +2153,11 @@ class GameplayScene extends Scene {
     
     // 更新结算弹窗
     this._updateSettlementDialog(deltaTime);
+    
+    // 更新 Toast 动画
+    if (this.toast) {
+      this.toast.update(deltaTime);
+    }
   }
 
   onRender(ctx) {
@@ -2129,11 +2191,22 @@ class GameplayScene extends Scene {
     // 渲染结算弹窗（在最上层）
     this._renderSettlementDialog(ctx);
     
+    // 渲染 Toast（波普风，最顶层）
+    if (this.toast) {
+      this.toast.render(ctx);
+    }
+    
     // 渲染过渡动画遮罩
     this._renderTransition(ctx);
     
     // 在最顶层渲染生气 emoji（全局生效）
     this._renderAngryEmoji(ctx, s);
+    
+    // 渲染无效双击反馈（全局）
+    this._renderInvalidDoubleClickFeedback(ctx, s);
+    
+    // 渲染待进入状态的放大镜呼吸闪烁
+    this._renderPendingEnterMagnifier(ctx, s);
   }
 
   /**
@@ -2277,7 +2350,8 @@ class GameplayScene extends Scene {
     });
     
     // 绘制活动工具（如果在页面上，包括拖动状态）
-    if (this.activeTool) {
+    // 包括收回动画期间（activeTool 可能为 null，但动画还在进行）
+    if (this.activeTool || (this.toolAnim.active && this.toolAnim.isDespawning)) {
       this._renderActiveTool(ctx, s);
     }
   }
@@ -2526,7 +2600,14 @@ class GameplayScene extends Scene {
    * 优先使用真实图片，如果没有则使用 emoji
    */
   _renderActiveTool(ctx, s) {
-    const tool = this.activeTool;
+    // 获取工具对象（可能是 activeTool，或收回动画中的 toolName）
+    let tool = this.activeTool;
+    if (!tool && this.toolAnim.isDespawning && this.toolAnim.toolName) {
+      // 从工具列表中查找（收回动画期间）
+      tool = this.tools.find(t => t.name === this.toolAnim.toolName);
+    }
+    if (!tool) return;
+    
     const x = this.toolPosition.x;
     const y = this.toolPosition.y;
     
@@ -2543,7 +2624,7 @@ class GameplayScene extends Scene {
     ctx.globalAlpha = alpha;
     
     // 应用摇晃动画（不倒翁效果）
-    if (this.toolShakeAnim.active && this.activeTool && this.activeTool.id === this.toolShakeAnim.targetToolId) {
+    if (this.toolShakeAnim.active && tool && tool.id === this.toolShakeAnim.targetToolId) {
       // 以工具底部中心为旋转中心（像不倒翁一样）
       // 拖动时工具底部在指尖位置(y)，静止时工具底部在 y + size/2
       const pivotY = this.isDraggingTool ? y : y + size / 2;
@@ -2905,6 +2986,12 @@ class GameplayScene extends Scene {
       return true;
     }
     
+    // 检查 Toast 点击（点击即消失）
+    if (this.toast && this.toast.visible && this.toast.isHit(x, y)) {
+      this.toast.hide();
+      return true;
+    }
+    
     this._touchStartTime = Date.now();
     this._touchStartPos = { x, y };
     
@@ -2964,10 +3051,23 @@ class GameplayScene extends Scene {
     
     // 检查二级背景区域双击（只在主关卡且没有弹窗时）
     if (!this.deepArea.isActive && !this.deepArea.transition.active) {
-      const deepArea = this._checkDeepAreaDoubleClick(x, y);
-      if (deepArea) {
-        // 进入二级背景
-        this._enterDeepArea(deepArea);
+      const doubleClickResult = this._checkDeepAreaDoubleClick(x, y);
+      if (doubleClickResult) {
+        const { area, isFromHint, x: clickX, y: clickY } = doubleClickResult;
+        
+        if (isFromHint) {
+          // 从金圈提示进来，直接进入二级背景
+          this._enterDeepArea(area);
+        } else {
+          // 用户自己发现的，显示放大镜呼吸闪烁1.2s后再进入
+          this._startPendingEnter(area, clickX, clickY);
+        }
+        return true;
+      }
+      // 检查是否是双击了非二级背景区域（全局双击反馈）
+      // 注意：只有在 _checkDeepAreaDoubleClick 返回 null 且没有记录有效点击时才检查
+      const isInvalidDoubleClick = this._checkGlobalDoubleClick(x, y);
+      if (isInvalidDoubleClick) {
         return true;
       }
     }
@@ -3094,9 +3194,20 @@ class GameplayScene extends Scene {
     }
     
     // 处理 ToolSlot 的触摸结束（用于选中工具）
-    if (this.toolSlot && this.toolSlot.onTouchEnd(x, y)) {
-      // 工具选择后直接弹出活动工具（由 _selectTool 内部处理）
-      return true;
+    if (this.toolSlot) {
+      // 先检查是否点击了空槽位（工具弹出的槽位）
+      const clickedEmptySlot = this._checkEmptySlotClick(x, y);
+      if (clickedEmptySlot) {
+        // 点击空槽位，收回工具
+        this._despawnTool();
+        return true;
+      }
+      
+      // 处理正常槽位点击
+      if (this.toolSlot.onTouchEnd(x, y)) {
+        // 工具选择后直接弹出活动工具（由 _selectTool 内部处理）
+        return true;
+      }
     }
     
     // 结束工具拖动
@@ -3112,8 +3223,8 @@ class GameplayScene extends Scene {
         dirt.highlightScale = 1;
       });
       
-      // 如果没有完成清洁，工具回到弹出位置
-      if (this.activeTool) {
+      // 如果没有完成清洁且不是在收回动画中，工具回到弹出位置
+      if (this.activeTool && !this.toolAnim.isDespawning) {
         this._spawnTool();
       }
       return true;
@@ -3451,6 +3562,9 @@ class GameplayScene extends Scene {
    * 选中/取消选中污垢圆圈（被动引导核心逻辑 + Z 字绘制入口）
    */
   _selectDirt(dirt, x, y) {
+    // 触发轻微振感（点击污垢时的全局反馈）
+    haptic.light();
+    
     // 获取污垢类型配置
     const dirtType = DIRT_TYPES[dirt.type];
     if (!dirtType) return;
@@ -3606,21 +3720,23 @@ class GameplayScene extends Scene {
   
   /**
    * 检查是否双击了二级背景区域
-   * 使用 200px 半径的圆作为检测范围
+   * 使用 80px * s 半径的圆作为检测范围
    * 双击时间间隔必须在 300ms 内
    */
   _checkDeepAreaDoubleClick(x, y) {
     const gameAreaY = this.screenHeight * 0.08;
     const gameY = y - gameAreaY;
     const s = this.screenWidth / 750;
-    const DETECT_RADIUS = 50 * s; // 50px 检测半径
+    const DETECT_RADIUS = 80 * s; // 80px 检测半径
     const DOUBLE_CLICK_TIME = 300; // 双击时间间隔 ms
     
     const now = Date.now();
     let clickedArea = null;
+    let clickedAreaIndex = -1;
     
     // 检查是否在某个二级区域内（且未完全清洁）
-    for (const area of this.deepArea.areas) {
+    for (let i = 0; i < this.deepArea.areas.length; i++) {
+      const area = this.deepArea.areas[i];
       // 计算当前区域剩余的污垢数量
       const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
       if (remainingDirts === 0) continue; // 已清洁完的区域不再可进入
@@ -3631,14 +3747,14 @@ class GameplayScene extends Scene {
       
       if (distance <= DETECT_RADIUS) {
         clickedArea = area;
+        clickedAreaIndex = i;
         break;
       }
     }
     
     if (!clickedArea) {
-      // 点击不在任何区域内，重置双击状态
-      this.deepArea.lastClick.time = 0;
-      this.deepArea.lastClick.areaId = null;
+      // 点击不在任何区域内，返回null
+      // 注意：不重置lastClick状态，让全局双击检测来处理
       return null;
     }
     
@@ -3649,16 +3765,291 @@ class GameplayScene extends Scene {
     );
     
     if (isDoubleClick) {
-      // 双击成功，重置状态并返回区域
+      // 双击成功，重置状态
       this.deepArea.lastClick.time = 0;
       this.deepArea.lastClick.areaId = null;
-      return clickedArea;
+      
+      // 判断是否是金圈提示的区域
+      // 金圈提示只显示第一个未访问、未清洁的区域
+      const firstHintAreaIndex = this._getFirstHintAreaIndex();
+      const isFromHint = (clickedAreaIndex === firstHintAreaIndex) && 
+                         (this.deepArea.firstHintShown || this.deepArea.hintsVisible);
+      
+      return {
+        area: clickedArea,
+        isFromHint: isFromHint,
+        x: x,
+        y: y
+      };
     } else {
       // 第一次点击，记录状态
       this.deepArea.lastClick.time = now;
       this.deepArea.lastClick.areaId = clickedArea.id;
       return null;
     }
+  }
+  
+  /**
+   * 获取金圈提示的第一个区域索引
+   */
+  _getFirstHintAreaIndex() {
+    // 只在主关卡且不在过渡动画中
+    if (this.deepArea.isActive || this.deepArea.transition.active) return -1;
+    
+    // 找到第一个未访问、未清洁的区域
+    return this.deepArea.areas.findIndex((area) => {
+      // 排除已访问过的区域
+      if (this.deepArea.visitedAreas.includes(area.id)) return false;
+      // 检查是否还有未清洁的污垢
+      const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
+      return remainingDirts > 0;
+    });
+  }
+  
+  /**
+   * 检查全局双击（非二级背景区域）
+   * 当用户双击了非二级背景区域时触发反馈
+   * @returns {boolean} 是否是有效的无效双击（触发反馈返回true）
+   */
+  _checkGlobalDoubleClick(x, y) {
+    const DOUBLE_CLICK_TIME = 300; // 双击时间间隔 ms
+    const now = Date.now();
+    
+    // 先检查当前点击位置是否在二级背景区域内
+    const gameAreaY = this.screenHeight * 0.08;
+    const gameY = y - gameAreaY;
+    const s = this.screenWidth / 750;
+    const DETECT_RADIUS = 80 * s; // 80px 检测半径
+    
+    let isInDeepArea = false;
+    for (const area of this.deepArea.areas) {
+      // 只检测未清洁完的区域
+      const remainingDirts = area.dirts.filter(d => !area.cleanedDirts.includes(d.id || `${d.x}-${d.y}`)).length;
+      if (remainingDirts === 0) continue;
+      
+      const dx = x - area.x * s;
+      const dy = gameY - area.y * s;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance <= DETECT_RADIUS) {
+        isInDeepArea = true;
+        break;
+      }
+    }
+    
+    // 如果当前点击在二级背景区域内，不处理（留给 _checkDeepAreaDoubleClick 处理）
+    if (isInDeepArea) {
+      return false;
+    }
+    
+    // 检查是否是双击（300ms内，且第一次点击也在非二级背景区域）
+    const isDoubleClick = (
+      this.deepArea.lastClick.time > 0 &&
+      now - this.deepArea.lastClick.time < DOUBLE_CLICK_TIME &&
+      this.deepArea.lastClick.areaId === 'invalid' // 第一次点击也在非二级背景
+    );
+    
+    if (isDoubleClick) {
+      // 双击了非二级背景区域，触发反馈
+      this._triggerInvalidDoubleClickFeedback(x, y);
+      // 重置点击状态
+      this.deepArea.lastClick.time = 0;
+      this.deepArea.lastClick.areaId = null;
+      return true;
+    }
+    
+    // 第一次点击在非二级背景区域，记录状态
+    this.deepArea.lastClick.time = now;
+    this.deepArea.lastClick.areaId = 'invalid';
+    return false;
+  }
+  
+  /**
+   * 启动待进入状态（放大镜呼吸闪烁）
+   * 用户自己发现隐藏区域时，先显示放大镜呼吸闪烁再进入
+   */
+  _startPendingEnter(area, x, y) {
+    console.log('[GameplayScene] 启动放大镜呼吸闪烁，1.2s后进入二级背景:', area.id);
+    
+    this.deepArea.pendingEnter = {
+      active: true,
+      areaId: area.id,
+      x: x,
+      y: y,
+      startTime: Date.now(),
+      duration: 1200,
+      isFromHint: false
+    };
+  }
+  
+  /**
+   * 更新待进入状态（放大镜呼吸闪烁动画）
+   */
+  _updatePendingEnter() {
+    const pending = this.deepArea.pendingEnter;
+    if (!pending.active) return;
+    
+    const elapsed = Date.now() - pending.startTime;
+    
+    if (elapsed >= pending.duration) {
+      // 呼吸闪烁结束，进入二级背景
+      const area = this.deepArea.areas.find(a => a.id === pending.areaId);
+      if (area) {
+        this._enterDeepArea(area);
+      }
+      pending.active = false;
+    }
+  }
+  
+  /**
+   * 渲染放大镜呼吸闪烁（待进入状态）
+   */
+  _renderPendingEnterMagnifier(ctx, s) {
+    const pending = this.deepArea.pendingEnter;
+    if (!pending.active) return;
+    
+    const elapsed = Date.now() - pending.startTime;
+    const progress = elapsed / pending.duration;
+    
+    // 呼吸动画：缩放 1.0 -> 1.12 -> 1.0，周期 600ms（更平缓）
+    const breathCycle = 600;
+    const breathProgress = (elapsed % breathCycle) / breathCycle;
+    const breathScale = 1 + Math.sin(breathProgress * Math.PI * 2) * 0.12; // 幅度从0.3减小到0.12
+    
+    // 淡出效果（最后 300ms 开始淡出）
+    let alpha = 1;
+    if (progress > 0.75) {
+      alpha = 1 - (progress - 0.75) / 0.25;
+    }
+    
+    const x = pending.x;
+    const y = pending.y;
+    const baseSize = 35 * s * breathScale; // 基础尺寸从40减小到35
+    
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.scale(breathScale, breathScale);
+    
+    // 绘制放大镜图标（简化版）
+    ctx.strokeStyle = '#FFD700'; // 金色
+    ctx.lineWidth = 3 * s;
+    ctx.lineCap = 'round';
+    
+    // 镜片外圈
+    ctx.beginPath();
+    ctx.arc(-baseSize * 0.1, -baseSize * 0.1, baseSize * 0.4, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // 镜片内部的玻璃高光
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.lineWidth = 2 * s;
+    ctx.arc(-baseSize * 0.1, -baseSize * 0.1, baseSize * 0.25, Math.PI, Math.PI * 1.5);
+    ctx.stroke();
+    
+    // 放大镜把手 (向右下方45度角)
+    ctx.beginPath();
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 3 * s;
+    const handleStartX = -baseSize * 0.1 + Math.cos(Math.PI / 4) * (baseSize * 0.4);
+    const handleStartY = -baseSize * 0.1 + Math.sin(Math.PI / 4) * (baseSize * 0.4);
+    ctx.moveTo(handleStartX, handleStartY);
+    ctx.lineTo(baseSize * 0.4, baseSize * 0.4);
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+  
+  /**
+   * 触发无效双击反馈（😮‍💨 emoji + 消极振感）
+   */
+  _triggerInvalidDoubleClickFeedback(x, y) {
+    // 设置反馈状态
+    this.deepArea.invalidDoubleClick = {
+      show: true,
+      x: x,
+      y: y,
+      startTime: Date.now(),
+      duration: 800
+    };
+    
+    // 触发消极振感
+    haptic.error();
+    
+    console.log('[GameplayScene] 无效双击反馈：位置', x, y);
+  }
+  
+  /**
+   * 更新无效双击反馈动画
+   */
+  _updateInvalidDoubleClickFeedback() {
+    const feedback = this.deepArea.invalidDoubleClick;
+    if (!feedback.show) return;
+    
+    const elapsed = Date.now() - feedback.startTime;
+    if (elapsed >= feedback.duration) {
+      feedback.show = false;
+    }
+  }
+  
+  /**
+   * 渲染无效双击反馈（ui_icon_sad 图片）
+   */
+  _renderInvalidDoubleClickFeedback(ctx, s) {
+    const feedback = this.deepArea.invalidDoubleClick;
+    if (!feedback.show) return;
+    
+    const elapsed = Date.now() - feedback.startTime;
+    const progress = elapsed / feedback.duration;
+    
+    // 计算动画：先放大后缩小，同时淡出
+    let scale = 1;
+    let alpha = 1;
+    let offsetY = 0;
+    
+    if (progress < 0.3) {
+      // 前30%：放大弹出
+      const p = progress / 0.3;
+      scale = 0.5 + p * 0.5; // 0.5 -> 1.0
+      alpha = p;
+    } else {
+      // 后70%：保持并淡出，同时向上飘
+      const p = (progress - 0.3) / 0.7;
+      scale = 1 - p * 0.2; // 1.0 -> 0.8
+      alpha = 1 - p;
+      offsetY = -p * 30 * s; // 向上飘30px
+    }
+    
+    const size = 50 * s * scale; // 图片大小
+    const x = feedback.x;
+    const y = feedback.y + offsetY;
+    
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    
+    // 尝试获取 sad 图片
+    const sadImg = GlobalToolImageCache.get('ui_icon_sad');
+    
+    if (sadImg) {
+      // 使用图片
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = 8 * s;
+      ctx.shadowOffsetX = 2 * s;
+      ctx.shadowOffsetY = 2 * s;
+      ctx.drawImage(sadImg, x - size / 2, y - size / 2, size, size);
+    } else {
+      // 降级：使用 emoji
+      ctx.font = `bold ${size}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillText('😮‍💨', x + 2 * s, y + 2 * s);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText('😮‍💨', x, y);
+    }
+    
+    ctx.restore();
   }
   
   /**
@@ -3678,6 +4069,13 @@ class GameplayScene extends Scene {
     // 记录该区域已被访问过（进入后不再显示金圈）
     if (!this.deepArea.visitedAreas.includes(area.id)) {
       this.deepArea.visitedAreas.push(area.id);
+    }
+    
+    // 取消二次提示定时器（如果用户在5秒内进入了隐藏区）
+    if (this.deepArea.secondHintTimer) {
+      clearTimeout(this.deepArea.secondHintTimer);
+      this.deepArea.secondHintTimer = null;
+      console.log('[GameplayScene] 用户主动进入隐藏区，取消二次提示定时器');
     }
     
     // 隐藏金圈提示（进入二级背景后立即隐藏）
@@ -3740,15 +4138,17 @@ class GameplayScene extends Scene {
       return remainingDirts > 0;
     });
     
-    // 第一关且未显示过第二次提示时，显示"再找找别的隐藏垃圾"提示
+    // 第一关且未显示过第二次提示时，设置5秒延迟检测
     if (hasOtherUncleanedArea && Number(this.levelId) === 1 && !this.deepArea.secondHintShown) {
       this.deepArea.secondHintShown = true; // 标记已显示
-      // 显示提示引导用户寻找其他隐藏垃圾
-      setTimeout(() => {
-        this._showToast('再找找别的隐藏垃圾，双击可疑之处检查！', 3000);
-        // 显示第一个未访问的二级背景金圈
-        this.deepArea.hintsVisible = true;
-      }, 500); // 等过渡动画开始后再显示
+      // 清除金圈提示状态（不显示金圈）
+      this.deepArea.firstHintShown = false;
+      this.deepArea.hintsVisible = false;
+      // 5秒后如果用户还没进入第二个隐藏区，再弹Toast
+      this.deepArea.secondHintTimer = setTimeout(() => {
+        this._showToast('还有隐藏污垢，再找找！', 3000, '🔍');
+        this.deepArea.secondHintTimer = null;
+      }, 5000);
     }
   }
   
@@ -3895,7 +4295,7 @@ class GameplayScene extends Scene {
     if (areasToShow.length === 0) return;
     
     const gameAreaY = this.screenHeight * 0.08;
-    const DETECT_RADIUS = 50 * s;
+    const DETECT_RADIUS = 80 * s; // 80px 金圈半径
     
     ctx.save();
     
@@ -4099,11 +4499,12 @@ class GameplayScene extends Scene {
       return;
     }
     
-    // 显示 toast 提示
-    this._showToast('看不见的地方，可能会藏着垃圾哦，双击看看！', 3000);
+    // 新顺序：先显示金圈，1秒后再显示 Toast
+    const DELAY_BEFORE_HINT = 2000; // 延迟2秒后显示金圈
+    const DELAY_BEFORE_TOAST = 1000; // 金圈显示1秒后显示 Toast
     
-    // 1秒后显示第一个金圈
     this.deepArea.hintShowTimer = setTimeout(() => {
+      // 1. 先显示金圈
       this.deepArea.firstHintShown = true;
       this.deepArea.hintsVisible = true;
       console.log('[GameplayScene] 新人引导：显示第一个二级背景金圈');
@@ -4114,7 +4515,12 @@ class GameplayScene extends Scene {
       } catch (e) {
         // 忽略错误
       }
-    }, 1000);
+      
+      // 2. 1秒后显示 Toast
+      setTimeout(() => {
+        this._showToast('双击放大，揪出隐藏污垢！', 3000, '👆');
+      }, DELAY_BEFORE_TOAST);
+    }, DELAY_BEFORE_HINT);
   }
   
   /**
@@ -4431,6 +4837,79 @@ class GameplayScene extends Scene {
   }
   
   /**
+   * 收回工具（点击空槽位时）
+   * 带果冻动效
+   */
+  _despawnTool() {
+    if (!this.activeTool || this.toolAnim.isDespawning) return;
+    
+    console.log('[GameplayScene] 收回工具:', this.activeTool.name);
+    
+    const slotIndex = this.currentToolIndex;
+    
+    // 获取槽位位置
+    const slotPos = this.toolSlot ? this.toolSlot.slotPositions[slotIndex] : null;
+    const toolSlotTopY = this.screenHeight * 0.88;
+    const toolSlotHeight = this.screenHeight * 0.12;
+    const toolSlotBottomY = toolSlotTopY + toolSlotHeight;
+    
+    // 启动收回动画（反向的弹出动画）
+    if (slotPos) {
+      this.toolAnim = {
+        active: true,
+        progress: 0,
+        startX: this.toolPosition.x,
+        startY: this.toolPosition.y,
+        targetX: slotPos.x + slotPos.size / 2,
+        targetY: toolSlotBottomY - 30, // 回到槽位内部
+        scale: 1,
+        alpha: 1,
+        isDespawning: true, // 标记是收回动画
+        toolName: this.activeTool.name // 保存工具名称用于渲染
+      };
+    }
+    
+    // 立即重置槽位状态（让用户可以操作其他槽位）
+    this.isDraggingTool = false;
+    this.currentToolIndex = -1;
+    if (this.toolSlot) {
+      this.toolSlot.emptySlots.clear();
+      this.toolSlot.selectedIndex = -1;
+    }
+    
+    // 清除新手引导提示
+    if (this.tutorial.isActive) {
+      this.tutorial.showRubbishBinDirtHint = false;
+      this.tutorial.showDcBasketDirtHint = false;
+      this.tutorial.showClothDirtHint = false;
+    }
+    
+    // 延迟清除活动工具（等动画完成后）
+    setTimeout(() => {
+      this.activeTool = null;
+      this.toolAnim.active = false;
+      this.toolAnim.isDespawning = false;
+    }, 350); // 350ms 动画时长
+  }
+  
+  /**
+   * 检查是否点击了空槽位
+   * @returns {boolean} 是否点击了空槽位
+   */
+  _checkEmptySlotClick(x, y) {
+    if (!this.toolSlot || !this.activeTool) return false;
+    
+    // 获取当前空槽位的索引
+    const emptySlotIndex = this.currentToolIndex;
+    
+    // 检查点击位置是否在该槽位内
+    const slotIndex = this.toolSlot.getSlotIndexAt(x, y);
+    
+    // 如果点击的是空槽位，返回 true
+    return slotIndex === emptySlotIndex && this.toolSlot.emptySlots.has(slotIndex);
+  }
+  
+  /**
    * 温和Q弹缓动函数（微弱回弹）
    */
   _easeOutElastic(t) {
@@ -4591,7 +5070,7 @@ class GameplayScene extends Scene {
     this.cleanProgress += 10;
     
     // 显示 Toast
-    this._showToast('清洁完成！清洁度 +10');
+    this._showToast('清洁完成！清洁度 +10', 2000, '✨');
     
     // 添加闪光粒子效果
     const s = this.screenWidth / 750;
@@ -4622,24 +5101,19 @@ class GameplayScene extends Scene {
   }
   
   /**
-   * 显示 Toast 提示
+   * 显示 Toast 提示（波普风）
+   * @param {string} message - 显示文本
+   * @param {number} duration - 显示时长(ms)，默认3000
+   * @param {string} icon - 可选的emoji图标，默认💥
    */
-  _showToast(message, duration) {
-    // 使用事件系统显示 toast
-    const { globalEvent } = require('../core/EventEmitter');
-    globalEvent.emit('game:toast', message, duration);
-    
-    // 同时控制台输出
-    console.log(`[GameplayScene] Toast: ${message}`);
-    
-    // 备用：直接使用微信 toast
-    if (typeof wx !== 'undefined' && wx.showToast) {
-      wx.showToast({
-        title: message,
-        icon: 'none',
-        duration: duration || 2000
-      });
+  _showToast(message, duration = 3000, icon = '💥') {
+    // 使用波普风 Toast 组件
+    if (this.toast) {
+      this.toast.show(message, duration, icon);
     }
+    
+    // 控制台输出
+    console.log(`[GameplayScene] Toast: ${message}`);
   }
 
   _cleanDirt(dirt) {

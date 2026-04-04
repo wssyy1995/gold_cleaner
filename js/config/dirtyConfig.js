@@ -5,7 +5,7 @@
 
 // 污垢类型定义
 export const DIRT_TYPES = {
-  dust: { 
+  preset_dust: { 
     name: '灰尘', 
     color: '#8B4513', 
     difficulty: 1,
@@ -20,6 +20,42 @@ export const DIRT_TYPES = {
     recipes: [['rubbish_bin']],
     operate_type: 'throw',
     scale: 1
+  },
+  paper2:{
+    name: '纸团2',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_paper2.png',
+    color: '#8B4513', 
+    difficulty: 1,
+    recipes: [['rubbish_bin']],
+    operate_type: 'throw',
+    scale: 0.5
+  },
+  paper3:{
+    name: '纸团3',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_paper3.png',
+    color: '#8B4513', 
+    difficulty: 1,
+    recipes: [['rubbish_bin']],
+    operate_type: 'throw',
+    scale: 1
+  },
+  apple:{
+    name: '苹果',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_apple.png',
+    color: '#8B4513', 
+    difficulty: 1,
+    recipes: [['rubbish_bin']],
+    operate_type: 'throw',
+    scale: 0.6
+  },
+  banana:{
+    name: '香蕉',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_banana.png',
+    color: '#8B4513', 
+    difficulty: 1,
+    recipes: [['rubbish_bin']],
+    operate_type: 'throw',
+    scale: 0.8
   },
   shred_paper:{
     name: '碎纸屑',

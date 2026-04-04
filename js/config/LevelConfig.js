@@ -18,11 +18,12 @@ const STAGE_1_LEVELS = [
     name: '老年人卧室',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l1_home.png`,
     dirts: [
-      { type: 'paper', x: 300, y: 420 },
-      { type: 'socks', x: 500, y: 800 },
-      { type: 'stain', x: 500, y: 1100 },
-      { type: 'stain', x: 200, y: 1100 },
-      { type: 'stain', x: 400, y: 1200 }
+      { type: 'paper', x: 300, y: 425 },
+      { type: 'paper2', x: 265, y: 730 },
+      { type: 'apple', x: 405, y: 885 },
+      { type: 'banana', x: 320, y: 910 },
+      { type: 'socks', x: 450, y: 750 },
+      { type: 'stain', x: 500, y: 1100 }
     ],
     dirts_deep_area: [
       { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
@@ -42,14 +43,15 @@ const STAGE_1_LEVELS = [
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l2_home.png`,
     dirts: [
       { type: 'paper', x: 200, y: 350 },
-      { type: 'shred_paper', x: 400, y: 1100 },
-      { type: 'shred_paper', x: 600, y: 1200 },
       { type: 'paper', x: 300, y: 420 },
-      { type: 'stain', x: 500, y: 1100 },
-      { type: 'stain', x: 700, y: 1200 },
-      { type: 'socks', x: 500, y: 800 },
-      { type: 'stain', x: 500, y: 1100 },
-      { type: 'shred_paper', x: 200, y: 1000 },{ type: 'stain', x: 100, y: 1100 }
+      { type: 'stain', x: 500, y: 1100 }
+
+    ],
+    dirts_deep_area: [
+      { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
+        { type: 'paper', x: 300, y: 420 }]},
+        {id: 2, x: 550, y: 950,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bed.png`,dirts: [
+          { type: 'socks', x: 400, y: 600 }]}
     ],
     timeLimit: 100,
     targetScore: 150,

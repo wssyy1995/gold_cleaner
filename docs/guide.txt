@@ -1,206 +1,176 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>弹跳放大镜 - 独立组件</title>
-    <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
-        canvas { box-shadow: 0 0 20px rgba(0,0,0,0.5); border-radius: 12px; }
-        .hint { position: absolute; top: 20px; color: #aaa; text-align: center; font-size: 14px; }
-    </style>
-</head>
-<body>
-    <div class="hint">独立组件演示：弹跳放大镜 (双击提示)<br>点击屏幕任意位置可在该处生成提示，中心位置为常驻循环提示</div>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+import React from 'react';
 
-    <script>
-        /**
-         * 弹跳放大镜 - 通用双击提示组件
-         * 适用于游戏主循环 (update / draw 模式)
-         */
-        class BouncyMagnifier {
-            constructor(options = {}) {
-                this.x = options.x || 0;
-                this.y = options.y || 0;
-                this.baseSize = options.size || 40;
-                this.color = options.color || '#FFD700'; // 默认黄金主题色，呼应你之前的黄金边框设计
-                this.duration = options.duration || 1500; // 一个完整的动画周期(毫秒)
-                
-                this.age = 0; // 当前存活时间
-                this.isFinished = false; // 是否播放完毕(对于一次性提示)
-                this.loop = options.loop !== false; // 是否循环播放，默认true
-            }
-
-            // 在游戏主循环中更新状态
-            update(deltaTime) {
-                if (this.isFinished) return;
-                
-                this.age += deltaTime;
-                if (this.age >= this.duration) {
-                    if (this.loop) {
-                        this.age %= this.duration; // 循环播放
-                    } else {
-                        this.isFinished = true; // 结束标记
-                    }
-                }
-            }
-
-            // 核心动画算法：两次心跳式弹跳 (映射到 0.0 ~ 1.0 的缩放比例)
-            getBounceScale(progress) {
-                // 将动画进度分为：第一跳(0-15%)、第二跳(15%-30%)、静止等待(30%-100%)
-                if (progress < 0.15) {
-                    // 第1跳 (放大)
-                    return 1 + Math.sin(progress / 0.15 * Math.PI) * 0.4;
-                } else if (progress < 0.3) {
-                    // 第2跳 (放大)
-                    let p2 = (progress - 0.15) / 0.15;
-                    return 1 + Math.sin(p2 * Math.PI) * 0.4;
-                }
-                return 1; // 休息阶段，保持原大小
-            }
-
-            // 获取透明度：优雅的渐入渐出
-            getOpacity(progress) {
-                if (progress < 0.1) return progress / 0.1; // 前10%极短的渐入
-                if (progress > 0.8) return 1 - (progress - 0.8) / 0.2; // 最后20%结尾渐出
-                return 1;
-            }
-
-            // 在游戏主循环中执行渲染
-            draw(ctx) {
-                if (this.isFinished) return;
-
-                const progress = this.age / this.duration;
-                const scale = this.getBounceScale(progress);
-                const opacity = this.getOpacity(progress);
-
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.scale(scale, scale);
-                ctx.globalAlpha = opacity;
-
-                // 1. 发光环境光晕
-                ctx.shadowColor = this.color;
-                ctx.shadowBlur = 15;
-                
-                // 2. 绘制放大镜主体参数
-                ctx.strokeStyle = this.color;
-                ctx.lineWidth = this.baseSize * 0.15;
-                ctx.lineCap = 'round';
-                
-                // 3. 镜片外圈
-                ctx.beginPath();
-                ctx.arc(-this.baseSize * 0.1, -this.baseSize * 0.1, this.baseSize * 0.4, 0, Math.PI * 2);
-                ctx.stroke();
-                
-                // 4. 镜片内部的玻璃高光 (极大提升质感细节)
-                ctx.beginPath();
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; // 白色半透明
-                ctx.lineWidth = this.baseSize * 0.08;
-                ctx.arc(-this.baseSize * 0.1, -this.baseSize * 0.1, this.baseSize * 0.25, Math.PI, Math.PI * 1.5);
-                ctx.stroke();
-
-                // 5. 放大镜把手 (向右下方45度角)
-                ctx.beginPath();
-                ctx.strokeStyle = this.color;
-                ctx.lineWidth = this.baseSize * 0.18;
-                const handleStartX = -this.baseSize * 0.1 + Math.cos(Math.PI / 4) * (this.baseSize * 0.4);
-                const handleStartY = -this.baseSize * 0.1 + Math.sin(Math.PI / 4) * (this.baseSize * 0.4);
-                ctx.moveTo(handleStartX, handleStartY);
-                ctx.lineTo(this.baseSize * 0.4, this.baseSize * 0.4);
-                ctx.stroke();
-                
-                // 6. "双击"动作的额外强调反馈波纹 (仅在跳动时出现)
-                if (progress < 0.4) {
-                    const rippleOpacity = 1 - (progress / 0.4);
-                    const rippleScale = 1 + (progress / 0.4) * 0.8;
-                    
-                    ctx.shadowBlur = 0; // 取消波纹的阴影，避免脏乱
-                    ctx.beginPath();
-                    ctx.strokeStyle = `rgba(255, 215, 0, ${rippleOpacity * 0.5})`; // 金色逐渐透明
-                    ctx.lineWidth = 2;
-                    ctx.arc(-this.baseSize * 0.1, -this.baseSize * 0.1, this.baseSize * 0.5 * rippleScale, 0, Math.PI * 2);
-                    ctx.stroke();
-                }
-
-                ctx.restore();
-            }
+export default function MobileGameCards() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-wrap justify-center items-center gap-12 p-12 overflow-y-auto">
+      {/* 注入待机动画所需的 CSS */}
+      <style>{`
+        @keyframes breathe {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.02); }
         }
-
-        // ==========================================
-        // 下方代码仅为演示环境 (模拟小游戏的渲染循环)
-        // ==========================================
-        
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        
-        // 维护一个正在播放的动画实例列表
-        let activeAnimations = [];
-
-        // 场景1：初始化一个在屏幕中央常驻、循环播放的放大镜 (用于空闲时强制引导玩家)
-        const tutorialMagnifier = new BouncyMagnifier({
-            x: canvas.width / 2,
-            y: canvas.height / 2,
-            size: 55,
-            color: '#FFD700', // 呼应你设计的脉冲黄金边框
-            loop: true,
-            duration: 2000    // 稍慢的周期，给新手反应时间
-        });
-        activeAnimations.push(tutorialMagnifier);
-
-        // 场景2：点击屏幕时，在点击位置生成一个一次性的蓝色放大镜 (模拟玩家成功操作的反馈)
-        canvas.addEventListener('mousedown', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            activeAnimations.push(new BouncyMagnifier({
-                x: x,
-                y: y,
-                size: 35,
-                color: '#00E5FF', // 科技感青色，表示反馈
-                loop: false,      // 播放一次后销毁
-                duration: 800     // 极短促的反馈时间
-            }));
-        });
-
-        // 游戏标准主循环 (Game Loop)
-        let lastTime = performance.now();
-        
-        function gameLoop(currentTime) {
-            const deltaTime = currentTime - lastTime;
-            lastTime = currentTime;
-
-            // 1. 擦除上一帧 (模拟你的游戏背景)
-            ctx.fillStyle = '#2c3e50';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // 绘制网格背景 (仅为装饰环境)
-            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-            ctx.lineWidth = 1;
-            for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
-            for(let i=0; i<canvas.height; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke(); }
-
-            // 2. 更新并绘制所有存活的动画实例
-            for (let i = activeAnimations.length - 1; i >= 0; i--) {
-                const anim = activeAnimations[i];
-                
-                // 核心的两步：更新时间 -> 重新绘制
-                anim.update(deltaTime);
-                anim.draw(ctx);
-                
-                // 3. 垃圾回收：如果动画已播放完毕(非循环的)，将其从数组中移除
-                if (anim.isFinished) {
-                    activeAnimations.splice(i, 1);
-                }
-            }
-
-            requestAnimationFrame(gameLoop);
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-6px); }
         }
+        @keyframes shimmer {
+          0% { transform: translateX(-150%) skewX(-15deg); }
+          100% { transform: translateX(150%) skewX(-15deg); }
+        }
+        .animate-shimmer-btn::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 50%;
+          height: 100%;
+          background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%);
+          transform: translateX(-150%) skewX(-15deg);
+          animation: shimmer 3s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* 隐藏滚动条 */
+        .hide-scroll::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
 
-        // 启动！
-        requestAnimationFrame(gameLoop);
-    </script>
-</body>
-</html>
+      {/* 1. 高级糖果胶材质 (Juicy Plastic) */}
+      <div className="flex flex-col items-center justify-center w-full md:w-auto">
+        <h3 className="mb-8 text-gray-500 font-medium tracking-widest text-sm">01 JUICY PLASTIC / 糖果胶材质</h3>
+        <div className="relative w-72 pt-8 pb-6 transition-transform duration-150 active:scale-95">
+          {/* Badge */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20 w-16 h-16 bg-yellow-400 rounded-full flex items-center justify-center border-4 border-white shadow-[0_4px_12px_rgba(250,204,21,0.5)]">
+            <span className="text-white font-bold text-2xl shadow-sm">1</span>
+          </div>
+          
+          {/* Card Body */}
+          <div className="bg-white rounded-3xl p-4 pt-10 border-[6px] border-yellow-400 shadow-[0_12px_24px_rgba(0,0,0,0.08)] relative z-10 flex flex-col items-center">
+            <div className="w-full aspect-video rounded-xl overflow-hidden mb-4 shadow-inner">
+              <img src="/api/placeholder/400/300" alt="room" className="w-full h-full object-cover" />
+            </div>
+            <h2 className="text-gray-800 font-bold text-xl mb-4">老年人卧室</h2>
+          </div>
+
+          {/* Button */}
+          <button className="absolute bottom-0 left-1/2 -translate-x-1/2 z-20 w-48 h-14 bg-yellow-400 rounded-full text-white font-bold text-xl 
+            shadow-[0_6px_0_#ca8a04,0_10px_16px_rgba(250,204,21,0.4)]
+            active:shadow-[0_0px_0_#ca8a04,0_0px_0px_rgba(250,204,21,0.4)] active:translate-y-[6px]
+            transition-all duration-75 flex items-center justify-center border-2 border-white">
+            开始任务
+          </button>
+        </div>
+      </div>
+
+      {/* 2. 流光呼吸法 (Breathing Shimmer) */}
+      <div className="flex flex-col items-center justify-center w-full md:w-auto">
+        <h3 className="mb-8 text-gray-500 font-medium tracking-widest text-sm">02 BREATHING SHIMMER / 流光呼吸</h3>
+        <div className="relative w-72 pt-8 pb-6" style={{ animation: 'breathe 4s infinite ease-in-out' }}>
+          {/* Badge */}
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 w-14 h-14 bg-gradient-to-b from-yellow-300 to-yellow-500 rounded-full flex items-center justify-center shadow-lg">
+            <span className="text-white font-bold text-xl">1</span>
+          </div>
+          
+          {/* Card Body */}
+          <div className="bg-white rounded-3xl p-4 pt-10 border border-gray-100 shadow-[0_16px_40px_-12px_rgba(250,204,21,0.25)] relative z-10 flex flex-col items-center">
+            <div className="w-full aspect-video rounded-xl overflow-hidden mb-4">
+              <img src="/api/placeholder/400/300" alt="room" className="w-full h-full object-cover" />
+            </div>
+            <h2 className="text-gray-800 font-bold text-xl mb-4">老年人卧室</h2>
+          </div>
+
+          {/* Button with Shimmer */}
+          <button className="animate-shimmer-btn overflow-hidden absolute bottom-2 left-1/2 -translate-x-1/2 z-20 w-48 h-14 bg-gradient-to-r from-yellow-400 to-yellow-500 rounded-full text-white font-bold text-xl 
+            shadow-[0_8px_20px_rgba(250,204,21,0.4)]
+            active:scale-90 active:shadow-md
+            transition-all duration-150 flex items-center justify-center">
+            开始任务
+          </button>
+        </div>
+      </div>
+
+      {/* 3. 柔和层叠纸雕 (Soft Papercraft) */}
+      <div className="flex flex-col items-center justify-center w-full md:w-auto">
+        <h3 className="mb-8 text-gray-500 font-medium tracking-widest text-sm">03 SOFT PAPERCRAFT / 纸雕层叠</h3>
+        <div className="relative w-72 pt-8 pb-6 transition-transform duration-150 active:scale-95">
+          {/* Badge - Layer 3 */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 z-30 w-16 h-16 bg-yellow-400 rounded-full flex items-center justify-center shadow-[0_4px_8px_rgba(0,0,0,0.1)]">
+            <span className="text-white font-bold text-2xl">1</span>
+          </div>
+          
+          {/* Card Body - Layer 2 */}
+          <div className="bg-white rounded-[2rem] p-3 pt-10 shadow-[0_8px_24px_rgba(0,0,0,0.06)] relative z-10 flex flex-col items-center mt-2">
+            {/* Inner Window - Layer 1 (Recessed) */}
+            <div className="w-full aspect-video rounded-2xl overflow-hidden mb-4 border border-gray-100 shadow-[inset_0_4px_12px_rgba(0,0,0,0.1)] relative">
+              <img src="/api/placeholder/400/300" alt="room" className="w-full h-full object-cover opacity-90 mix-blend-multiply" />
+            </div>
+            <h2 className="text-gray-700 font-bold text-xl mb-6 tracking-wide">老年人卧室</h2>
+          </div>
+
+          {/* Button - Layer 3 */}
+          <button className="absolute -bottom-2 left-1/2 -translate-x-1/2 z-30 w-52 h-14 bg-yellow-400 rounded-full text-white font-bold text-xl 
+            shadow-[0_8px_16px_rgba(250,204,21,0.3)]
+            active:scale-95 active:shadow-sm active:-translate-y-1
+            transition-all duration-150 flex items-center justify-center">
+            开始任务
+          </button>
+        </div>
+      </div>
+
+      {/* 4. 现代轻拟态 (Clean Neumorphism) */}
+      <div className="flex flex-col items-center justify-center w-full md:w-auto">
+        <h3 className="mb-8 text-gray-500 font-medium tracking-widest text-sm">04 NEUMORPHISM / 纯净轻拟态</h3>
+        <div className="relative w-72 pt-8 pb-6">
+          {/* Card Body */}
+          <div className="bg-[#f8f9fa] rounded-3xl p-4 pt-8 shadow-[12px_12px_24px_#e2e5e9,-12px_-12px_24px_#ffffff] relative z-10 flex flex-col items-center">
+            {/* Badge Integrated */}
+            <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-14 h-14 bg-[#f8f9fa] rounded-full flex items-center justify-center shadow-[6px_6px_12px_#e2e5e9,-6px_-6px_12px_#ffffff]">
+              <span className="text-yellow-500 font-bold text-xl">1</span>
+            </div>
+
+            <div className="w-full aspect-video rounded-xl overflow-hidden mb-4 mt-2 border-[4px] border-white">
+              <img src="/api/placeholder/400/300" alt="room" className="w-full h-full object-cover" />
+            </div>
+            <h2 className="text-gray-600 font-bold text-xl mb-8">老年人卧室</h2>
+          </div>
+
+          {/* Button */}
+          <button className="absolute -bottom-2 left-1/2 -translate-x-1/2 z-20 w-48 h-14 bg-yellow-400 rounded-full text-white font-bold text-xl 
+            shadow-[6px_6px_12px_#d9dce0,-6px_-6px_12px_#ffffff]
+            active:shadow-[inset_4px_4px_8px_rgba(0,0,0,0.1),inset_-4px_-4px_8px_rgba(255,255,255,0.4)]
+            transition-all duration-150 flex items-center justify-center">
+            开始任务
+          </button>
+        </div>
+      </div>
+
+      {/* 5. 悬浮微失重 (Floating Gravity) */}
+      <div className="flex flex-col items-center justify-center w-full md:w-auto">
+        <h3 className="mb-8 text-gray-500 font-medium tracking-widest text-sm">05 FLOATING GRAVITY / 失重悬浮</h3>
+        <div className="relative w-72 pt-8 pb-6" style={{ animation: 'float 5s infinite ease-in-out' }}>
+          {/* Badge */}
+          <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-20 w-16 h-16 bg-white rounded-full flex items-center justify-center border-4 border-yellow-400 shadow-xl" style={{ animation: 'float 4s infinite ease-in-out reverse' }}>
+            <span className="text-yellow-500 font-black text-2xl">1</span>
+          </div>
+          
+          {/* Card Body */}
+          <div className="bg-white rounded-[2.5rem] p-4 pt-12 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] relative z-10 flex flex-col items-center">
+            <div className="w-full aspect-video rounded-2xl overflow-hidden mb-4 shadow-md">
+              <img src="/api/placeholder/400/300" alt="room" className="w-full h-full object-cover" />
+            </div>
+            <h2 className="text-gray-800 font-bold text-xl mb-6">老年人卧室</h2>
+          </div>
+
+          {/* Button */}
+          <button className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-20 w-48 h-16 bg-yellow-400 rounded-2xl text-white font-bold text-xl 
+            shadow-[0_12px_24px_-6px_rgba(250,204,21,0.6)]
+            active:scale-90 active:shadow-none active:translate-y-2
+            transition-all duration-200 flex items-center justify-center">
+            开始任务
+          </button>
+        </div>
+      </div>
+
+    </div>
+  );
+}

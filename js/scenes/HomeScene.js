@@ -182,6 +182,17 @@ class HomeScene extends Scene {
       transformProgress: 0, // 变形进度 0-1
       timer: 0              // 动画计时器
     };
+    
+    // 开始任务按钮按下状态
+    this._pressedStartBtn = false;
+    
+    // 流光呼吸法动画状态
+    this._breathingShimmer = {
+      breathTime: 0,        // 呼吸动画计时器
+      breathDuration: 4000, // 呼吸周期 4s
+      shimmerTime: 0,       // 流光动画计时器
+      shimmerDuration: 2500 // 流光周期 2.5s
+    };
   }
 
   async onLoad(data = {}) {
@@ -1429,6 +1440,18 @@ class HomeScene extends Scene {
     
     // 更新通关动画
     this._updateLevelCompleteAnimation(deltaTime);
+    
+    // 更新流光呼吸法动画
+    this._updateBreathingShimmer(deltaTime);
+  }
+  
+  /**
+   * 更新流光呼吸法动画
+   */
+  _updateBreathingShimmer(deltaTime) {
+    const anim = this._breathingShimmer;
+    anim.breathTime = (anim.breathTime + deltaTime) % anim.breathDuration;
+    anim.shimmerTime = (anim.shimmerTime + deltaTime) % anim.shimmerDuration;
   }
 
   onRender(ctx) {
@@ -1674,19 +1697,37 @@ class HomeScene extends Scene {
     const sphereCenterX = cardX + cardWidth / 2;
     const sphereCenterY = cardY + sphereRadius;
     
-    // 卡片背景
+    // 计算呼吸动画缩放 (1.0 ~ 1.02)
+    const breathProgress = this._breathingShimmer.breathTime / this._breathingShimmer.breathDuration;
+    const breathScale = 1 + Math.sin(breathProgress * Math.PI * 2) * 0.02;
+    
+    // 应用呼吸缩放（以卡片中心为锚点）
+    const cardCenterX = cardX + cardWidth / 2;
+    const cardCenterY = cardY + cardHeight / 2;
     ctx.save();
+    ctx.translate(cardCenterX, cardCenterY);
+    ctx.scale(breathScale, breathScale);
+    ctx.translate(-cardCenterX, -cardCenterY);
+    
+    // 卡片背景（带阴影）
+    ctx.save();
+    ctx.shadowColor = 'rgba(250, 204, 21, 0.25)'; // 金色柔和阴影
+    ctx.shadowBlur = 40 * s;
+    ctx.shadowOffsetY = -12 * s;
     this._drawRoundedRect(ctx, cardX, cardY + sphereRadius, cardWidth, cardHeight - sphereRadius, cardBorderRadius);
     ctx.fillStyle = '#FFFFFF';
     ctx.fill();
     ctx.restore();
     
-    // 卡片边框
+    // 卡片细边框
     ctx.save();
     this._drawRoundedRect(ctx, cardX, cardY + sphereRadius, cardWidth, cardHeight - sphereRadius, cardBorderRadius);
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth = cardBorderWidth;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)'; // 极淡的边框
+    ctx.lineWidth = 1;
     ctx.stroke();
+    ctx.restore();
+    
+    // 恢复呼吸缩放的变换
     ctx.restore();
     
     // 预览图片 - 优先从全局缓存获取
@@ -1755,56 +1796,125 @@ class HomeScene extends Scene {
     ctx.fillText(level.name, cardX + cardWidth / 2, nameTextY);
     ctx.restore();
     
-    // 关卡数字球
+    // 关卡数字球（糖果胶材质 Juicy Plastic）
+    const badgeY = sphereCenterY - 4 * s; // 更靠上一点
+    
+    // 外发光阴影
+    ctx.save();
+    ctx.shadowColor = 'rgba(250, 204, 21, 0.5)'; // 金色阴影 rgba(250,204,21,0.5)
+    ctx.shadowBlur = 12 * s;
+    ctx.shadowOffsetY = 4 * s;
+    ctx.beginPath();
+    ctx.arc(sphereCenterX, badgeY, sphereRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = '#FBBF24'; // 黄色背景 #FBBF24 (yellow-400)
+    ctx.fill();
+    ctx.restore();
+    
+    // 白色边框 (6px)
     ctx.save();
     ctx.beginPath();
-    ctx.arc(sphereCenterX, sphereCenterY, sphereRadius, 0, 2 * Math.PI);
-    ctx.fillStyle = '#FFA500';
-    ctx.fill();
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth = cardBorderWidth * 1.5;
+    ctx.arc(sphereCenterX, badgeY, sphereRadius, 0, 2 * Math.PI);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 6 * s;
     ctx.stroke();
     ctx.restore();
     
+    // 数字文字（带阴影）
     ctx.save();
     ctx.fillStyle = '#FFFFFF';
     ctx.font = `bold ${sphereRadius * 1.2}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(level.id.toString(), sphereCenterX, sphereCenterY);
+    // 文字阴影
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+    ctx.shadowBlur = 2 * s;
+    ctx.shadowOffsetY = 1 * s;
+    ctx.fillText(level.id.toString(), sphereCenterX, badgeY);
     ctx.restore();
     
-    // 开始任务按钮
+    // 开始任务按钮（流光呼吸法）
     const btnWidth = cardWidth * 0.8;
     const btnHeight = (cardHeight - sphereRadius) * 0.2;
     const btnX = cardX + (cardWidth - btnWidth) / 2;
-    const btnY = nameTextY + levelNameHeight * 0.6;
-    const btnRadius = btnHeight * 0.3;
+    const btnY = nameTextY + levelNameHeight * 0.6 - 4 * s;
+    const btnRadius = btnHeight * 0.5; // 更圆的按钮
     
-    this._startBtnRect = { x: btnX, y: btnY, width: btnWidth, height: btnHeight, level };
+    // 检查按钮是否被按下（用于按压动画）
+    const isPressed = this._pressedStartBtn && this._startBtnRect && this._startBtnRect.level === level;
+    
+    // 按钮按下效果：scale(0.9) 并调整位置
+    const btnScale = isPressed ? 0.9 : 1;
+    const btnCenterX = btnX + btnWidth / 2;
+    const btnCenterY = btnY + btnHeight / 2;
     
     ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-    ctx.shadowBlur = 8 * s;
-    ctx.shadowOffsetY = 4 * s;
+    ctx.translate(btnCenterX, btnCenterY);
+    ctx.scale(btnScale, btnScale);
+    ctx.translate(-btnCenterX, -btnCenterY);
+    
+    // 更新点击区域（考虑缩放）
+    this._startBtnRect = { 
+      x: btnX + (btnWidth * (1 - btnScale)) / 2, 
+      y: btnY + (btnHeight * (1 - btnScale)) / 2, 
+      width: btnWidth * btnScale, 
+      height: btnHeight * btnScale, 
+      level 
+    };
+    
+    // 按钮背景（纯色 #FFC107，WXSS 中的颜色）
+    ctx.save();
+    if (isPressed) {
+      // 按下时阴影变小
+      ctx.shadowColor = 'rgba(250, 204, 21, 0.4)';
+      ctx.shadowBlur = 10 * s;
+      ctx.shadowOffsetY = 4 * s;
+    } else {
+      // 正常状态阴影
+      ctx.shadowColor = 'rgba(250, 204, 21, 0.4)';
+      ctx.shadowBlur = 20 * s;
+      ctx.shadowOffsetY = 8 * s;
+    }
     this._drawRoundedRect(ctx, btnX, btnY, btnWidth, btnHeight, btnRadius);
-    ctx.fillStyle = '#FFD700';
+    ctx.fillStyle = '#FFC107'; // 纯色背景，WXSS 中的颜色
     ctx.fill();
     ctx.restore();
     
-    ctx.save();
-    this._drawRoundedRect(ctx, btnX, btnY, btnWidth, btnHeight, btnRadius);
-    ctx.strokeStyle = '#FFA500';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
+    // 流光效果（shimmer）- 参考 WXSS 实现
+    // shimmerProgress: 0 -> 1 对应 left: -100% -> 200%
+    const shimmerProgress = this._breathingShimmer.shimmerTime / this._breathingShimmer.shimmerDuration;
+    const shimmerX = btnX - btnWidth + shimmerProgress * btnWidth * 3; // 从 -100% 到 200%
+    const shimmerWidth = btnWidth * 0.5; // 宽度 50%
     
     ctx.save();
-    ctx.fillStyle = '#8B4513';
+    // 裁剪到按钮区域（overflow: hidden 效果）
+    this._drawRoundedRect(ctx, btnX, btnY, btnWidth, btnHeight, btnRadius);
+    ctx.clip();
+    
+    // 绘制流光条（倾斜 -20度）
+    ctx.save();
+    ctx.translate(shimmerX, btnY);
+    ctx.transform(1, 0, -0.364, 1, 0, 0); // skewX(-20deg) -> tan(-20°) ≈ -0.364
+    
+    // 半透明白色渐变条
+    const shimmerGradient = ctx.createLinearGradient(0, 0, shimmerWidth, 0);
+    shimmerGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    shimmerGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.5)'); // 中间最亮 0.5
+    shimmerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = shimmerGradient;
+    ctx.fillRect(0, -btnHeight, shimmerWidth, btnHeight * 3); // 上下延伸确保覆盖
+    ctx.restore();
+    ctx.restore();
+    
+    // 按钮文字（白色，在缩放变换内）
+    ctx.save();
+    ctx.fillStyle = '#FFFFFF';
     ctx.font = `bold ${Math.max(16, btnHeight * 0.45)}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('开始任务', btnX + btnWidth / 2, btnY + btnHeight / 2);
+    ctx.restore();
+    
+    // 恢复缩放变换
     ctx.restore();
   }
 

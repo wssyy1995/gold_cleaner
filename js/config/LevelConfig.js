@@ -18,12 +18,11 @@ const STAGE_1_LEVELS = [
     name: '老年人卧室',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l1_home.png`,
     dirts: [
-      { type: 'paper', x: 300, y: 425 },
+      { type: 'banana', x: 320, y: 910},
       { type: 'paper2', x: 265, y: 730 },
-      { type: 'apple', x: 405, y: 885 },
-      { type: 'banana', x: 320, y: 910 },
+      { type: 'apple', x: 405, y: 890 },
       { type: 'socks', x: 450, y: 750 },
-      { type: 'stain', x: 500, y: 1100 }
+      { type: 'blackmark', x: 135, y: 800 ,scale: 1.2}
     ],
     dirts_deep_area: [
       { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
@@ -44,7 +43,7 @@ const STAGE_1_LEVELS = [
     dirts: [
       { type: 'paper', x: 200, y: 350 },
       { type: 'paper', x: 300, y: 420 },
-      { type: 'stain', x: 500, y: 1100 }
+      { type: 'waterstain', x: 500, y: 1100 }
 
     ],
     dirts_deep_area: [
@@ -64,7 +63,7 @@ const STAGE_1_LEVELS = [
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l3_home.png`,
     dirts: [
       { type: 'dust', x: 250, y: 300 },
-      { type: 'stain', x: 450, y: 450 },
+      { type: 'waterstain', x: 450, y: 450 },
       { type: 'dust', x: 550, y: 350 },
     ],
     timeLimit: 100,
@@ -79,7 +78,7 @@ const STAGE_1_LEVELS = [
     dirts: [
       { type: 'dust', x: 200, y: 400 },
       { type: 'dust', x: 350, y: 550 },
-      { type: 'stain', x: 500, y: 350 },
+      { type: 'waterstain', x: 500, y: 350 },
       { type: 'dust', x: 650, y: 500 },
     ],
     timeLimit: 90,
@@ -92,8 +91,8 @@ const STAGE_1_LEVELS = [
     name: '浴室挑战',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l5_home.png`,
     dirts: [
-      { type: 'stain', x: 300, y: 400 },
-      { type: 'stain', x: 500, y: 500 },
+      { type: 'waterstain', x: 300, y: 400 },
+      { type: 'waterstain', x: 500, y: 500 },
       { type: 'dust', x: 200, y: 300 },
       { type: 'dust', x: 600, y: 450 },
     ],
@@ -108,9 +107,9 @@ const STAGE_1_LEVELS = [
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l6_home.png`,
     dirts: [
       { type: 'dust', x: 200, y: 350 },
-      { type: 'stain', x: 400, y: 500 },
+      { type: 'waterstain', x: 400, y: 500 },
       { type: 'dust', x: 600, y: 400 },
-      { type: 'stain', x: 300, y: 600 },
+      { type: 'waterstain', x: 300, y: 600 },
     ],
     timeLimit: 80,
     targetScore: 350,
@@ -123,9 +122,9 @@ const STAGE_1_LEVELS = [
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l7_home.png`,
     dirts: [
       { type: 'dust', x: 150, y: 300 },
-      { type: 'stain', x: 350, y: 450 },
+      { type: 'waterstain', x: 350, y: 450 },
       { type: 'dust', x: 550, y: 350 },
-      { type: 'stain', x: 250, y: 600 },
+      { type: 'waterstain', x: 250, y: 600 },
       { type: 'dust', x: 650, y: 550 },
     ],
     timeLimit: 120,
@@ -140,7 +139,7 @@ const STAGE_1_LEVELS = [
     dirts: [
       { type: 'grime', x: 300, y: 400 },
       { type: 'dust', x: 200, y: 300 },
-      { type: 'stain', x: 500, y: 500 },
+      { type: 'waterstain', x: 500, y: 500 },
       { type: 'grime', x: 600, y: 450 },
     ],
     timeLimit: 100,
@@ -155,7 +154,7 @@ const STAGE_1_LEVELS = [
     dirts: [
       { type: 'grime', x: 250, y: 350 },
       { type: 'grime', x: 450, y: 500 },
-      { type: 'stain', x: 350, y: 600 },
+      { type: 'waterstain', x: 350, y: 600 },
       { type: 'dust', x: 600, y: 400 },
     ],
     timeLimit: 100,
@@ -171,8 +170,8 @@ const STAGE_1_LEVELS = [
       { type: 'grime', x: 250, y: 350, size: 1.5 },
       { type: 'grime', x: 550, y: 450, size: 1.5 },
       { type: 'grime', x: 400, y: 600, size: 2 },
-      { type: 'stain', x: 200, y: 550 },
-      { type: 'stain', x: 600, y: 350 },
+      { type: 'waterstain', x: 200, y: 550 },
+      { type: 'waterstain', x: 600, y: 350 },
       { type: 'dust', x: 400, y: 250 },
     ],
     timeLimit: 120,
@@ -190,7 +189,7 @@ const STAGE_2_LEVELS = [
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage2_l1_home.png`,
     dirts: [
       { type: 'dust', x: 300, y: 400 },
-      { type: 'stain', x: 500, y: 500 },
+      { type: 'waterstain', x: 500, y: 500 },
       { type: 'mold', x: 400, y: 300 },
     ],
     timeLimit: 100,
@@ -263,7 +262,7 @@ const STAGE_4_LEVELS = [
       { type: 'rust', x: 200, y: 400 },
       { type: 'mold', x: 400, y: 300 },
       { type: 'grime', x: 600, y: 500 },
-      { type: 'stain', x: 300, y: 600 },
+      { type: 'waterstain', x: 300, y: 600 },
     ],
     timeLimit: 80,
     targetScore: 800,

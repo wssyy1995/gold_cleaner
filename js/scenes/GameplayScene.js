@@ -265,6 +265,7 @@ class GameplayScene extends Scene {
     this.deepArea = {
       isActive: false,              // 是否正在二级背景中
       currentAreaId: null,          // 当前二级背景ID
+      autoExitScheduled: false,     // 防止自动退出重复触发
       areas: [],                    // 所有二级区域配置
       images: {},                   // 缓存的二级背景图片 { areaId: img }
       originalDirts: [],            // 主关卡原始污垢（用于回退时恢复）
@@ -914,7 +915,10 @@ class GameplayScene extends Scene {
       const y = (dirtConfig.y || 400) * s;
       
       // 圆圈直径固定 60px，适配屏幕
-      const circleSize = 60 * s;
+      const baseCircleSize = 60 * s;
+      // 优先使用 levelConfig 中的 scale，否则使用 DIRT_TYPES 中的默认 scale
+      const scale = dirtConfig.scale ?? dirtType?.scale ?? 1;
+      const circleSize = baseCircleSize * scale;
       
       this.dirtObjects.push({
         id: i,
@@ -925,6 +929,8 @@ class GameplayScene extends Scene {
         width: circleSize,          // 宽度
         height: circleSize,         // 高度
         size: circleSize,           // 圆圈直径（兼容旧代码）
+        scale: scale,               // 缩放比例（用于渲染）
+        mirror: dirtConfig.mirror,  // 镜像方向：'horizontal' | 'vertical' | undefined
         state: 'dirty',             // dirty, selected, cleaning, clean
         selected: false,            // 是否被选中（闪烁）
         cleaning: false,            // 是否正在清洁中
@@ -953,14 +959,21 @@ class GameplayScene extends Scene {
       const dirtConfig = availableDirtTypes[Math.floor(Math.random() * availableDirtTypes.length)];
       const relativeY = (50 + Math.random() * (this.screenHeight * 0.9 / s - 150)) * s;
       
+      // 后备方案使用 DIRT_TYPES 中的默认 scale
+      const dirtType = DIRT_TYPES[dirtConfig.type];
+      const scale = dirtType?.scale ?? 1;
+      const baseSize = 100 * s;
+      
       this.dirtObjects.push({
         id: i,
         type: dirtConfig.type,
         name: dirtConfig.name,
         x: (80 + Math.random() * 590) * s,
         y: relativeY,
-        width: 100 * s,
-        height: 100 * s,
+        width: baseSize * scale,
+        height: baseSize * scale,
+        size: baseSize * scale,
+        scale: scale,             // 缩放比例（用于渲染）
         state: 'dirty',
         strokeCount: 0,
         maxStrokes: 3,
@@ -2131,11 +2144,15 @@ class GameplayScene extends Scene {
     this._updateTransition(deltaTime);
     
     // 检查二级背景是否全部清洁完成，自动返回主关卡
-    if (this.deepArea.isActive && !this.deepArea.transition.active) {
+    if (this.deepArea.isActive && !this.deepArea.transition.active && !this.deepArea.autoExitScheduled) {
       const currentAreaCleaned = this.dirtObjects.every(d => d.state === 'clean');
       if (currentAreaCleaned && this.dirtObjects.length > 0) {
         console.log('[GameplayScene] 二级背景全部清洁完成，自动返回主关卡');
-        setTimeout(() => this._exitDeepArea(), 500);
+        this.deepArea.autoExitScheduled = true;
+        setTimeout(() => {
+          this._exitDeepArea();
+          this.deepArea.autoExitScheduled = false;
+        }, 500);
       }
     }
     
@@ -2360,9 +2377,9 @@ class GameplayScene extends Scene {
    * 使用图片渲染污垢
    */
   _renderDirtWithImage(ctx, dirt, cx, cy, radius, pulseAlpha, s, img) {
-      // 获取污垢类型的缩放配置
+      // 优先使用 dirt 对象的 scale，其次是 DIRT_TYPES 中的默认 scale
       const dirtType = DIRT_TYPES[dirt.type];
-      const scale = dirtType?.scale || 1; // 默认1倍
+      const scale = dirt?.scale ?? dirtType?.scale ?? 1;
       
       // 使用图片渲染
       ctx.save();
@@ -2384,8 +2401,19 @@ class GameplayScene extends Scene {
         drawWidth = maxSize * imgRatio;
       }
       
-      const x = cx - drawWidth / 2;
-      const y = cy - drawHeight / 2;
+      let x = cx - drawWidth / 2;
+      let y = cy - drawHeight / 2;
+      
+      // 处理镜像变换（水平或垂直翻转）
+      if (dirt.mirror === 'horizontal' || dirt.mirror === 'vertical') {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(dirt.mirror === 'horizontal' ? -1 : 1, dirt.mirror === 'vertical' ? -1 : 1);
+        ctx.translate(-cx, -cy);
+        // 重新计算 x, y 因为原点变了
+        x = cx - drawWidth / 2;
+        y = cy - drawHeight / 2;
+      }
       
       // 根据划动清洁进度裁切显示图片（从下往上消失）
       // 3次滑动分别裁切: 1/4, 1/4, 2/4
@@ -2426,13 +2454,17 @@ class GameplayScene extends Scene {
         ctx.restore();
       }
       
+      // 恢复镜像变换
+      if (dirt.mirror === 'horizontal' || dirt.mirror === 'vertical') {
+        ctx.restore();
+      }
+      
       ctx.restore();
       
       // 渲染划动清洁进度条（三格蓝色能量条）
-      // 当前正在对该污垢进行划动清洁时显示
-      if (this.strokeState && this.strokeState.active && 
-          this.strokeState.dirt === dirt && dirt.strokeCount < dirt.maxStrokes) {
-        this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount || 0, dirt.maxStrokes || 3, s);
+      // 只要有进度就常驻显示，方便玩家切换污垢后继续清洁
+      if (dirt.strokeCount > 0 && dirt.strokeCount < dirt.maxStrokes) {
+        this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, dirt.maxStrokes, s);
       }
   }
 
@@ -2539,9 +2571,9 @@ class GameplayScene extends Scene {
    * 支持擦拭进度显示
    */
   _renderDirtWithCircle(ctx, dirt, cx, cy, radius, pulseAlpha, s) {
-    // 获取污垢类型的缩放配置
+    // 优先使用 dirt 对象的 scale，其次是 DIRT_TYPES 中的默认 scale
     const dirtType = DIRT_TYPES[dirt.type];
-    const scale = dirtType?.scale || 1; // 默认1倍
+    const scale = dirt?.scale ?? dirtType?.scale ?? 1;
     
     // 应用 scale 配置
     const scaledRadius = radius * scale;
@@ -2590,7 +2622,8 @@ class GameplayScene extends Scene {
     ctx.restore();
     
     // 渲染划动清洁进度条（三格蓝色能量条）
-    if (dirt.strokeCount !== undefined && dirt.strokeCount < dirt.maxStrokes) {
+    // 只要有进度就常驻显示
+    if (dirt.strokeCount > 0 && dirt.strokeCount < dirt.maxStrokes) {
       this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, dirt.maxStrokes, s);
     }
   }
@@ -3654,7 +3687,10 @@ class GameplayScene extends Scene {
     // wipe 类型：点击后如果 cloth 已弹出，自动进入 Z 字绘制模式
     if (dirtType.operate_type === 'wipe') {
       if (this.activeTool && this.activeTool.id === 'cloth') {
-        this._startStrokeClean(dirt, x, y);
+        // 只有不在划动清洁中，或点击了不同的污垢时才重新开始
+        if (!this.strokeState.active || this.strokeState.dirt !== dirt) {
+          this._startStrokeClean(dirt, x, y);
+        }
       }
       return;
     }
@@ -3662,7 +3698,10 @@ class GameplayScene extends Scene {
     // sweep 类型：点击后如果 broom 已弹出，自动进入 Z 字绘制模式
     if (dirtType.operate_type === 'sweep') {
       if (this.activeTool && this.activeTool.id === 'broom') {
-        this._startStrokeClean(dirt, x, y);
+        // 只有不在划动清洁中，或点击了不同的污垢时才重新开始
+        if (!this.strokeState.active || this.strokeState.dirt !== dirt) {
+          this._startStrokeClean(dirt, x, y);
+        }
       }
       return;
     }
@@ -4056,7 +4095,8 @@ class GameplayScene extends Scene {
    * 进入二级背景
    */
   _enterDeepArea(area) {
-    console.log(`[GameplayScene] 进入二级背景: ${area.id}`);
+    console.log(`[GameplayScene] 进入二级背景: ${area.id}, 已清洁: ${area.cleanedDirts.length}/${area.dirts.length}`);
+    console.log(`[GameplayScene] cleanedDirts:`, area.cleanedDirts);
     
     // 保存当前主关卡状态
     this.deepArea.originalDirts = [...this.dirtObjects];
@@ -4107,14 +4147,19 @@ class GameplayScene extends Scene {
     const currentArea = this.deepArea.areas.find(a => a.id === this.deepArea.currentAreaId);
     if (currentArea) {
       // 记录已清洁的污垢
+      const beforeCount = currentArea.cleanedDirts.length;
       this.dirtObjects.forEach(dirt => {
         if (dirt.state === 'clean') {
           const dirtId = dirt.id || `${dirt.originalX}-${dirt.originalY}`;
           if (!currentArea.cleanedDirts.includes(dirtId)) {
             currentArea.cleanedDirts.push(dirtId);
+            console.log(`[GameplayScene] 保存已清洁污垢: ${dirtId} (${dirt.name})`);
           }
         }
       });
+      console.log(`[GameplayScene] 二级背景 ${currentArea.id} 清洁状态: ${beforeCount} -> ${currentArea.cleanedDirts.length}`);
+    } else {
+      console.warn('[GameplayScene] 未找到当前二级背景区域:', this.deepArea.currentAreaId);
     }
     
     // 恢复主关卡状态
@@ -4122,6 +4167,9 @@ class GameplayScene extends Scene {
     this.deepArea.currentAreaId = null;
     this.bgImage = this.deepArea.originalBgImage;
     this.dirtObjects = this.deepArea.originalDirts;
+    
+    // 立即更新清洁度（确保包含刚保存的二级背景进度）
+    this._updateCleanProgress();
     
     // 开始淡出动画
     this._startTransition(false);
@@ -4159,11 +4207,16 @@ class GameplayScene extends Scene {
     const s = this.screenWidth / 750;
     const gameAreaY = this.screenHeight * 0.08;
     
+    const beforeFilter = area.dirts.length;
     this.dirtObjects = area.dirts
       .filter((d, index) => {
         // 过滤掉已清洁的污垢
         const dirtId = d.id || `${d.x}-${d.y}`;
-        return !area.cleanedDirts.includes(dirtId);
+        const isCleaned = area.cleanedDirts.includes(dirtId);
+        if (isCleaned) {
+          console.log(`[GameplayScene] 过滤掉已清洁污垢: ${dirtId}`);
+        }
+        return !isCleaned;
       })
       .map((dirtConfig, index) => {
         const dirtType = DIRT_TYPES[dirtConfig.type];
@@ -4172,7 +4225,10 @@ class GameplayScene extends Scene {
           return null;
         }
         
-        const circleSize = 60 * s;
+        // 优先使用 levelConfig 中的 scale，否则使用 DIRT_TYPES 中的默认 scale
+        const scale = dirtConfig.scale ?? dirtType?.scale ?? 1;
+        const baseCircleSize = 60 * s;
+        const circleSize = baseCircleSize * scale;
         
         return {
           id: dirtConfig.id || `deep_${area.id}_${index}`,
@@ -4185,6 +4241,8 @@ class GameplayScene extends Scene {
           width: circleSize,
           height: circleSize,
           size: circleSize,
+          scale: scale,             // 缩放比例（用于渲染）
+          mirror: dirtConfig.mirror, // 镜像方向：'horizontal' | 'vertical' | undefined
           state: 'dirty',
           selected: false,
           cleaning: false,
@@ -4199,7 +4257,7 @@ class GameplayScene extends Scene {
       })
       .filter(d => d !== null);
     
-    console.log(`[GameplayScene] 二级区域生成 ${this.dirtObjects.length} 个污垢`);
+    console.log(`[GameplayScene] 二级区域生成 ${this.dirtObjects.length}/${beforeFilter} 个污垢 (过滤了 ${beforeFilter - this.dirtObjects.length} 个已清洁)`);
   }
   
   /**
@@ -4424,7 +4482,12 @@ class GameplayScene extends Scene {
     const totalCleaned = mainCleaned + deepCleaned;
     
     if (totalDirts > 0) {
-      this.cleanProgress = (totalCleaned / totalDirts) * 100;
+      const newProgress = (totalCleaned / totalDirts) * 100;
+      // 只在清洁度变化时打印日志
+      if (Math.abs(newProgress - this.cleanProgress) > 0.1) {
+        console.log(`[GameplayScene] 清洁度更新: ${this.cleanProgress.toFixed(1)}% -> ${newProgress.toFixed(1)}% (主: ${mainCleaned}/${mainTotal}, 二级: ${deepCleaned}/${deepTotal})`);
+      }
+      this.cleanProgress = newProgress;
       
       // 更新 TopBar 的进度
       if (this.topBar) {
@@ -4575,26 +4638,29 @@ class GameplayScene extends Scene {
     this.toolPosition = { x, y };
     this.selectedDirt = dirt;
     
+    // 保留之前的进度（如果有的话）
+    const existingStrokeCount = dirt.strokeCount || 0;
+    
     const gameAreaY = this.screenHeight * 0.08;
     this.strokeState = {
       active: true,
       dirt: dirt,
-      strokeCount: 0,
+      strokeCount: existingStrokeCount,  // 从之前的进度继续
       maxStrokes: 3,
       lastPos: { x, y: y - gameAreaY },
       totalDistance: 0,
-      minStrokeDistance: 60 * (this.screenWidth / 750)  // 增加距离阈值，需要划动更多距离才算一次
+      minStrokeDistance: 60 * (this.screenWidth / 750)
     };
     
     // 在污垢对象上记录当前划动次数，用于渲染进度条
-    dirt.strokeCount = 0;
+    dirt.strokeCount = existingStrokeCount;  // 保留之前的进度
     dirt.maxStrokes = 3;
     
     // 高亮显示目标污垢
     dirt.isHighlighted = true;
     dirt.highlightScale = 1;
     
-    console.log(`[GameplayScene] 开始划动清洁: ${dirt.name}, 需要划动 3 次`);
+    console.log(`[GameplayScene] 开始划动清洁: ${dirt.name}, 已有进度: ${existingStrokeCount}/3`);
   }
   
   /**
@@ -4651,21 +4717,21 @@ class GameplayScene extends Scene {
     }
     
     // 检查是否完成有效划动（使用while循环处理可能超过阈值多次的情况）
-    while (state.totalDistance >= state.minStrokeDistance && state.strokeCount < state.maxStrokes) {
+    while (state.totalDistance >= state.minStrokeDistance && dirt.strokeCount < state.maxStrokes) {
       state.totalDistance = 0;  // 重置距离计数
       state.lastCountTime = now; // 记录计数时间
       state.strokeCount++;
       dirt.strokeCount = state.strokeCount;
       
-      console.log(`[GameplayScene] ✅ 划动计数: ${state.strokeCount}/${state.maxStrokes}`);
+      console.log(`[GameplayScene] ✅ 划动计数: ${state.strokeCount}/${state.maxStrokes} (dirt.strokeCount: ${dirt.strokeCount})`);
       
       // 触发震动反馈（每完成一次划动）
       if (typeof wx !== 'undefined' && wx.vibrateShort) {
         wx.vibrateShort({ type: 'light' });
       }
       
-      // 检查是否完成所有划动
-      if (state.strokeCount >= state.maxStrokes) {
+      // 检查是否完成所有划动（使用 dirt.strokeCount 判断）
+      if (dirt.strokeCount >= state.maxStrokes) {
         console.log('[GameplayScene] 划动完成，清洁完成');
         state.active = false;
         state.totalDistance = 0;
@@ -4872,9 +4938,12 @@ class GameplayScene extends Scene {
     // 立即重置槽位状态（让用户可以操作其他槽位）
     this.isDraggingTool = false;
     this.currentToolIndex = -1;
+    this.strokeState.active = false; // 重置划动清洁状态
     if (this.toolSlot) {
       this.toolSlot.emptySlots.clear();
       this.toolSlot.selectedIndex = -1;
+      this.toolSlot.isDragging = false;
+      this.toolSlot._pendingSlotIndex = -1;
     }
     
     // 清除新手引导提示
@@ -4884,9 +4953,11 @@ class GameplayScene extends Scene {
       this.tutorial.showClothDirtHint = false;
     }
     
-    // 延迟清除活动工具（等动画完成后）
+    // 立即清除活动工具（防止竞态条件：用户在动画期间点击其他位置）
+    this.activeTool = null;
+    
+    // 延迟重置动画状态（等动画完成后）
     setTimeout(() => {
-      this.activeTool = null;
       this.toolAnim.active = false;
       this.toolAnim.isDespawning = false;
     }, 350); // 350ms 动画时长

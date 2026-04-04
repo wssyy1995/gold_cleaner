@@ -28,7 +28,7 @@ export const DIRT_TYPES = {
     difficulty: 1,
     recipes: [['rubbish_bin']],
     operate_type: 'throw',
-    scale: 0.5
+    scale: 0.7
   },
   paper3:{
     name: '纸团3',
@@ -46,7 +46,7 @@ export const DIRT_TYPES = {
     difficulty: 1,
     recipes: [['rubbish_bin']],
     operate_type: 'throw',
-    scale: 0.6
+    scale: 0.7
   },
   banana:{
     name: '香蕉',
@@ -73,14 +73,23 @@ export const DIRT_TYPES = {
     difficulty: 1,
     recipes: [['dc_basket']],
     operate_type: 'throw',
-    scale: 1.5
+    scale: 1.1
   },
-  stain: { 
+  waterstain: { 
     name: '水渍污渍', 
-    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_stain.png',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_waterstain.png',
     color: '#654321', 
     difficulty: 2,
-    scale: 3,
+    scale: 2,
+    recipes: [['cloth']],
+    operate_type: 'wipe'
+  },
+  blackmark: { 
+    name: '黑印', 
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_blackmark.png',
+    color: '#654321', 
+    difficulty: 2,
+    scale: 1,
     recipes: [['cloth']],
     operate_type: 'wipe'
   },

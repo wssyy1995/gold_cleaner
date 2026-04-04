@@ -622,6 +622,8 @@ class ToolSlot {
     // 检查是否在容器内
     if (x < this.containerX || x > this.containerX + this.containerW ||
         y < this.containerY || y > this.containerY + this.containerH) {
+      // 重置待处理槽位索引，防止上一次的值被误用
+      this._pendingSlotIndex = -1;
       return null;
     }
     

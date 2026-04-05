@@ -1,0 +1,203 @@
+import React, { useRef, useState, useEffect } from 'react';
+import { Droplet, RefreshCw, Maximize, Loader2 } from 'lucide-react';
+
+export default function LimescaleSimulator() {
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const lastPos = useRef({ x: 0, y: 0 });
+  
+  // 写死的参数
+  const density = 40;
+  const hardness = 0.8;
+  const opacity = 0.5;
+
+  const bgColor = '#333333';
+
+  const initCanvas = () => {
+    if (isGenerating) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.05)');
+    grad.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  };
+
+  useEffect(() => {
+    initCanvas();
+  }, []);
+
+  const drawLimescaleCluster = (centerX, centerY) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    const numSpots = Math.floor(density * (0.8 + Math.random() * 0.4));
+    const clusterRadius = 40;
+
+    for (let i = 0; i < numSpots; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * clusterRadius;
+      const x = centerX + Math.cos(angle) * radius * 0.9;
+      const y = centerY + Math.sin(angle) * radius * 1.1;
+
+      const sizeRandom = Math.pow(Math.random(), 4);
+      const spotSize = 0.5 + (sizeRandom * 7 + Math.random() * 1.2) * hardness;
+      
+      const spotOpacity = 0.15 + (Math.random() * 0.45 * opacity);
+      const fillColor = `rgba(235, 235, 240, ${spotOpacity})`;
+
+      if (spotSize < 1.5 && sizeRandom < 0.1) {
+        ctx.fillStyle = fillColor;
+        ctx.fillRect(x, y, spotSize * (1 + Math.random()), spotSize * (1 + Math.random()));
+        continue; 
+      }
+      
+      ctx.beginPath();
+      const points = 6 + Math.floor(Math.random() * 4);
+      for (let p = 0; p < points; p++) {
+        const pAngle = (p / points) * Math.PI * 2;
+        let pRadiusX = spotSize * (0.7 + Math.random() * 0.5);
+        let pRadiusY = spotSize * (0.7 + Math.random() * 0.5);
+
+        if (sizeRandom > 0.1 && (pAngle > Math.PI * 0.1 && pAngle < Math.PI * 0.9)) {
+          const gravityStretch = 1 + (sizeRandom * 3) + Math.random();
+          pRadiusY = pRadiusY * gravityStretch;
+        }
+
+        const px = x + Math.cos(pAngle) * pRadiusX;
+        const py = y + Math.sin(pAngle) * pRadiusY;
+        
+        if (p === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
+        }
+      }
+      ctx.closePath();
+      
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+
+      const edgeOpacity = spotOpacity * (1.5 + sizeRandom) * hardness;
+      ctx.lineWidth = 0.3 + (sizeRandom * 0.8);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(edgeOpacity, 0.95)})`;
+      ctx.stroke();
+    }
+  };
+
+  const generateFullScreen = () => {
+    if (isGenerating) return;
+    setIsGenerating(true);
+    
+    const canvas = canvasRef.current;
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    const step = 30;
+    let currentY = 0;
+
+    const drawChunk = () => {
+      for (let i = 0; i < 4 && currentY < height; i++, currentY += step) {
+        for (let x = 0; x < width; x += step) {
+          const offsetX = x + (Math.random() * step - step/2);
+          const offsetY = currentY + (Math.random() * step - step/2);
+          drawLimescaleCluster(offsetX, offsetY);
+        }
+      }
+      
+      if (currentY < height) {
+        requestAnimationFrame(drawChunk);
+      } else {
+        setIsGenerating(false);
+      }
+    };
+    
+    requestAnimationFrame(drawChunk);
+  };
+
+  const handlePointerDown = (e) => {
+    setIsDrawing(true);
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    lastPos.current = { x, y };
+    drawLimescaleCluster(x, y);
+  };
+
+  const handlePointerMove = (e) => {
+    if (!isDrawing) return;
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const dx = x - lastPos.current.x;
+    const dy = y - lastPos.current.y;
+    if (dx * dx + dy * dy < 144) return;
+    
+    lastPos.current = { x, y };
+    drawLimescaleCluster(x, y);
+  };
+
+  const handlePointerUp = () => setIsDrawing(false);
+
+  return (
+    <div className="flex flex-col items-center justify-center p-6 bg-gray-50 min-h-screen font-sans">
+      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 max-w-2xl w-full">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-100 p-2 rounded-lg">
+              <Droplet className="text-blue-600 w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">玻璃水垢特效 (精简版)</h1>
+              <p className="text-sm text-gray-500">参数已锁定，享受极致流畅的涂抹体验</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={initCanvas}
+              disabled={isGenerating}
+              className={`flex items-center gap-2 px-4 py-2 ${isGenerating ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} rounded-lg transition-colors font-medium`}
+            >
+              <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
+              擦亮玻璃
+            </button>
+            <button 
+              onClick={generateFullScreen}
+              disabled={isGenerating}
+              className={`flex items-center gap-2 px-4 py-2 ${isGenerating ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg transition-colors font-medium`}
+            >
+              {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Maximize className="w-4 h-4" />}
+              一键铺满
+            </button>
+          </div>
+        </div>
+
+        <div className="flex justify-center rounded-lg overflow-hidden border-4 border-gray-800 shadow-xl bg-gray-900 w-full">
+          <canvas
+            ref={canvasRef}
+            width={600}
+            height={400}
+            className="cursor-crosshair touch-none w-full h-auto object-contain"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

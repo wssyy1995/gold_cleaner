@@ -78,6 +78,11 @@ class GameApp {
     // 初始化游戏管理器
     this.gameManager = new GameManager();
     gameInstance = this.gameManager;
+    
+    // 挂到全局，方便调试工具访问
+    if (typeof globalThis !== 'undefined') {
+      globalThis._gameInstance = this.gameManager;
+    }
 
     // 初始化游戏
     this.gameManager.init();

@@ -46,7 +46,9 @@ class DataManager {
       // 震动开关
       vibrationEnabled: true,
       // 音量大小 (0-1)
-      volume: 1.0
+      volume: 1.0,
+      // 坐标显示
+      showCoordinates: false
     };
 
     // 拥有的道具

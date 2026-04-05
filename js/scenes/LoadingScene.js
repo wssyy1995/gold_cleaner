@@ -13,6 +13,7 @@ import { getGame } from '../../app';
 import { getAllDirtTypes, GlobalDirtImageCache } from '../config/dirtyConfig';
 import { ALL_TOOLS, GlobalToolImageCache } from '../config/ToolConfig';
 import { GlobalPreviewCache } from './HomeScene';
+import CoordinateRenderer from '../utils/CoordinateRenderer';
 
 
 // 全局手指引导图片缓存
@@ -894,6 +895,11 @@ class LoadingScene extends Scene {
     if (this.percentText) this.percentText.onRender(ctx);
     if (this.tipText) this.tipText.onRender(ctx);
     if (this.versionText) this.versionText.onRender(ctx);
+    
+    // 绘制坐标网格（调试用）
+    if (CoordinateRenderer.isEnabled()) {
+      CoordinateRenderer.render(ctx, this.screenWidth, this.screenHeight, 100);
+    }
   }
 
   _drawLoadingIcon(ctx, x, y, s = 1) {

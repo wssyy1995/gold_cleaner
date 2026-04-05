@@ -5,6 +5,24 @@
 
 // 污垢类型定义
 export const DIRT_TYPES = {
+  preset_mildew: { 
+    name: '霉斑', 
+    difficulty: 1,
+    recipes: [['cloth']],
+    operate_type: 'wipe'
+  },
+  preset_water_incru: { 
+    name: '水渍', 
+    difficulty: 1,
+    recipes: [['cloth']],
+    operate_type: 'wipe'
+  },
+  preset_water_incre: { 
+    name: '水渍', 
+    difficulty: 1,
+    recipes: [['cloth']],
+    operate_type: 'wipe'
+  },
   preset_dust: { 
     name: '灰尘', 
     color: '#8B4513', 
@@ -74,6 +92,15 @@ export const DIRT_TYPES = {
     recipes: [['dc_basket']],
     operate_type: 'throw',
     scale: 1.1
+  },
+  pants:{
+    name: '脏短裤', 
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_pants.png',
+    color: '#8B4513', 
+    difficulty: 1,
+    recipes: [['dc_basket']],
+    operate_type: 'throw',
+    scale: 1
   },
   waterstain: { 
     name: '水渍污渍', 

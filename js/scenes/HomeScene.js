@@ -10,6 +10,7 @@ import { getLevelImageKey, getLevelImageConfig } from '../cloud/CloudResourceCon
 import CloudStorage from '../cloud/CloudStorage';
 import { getGame } from '../../app';
 import { getLevel } from '../config/LevelConfig';
+import CoordinateRenderer from '../utils/CoordinateRenderer';
 
 // 全局底部按钮图片缓存 - 避免场景切换时重新加载
 const GlobalBottomBtnCache = {
@@ -1484,6 +1485,11 @@ class HomeScene extends Scene {
 
     // 绘制底部图片按钮
     this._drawBottomButtons(ctx);
+    
+    // 绘制坐标网格（调试用）
+    if (CoordinateRenderer.isEnabled()) {
+      CoordinateRenderer.render(ctx, this.screenWidth, this.screenHeight, 100);
+    }
   }
 
   _drawBackgroundCover(ctx, img, sw, sh) {

@@ -7,6 +7,9 @@ import Button from '../ui/components/Button';
 import Text from '../ui/components/Text';
 import { globalEvent } from '../core/EventEmitter';
 import UploadTool from '../cloud/UploadTool';
+import DataManager from '../managers/DataManager';
+import CoordinateRenderer from '../utils/CoordinateRenderer';
+import { getGame } from '../../app';
 
 class SettingScene extends Scene {
   constructor() {
@@ -18,8 +21,12 @@ class SettingScene extends Scene {
     this.settings = {
       musicVolume: 0.8,
       soundVolume: 1.0,
-      vibration: true
+      vibration: true,
+      showCoordinates: false
     };
+    
+    // DataManager 实例
+    this.dataManager = null;
     
     // 上传工具
     this.uploadTool = null;
@@ -34,25 +41,49 @@ class SettingScene extends Scene {
   }
 
   _loadSettings() {
-    if (typeof wx === 'undefined') return;
+    // 从 DataManager 加载设置
+    const game = getGame();
+    if (game && game.dataManager) {
+      this.dataManager = game.dataManager;
+      const dmSettings = this.dataManager.getSettings();
+      this.settings.showCoordinates = dmSettings.showCoordinates || false;
+    }
     
-    try {
-      const saved = wx.getStorageSync('gameSettings');
-      if (saved) {
-        this.settings = JSON.parse(saved);
+    // 兼容旧版本地存储
+    if (typeof wx !== 'undefined') {
+      try {
+        const saved = wx.getStorageSync('gameSettings');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          this.settings.musicVolume = parsed.musicVolume ?? this.settings.musicVolume;
+          this.settings.soundVolume = parsed.soundVolume ?? this.settings.soundVolume;
+          this.settings.vibration = parsed.vibration ?? this.settings.vibration;
+        }
+      } catch (e) {
+        console.warn('[SettingScene] 加载旧版设置失败');
       }
-    } catch (e) {
-      console.warn('[SettingScene] 加载设置失败');
     }
   }
 
   _saveSettings() {
-    if (typeof wx === 'undefined') return;
+    // 保存到 DataManager
+    if (this.dataManager) {
+      this.dataManager.updateSettings({
+        showCoordinates: this.settings.showCoordinates
+      });
+    }
     
-    try {
-      wx.setStorageSync('gameSettings', JSON.stringify(this.settings));
-    } catch (e) {
-      console.warn('[SettingScene] 保存设置失败');
+    // 兼容旧版本地存储
+    if (typeof wx !== 'undefined') {
+      try {
+        wx.setStorageSync('gameSettings', JSON.stringify({
+          musicVolume: this.settings.musicVolume,
+          soundVolume: this.settings.soundVolume,
+          vibration: this.settings.vibration
+        }));
+      } catch (e) {
+        console.warn('[SettingScene] 保存设置失败');
+      }
     }
   }
 
@@ -206,11 +237,23 @@ class SettingScene extends Scene {
       this._saveSettings();
     });
     
+    // 坐标显示开关（开发者选项）
+    this._renderSwitch(ctx, s, 40 * s, startY + itemHeight * 3, 670 * s, '坐标显示', this.settings.showCoordinates, (v) => {
+      this.settings.showCoordinates = v;
+      this._saveSettings();
+      console.log('[SettingScene] 坐标显示:', v ? '开启' : '关闭');
+    });
+    
     // 关于游戏
-    this._renderAbout(ctx, s, startY + itemHeight * 4);
+    this._renderAbout(ctx, s, startY + itemHeight * 5);
     
     // 调试区域 - 上传按钮
     this._renderDebugSection(ctx, s);
+    
+    // 绘制坐标网格（调试用）
+    if (CoordinateRenderer.isEnabled()) {
+      CoordinateRenderer.render(ctx, this.screenWidth, this.screenHeight, 100);
+    }
   }
   
   /**
@@ -392,6 +435,13 @@ class SettingScene extends Scene {
     // 震动开关
     if (this._checkSwitchHit(x, y, s, 40 * s, 350 * s, 670 * s)) {
       this.settings.vibration = !this.settings.vibration;
+      this._saveSettings();
+      return true;
+    }
+    
+    // 坐标显示开关
+    if (this._checkSwitchHit(x, y, s, 40 * s, 450 * s, 670 * s)) {
+      this.settings.showCoordinates = !this.settings.showCoordinates;
       this._saveSettings();
       return true;
     }

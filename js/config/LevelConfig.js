@@ -21,14 +21,14 @@ const STAGE_1_LEVELS = [
       { type: 'banana', x: 320, y: 910},
       { type: 'paper2', x: 265, y: 730 },
       { type: 'apple', x: 405, y: 890 },
-      { type: 'socks', x: 450, y: 750 },
+      { type: 'pants', x: 450, y: 750 },
       { type: 'blackmark', x: 135, y: 800 ,scale: 1.2}
     ],
     dirts_deep_area: [
       { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
         { type: 'paper', x: 300, y: 420 }]},
         {id: 2, x: 550, y: 950,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bed.png`,dirts: [
-          { type: 'socks', x: 400, y: 600 }]}
+          { type: 'socks', x: 400, y: 700,scale: 1.5 ,mirror:''}]}
     ],
     timeLimit: 120,
     targetScore: 100,
@@ -41,8 +41,10 @@ const STAGE_1_LEVELS = [
     name: '卫生间',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l2_home.png`,
     dirts: [
-      { type: 'paper', x: 200, y: 350 },
-      { type: 'paper', x: 300, y: 420 },
+      { type: 'preset_water_incru', x: 50, y: 560,radius:30,count:3 },
+      { type: 'preset_water_incru', x: 290, y: 380,radius:50,count:5 },
+      { type: 'preset_water_incru', x: 390, y: 400,radius:40,count:4 },
+      { type: 'preset_water_incru', x: 290, y: 550,radius:40,count:4 },
       { type: 'waterstain', x: 500, y: 1100 },
       { type: 'waterstain', x: 400, y: 1200 },
       { type: 'waterstain', x: 3300, y: 1150 }
@@ -50,7 +52,7 @@ const STAGE_1_LEVELS = [
     ],
     dirts_deep_area: [
       { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
-        { type: 'paper', x: 300, y: 420 }]},
+        { type: 'preset_mildew', x: 220, y: 300,radius:60,count:10}]},
         {id: 2, x: 550, y: 950,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bed.png`,dirts: [
           { type: 'socks', x: 400, y: 600 }]}
     ],

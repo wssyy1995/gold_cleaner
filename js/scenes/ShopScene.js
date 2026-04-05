@@ -6,6 +6,7 @@ import Scene from '../core/Scene';
 import Button from '../ui/components/Button';
 import Text from '../ui/components/Text';
 import { globalEvent } from '../core/EventEmitter';
+import CoordinateRenderer from '../utils/CoordinateRenderer';
 
 class ShopScene extends Scene {
   constructor() {
@@ -296,6 +297,11 @@ class ShopScene extends Scene {
     
     // Toast提示
     this._renderToast(ctx, s);
+    
+    // 绘制坐标网格（调试用）
+    if (CoordinateRenderer.isEnabled()) {
+      CoordinateRenderer.render(ctx, this.screenWidth, this.screenHeight, 100);
+    }
   }
   
   _renderProducts(ctx, s) {

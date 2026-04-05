@@ -6,6 +6,7 @@ import Scene from '../core/Scene';
 import Button from '../ui/components/Button';
 import Text from '../ui/components/Text';
 import { globalEvent } from '../core/EventEmitter';
+import CoordinateRenderer from '../utils/CoordinateRenderer';
 
 class ToolScene extends Scene {
   constructor() {
@@ -355,6 +356,11 @@ class ToolScene extends Scene {
 
     // Toast
     this._renderToast(ctx, s);
+    
+    // 绘制坐标网格（调试用）
+    if (CoordinateRenderer.isEnabled()) {
+      CoordinateRenderer.render(ctx, this.screenWidth, this.screenHeight, 100);
+    }
   }
 
   _renderInventory(ctx, s) {

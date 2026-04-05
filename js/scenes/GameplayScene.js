@@ -12,11 +12,13 @@ import GameConfig from '../config/GameConfig';
 import { BASE_TOOLS, PREMIUM_TOOLS, getTool, GlobalToolImageCache } from '../config/ToolConfig';
 import { getLevel } from '../config/LevelConfig';
 import { DIRT_TYPES, GlobalDirtImageCache } from '../config/dirtyConfig';
+import PresetDirtRegistry from '../presets/PresetDirtRegistry';
 import { GlobalPreviewCache } from './HomeScene';
 import { globalEvent } from '../core/EventEmitter';
 import { getGame } from '../../app';
 import { getLevelImageKey } from '../cloud/CloudResourceConfig';
 import CloudStorage from '../cloud/CloudStorage';
+import CoordinateRenderer from '../utils/CoordinateRenderer';
 
 import PauseMenu from '../ui/dialogs/PauseMenu';
 import LevelCompleteDialog from '../ui/dialogs/LevelCompleteDialog';
@@ -910,6 +912,12 @@ class GameplayScene extends Scene {
         return;
       }
       
+      // 检查是否是预制污垢类型
+      if (dirtConfig.type.startsWith('preset_')) {
+        this._generatePresetDirt(dirtConfig, i, s, dirtType);
+        return;
+      }
+      
       // 配置中的坐标是设计尺寸（750x1334），需要适配当前屏幕
       const x = (dirtConfig.x || 300) * s;
       const y = (dirtConfig.y || 400) * s;
@@ -945,6 +953,62 @@ class GameplayScene extends Scene {
     });
     
     console.log(`[GameplayScene] 生成了 ${this.dirtObjects.length} 个污垢圆圈`);
+  }
+
+  /**
+   * 生成预制污垢
+   * @param {Object} dirtConfig - 污垢配置
+   * @param {number} i - 索引
+   * @param {number} s - 屏幕缩放比例
+   * @param {Object} dirtType - 污垢类型定义
+   */
+  _generatePresetDirt(dirtConfig, i, s, dirtType) {
+    // 配置中的坐标是设计尺寸（750x1334），需要适配当前屏幕
+    const x = (dirtConfig.x || 300) * s;
+    const y = (dirtConfig.y || 400) * s;
+    
+    // 使用配置的 radius（默认30），这是霉斑分布范围的半径
+    const radius = (dirtConfig.radius || 30) * s;
+    const scale = dirtConfig.scale ?? 1;
+    
+    // 污垢的碰撞区域大小基于 radius（直径）
+    const circleSize = radius * 2 * scale;
+    
+    // 生成预制污垢数据（传入已缩放的坐标）
+    const scaledConfig = {
+      ...dirtConfig,
+      x: x,
+      y: y
+    };
+    const presetData = PresetDirtRegistry.generate(dirtConfig.type, scaledConfig, s);
+    
+    this.dirtObjects.push({
+      id: i,
+      type: dirtConfig.type,
+      name: dirtType.name,
+      x: x,
+      y: y,
+      width: circleSize,
+      height: circleSize,
+      size: circleSize,
+      scale: scale,
+      mirror: dirtConfig.mirror,
+      state: 'dirty',
+      selected: false,
+      cleaning: false,
+      strokeCount: 0,
+      maxStrokes: 3,
+      currentRecipe: dirtType.recipes[0],
+      currentStep: 0,
+      recipes: dirtType.recipes,
+      score: 10,
+      coinReward: 5,
+      // 预制污垢特有数据
+      presetType: dirtConfig.type,  // 预制类型标识
+      presetData: presetData        // 预制数据（菌落列表等）
+    });
+    
+    console.log(`[GameplayScene] 生成预制污垢: ${dirtConfig.type}, 位置: (${x}, ${y})`);
   }
 
   /**
@@ -2239,6 +2303,11 @@ class GameplayScene extends Scene {
     
     // 渲染待进入状态的放大镜呼吸闪烁
     this._renderPendingEnterMagnifier(ctx, s);
+    
+    // 绘制坐标网格（调试用）
+    if (CoordinateRenderer.isEnabled()) {
+      CoordinateRenderer.render(ctx, this.screenWidth, this.screenHeight, 100);
+    }
   }
 
   /**
@@ -2352,6 +2421,7 @@ class GameplayScene extends Scene {
   _renderDirts(ctx, gameAreaY, s) {
     const now = Date.now();
     
+    // 第一阶段：渲染所有污垢
     this.dirtObjects.forEach(dirt => {
       if (dirt.state === 'clean') return;
       
@@ -2371,6 +2441,12 @@ class GameplayScene extends Scene {
         pulseAlpha = pulse;
       }
       
+      // 检查是否是预制污垢类型
+      if (dirt.presetType) {
+        this._renderPresetDirt(ctx, dirt, cx, cy, radius, pulseAlpha, s);
+        return;
+      }
+      
       // 如果从缓存能获取到图片，使用图片渲染
       const dirtImg = GlobalDirtImageCache.get(dirt.type);
       if (dirtImg) {
@@ -2381,11 +2457,50 @@ class GameplayScene extends Scene {
       }
     });
     
+    // 第二阶段：在所有污垢之上渲染进度条（确保层级最高）
+    this.dirtObjects.forEach(dirt => {
+      if (dirt.state === 'clean') return;
+      if (dirt.strokeCount <= 0 || dirt.strokeCount > dirt.maxStrokes) return;
+      
+      const cx = dirt.x;
+      const cy = dirt.y + gameAreaY;
+      const highlightScale = dirt.highlightScale || 1;
+      const radius = (dirt.width / 2) * highlightScale;
+      
+      this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, dirt.maxStrokes, s);
+    });
+    
     // 绘制活动工具（如果在页面上，包括拖动状态）
     // 包括收回动画期间（activeTool 可能为 null，但动画还在进行）
     if (this.activeTool || (this.toolAnim.active && this.toolAnim.isDespawning)) {
       this._renderActiveTool(ctx, s);
     }
+  }
+
+  /**
+   * 渲染预制污垢
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {Object} dirt - 污垢对象
+   * @param {number} cx - 中心X坐标
+   * @param {number} cy - 中心Y坐标
+   * @param {number} radius - 污垢半径
+   * @param {number} pulseAlpha - 脉冲透明度
+   * @param {number} s - 屏幕缩放比例
+   */
+  _renderPresetDirt(ctx, dirt, cx, cy, radius, pulseAlpha, s) {
+    // 计算划动清洁进度（从下往上消失）
+    const strokeCount = dirt.strokeCount || 0;
+    let remainingRatio = 1;
+    if (strokeCount >= 3) {
+      remainingRatio = 0;
+    } else if (strokeCount === 2) {
+      remainingRatio = 2 / 4;
+    } else if (strokeCount === 1) {
+      remainingRatio = 3 / 4;
+    }
+    
+    // 使用 PresetDirtRegistry 渲染（传入实际渲染坐标 cx, cy）
+    PresetDirtRegistry.render(ctx, dirt, s, pulseAlpha, remainingRatio, cx, cy);
   }
 
   /**
@@ -2475,12 +2590,6 @@ class GameplayScene extends Scene {
       }
       
       ctx.restore();
-      
-      // 渲染划动清洁进度条（三格蓝色能量条）
-      // 只要有进度就常驻显示，包括完成时（pendingComplete 状态下也要显示）
-      if (dirt.strokeCount > 0 && dirt.strokeCount <= dirt.maxStrokes) {
-        this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, dirt.maxStrokes, s);
-      }
   }
 
   /**
@@ -2511,13 +2620,14 @@ class GameplayScene extends Scene {
    * @param {number} s - 屏幕缩放比例
    */
   _renderStrokeProgress(ctx, cx, cy, radius, strokeCount, maxStrokes, s) {
-    const barWidth = radius * 2.6;      // 进度条总宽度（更大）
-    const barHeight = 18 * s;           // 进度条高度（更大）
-    const gap = 9 * s;                  // 格子之间的间隙（更大）
+    // 固定大小进度条（不随污垢大小变化）
+    const barWidth = 100 * s;           // 固定宽度 100px
+    const barHeight = 16 * s;           // 固定高度 16px
+    const gap = 6 * s;                  // 格子间隙
     const cellWidth = (barWidth - gap * (maxStrokes - 1)) / maxStrokes;  // 每个格子的宽度
-    const startX = cx - barWidth / 2;   // 起始X坐标
-    const startY = cy - radius - 50 * s; // 在污垢上方显示，距离更大
-    const cornerRadius = 6 * s;         // 圆角半径（更大）
+    const startX = cx - barWidth / 2;   // 起始X坐标（居中）
+    const startY = cy - 50 * s;         // 在污垢上方固定距离显示
+    const cornerRadius = 4 * s;         // 圆角半径
     
     ctx.save();
     
@@ -2635,12 +2745,6 @@ class GameplayScene extends Scene {
     ctx.fill();
     
     ctx.restore();
-    
-    // 渲染划动清洁进度条（三格蓝色能量条）
-    // 只要有进度就常驻显示，包括完成时（pendingComplete 状态下也要显示）
-    if (dirt.strokeCount > 0 && dirt.strokeCount <= dirt.maxStrokes) {
-      this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, dirt.maxStrokes, s);
-    }
   }
 
   /**
@@ -4226,8 +4330,27 @@ class GameplayScene extends Scene {
         const baseCircleSize = 60 * s;
         const circleSize = baseCircleSize * scale;
         
+        // ID 必须与过滤时使用的逻辑一致：d.id || `${d.x}-${d.y}`
+        const dirtId = dirtConfig.id || `${dirtConfig.x}-${dirtConfig.y}`;
+        
+        // 检查是否是预制污垢类型
+        const isPreset = dirtConfig.type.startsWith('preset_');
+        let presetData = null;
+        let presetType = null;
+        
+        if (isPreset) {
+          // 传入已缩放的坐标
+          const scaledConfig = {
+            ...dirtConfig,
+            x: dirtConfig.x * s,
+            y: dirtConfig.y * s
+          };
+          presetData = PresetDirtRegistry.generate(dirtConfig.type, scaledConfig, s);
+          presetType = dirtConfig.type;
+        }
+        
         return {
-          id: dirtConfig.id || `deep_${area.id}_${index}`,
+          id: dirtId,
           originalX: dirtConfig.x, // 保存原始坐标用于标识
           originalY: dirtConfig.y,
           type: dirtConfig.type,
@@ -4248,7 +4371,10 @@ class GameplayScene extends Scene {
           currentStep: 0,
           recipes: dirtType.recipes,
           score: 10,
-          coinReward: 5
+          coinReward: 5,
+          // 预制污垢特有数据
+          presetType: presetType,
+          presetData: presetData
         };
       })
       .filter(d => d !== null);

@@ -1,0 +1,194 @@
+import React, { useRef, useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { RefreshCw, MousePointerClick, Trash2 } from 'lucide-react';
+
+export default function MoldSimulator() {
+  const canvasRef = useRef(null);
+  const [ctx, setCtx] = useState(null);
+
+  // Initialize canvas and draw background
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    // Support high DPI displays
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    
+    const context = canvas.getContext('2d');
+    context.scale(dpr, dpr);
+    setCtx(context);
+    
+    drawBackground(context, rect.width, rect.height);
+    generateRandomMold(context, rect.width, rect.height, 3);
+  }, []);
+
+  const drawBackground = (context, w, h) => {
+    // Fill base wall color
+    context.fillStyle = '#f2f0e6'; // Slightly aged off-white wall
+    context.fillRect(0, 0, w, h);
+
+    // Add subtle wall texture (noise)
+    context.fillStyle = 'rgba(0, 0, 0, 0.02)';
+    for (let i = 0; i < (w * h) / 10; i++) {
+      const x = Math.random() * w;
+      const y = Math.random() * h;
+      context.fillRect(x, y, 1, 1);
+    }
+    
+    // Add a slight vignette for a damp, gloomy corner feeling
+    const gradient = context.createRadialGradient(w/2, h/2, w/4, w/2, h/2, w);
+    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+    gradient.addColorStop(1, 'rgba(0,30,10,0.15)'); // Slightly greenish-dark vignette
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, w, h);
+  };
+
+  // Draw a single mold colony
+  const drawMoldColony = (context, centerX, centerY, size = 50, density = 1.0) => {
+    context.save();
+    
+    // 【性能优化】移除了极其耗费性能的 ctx.filter = 'blur()'
+    // 保留正片叠底，通过透明度叠加来自然产生边缘柔和的绒毛质感
+    context.globalCompositeOperation = 'multiply';
+
+    // 【性能优化】将平方级增长 (size * size) 改为线性/较小系数的增长
+    // 大幅减少绘制调用次数，从几千次降低到几百次
+    const numSpores = Math.floor(size * 12 * density); 
+    
+    for (let i = 0; i < numSpores; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.pow(Math.random(), 2.5) * size; 
+      
+      const x = centerX + Math.cos(angle) * distance;
+      const y = centerY + Math.sin(angle) * distance;
+
+      // 【性能优化】为了弥补粒子数量的减少，适当增大单颗孢子的基础半径
+      const maxSporeSize = Math.random() * 4 + 1; 
+      const sporeRadius = maxSporeSize * (1 - distance / size) + Math.random() * 1;
+
+      const r = Math.floor(Math.random() * 30 + 10);
+      const g = Math.floor(Math.random() * 40 + 20); 
+      const b = Math.floor(Math.random() * 30 + 10);
+      
+      const baseAlpha = 0.15 + Math.random() * 0.35; // 降低单体透明度，让叠加过渡更平滑
+      const alpha = baseAlpha * Math.max(0.05, 1 - (distance / size));
+
+      context.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      context.beginPath();
+      context.arc(x, y, Math.max(0.5, sporeRadius), 0, Math.PI * 2);
+      context.fill();
+    }
+    
+    // Add a few satellite colonies (spreading)
+    const numSatellites = Math.floor(Math.random() * 3);
+    for (let i = 0; i < numSatellites; i++) {
+       const satAngle = Math.random() * Math.PI * 2;
+       const satDist = size * 0.8 + Math.random() * size * 0.5;
+       const satX = centerX + Math.cos(satAngle) * satDist;
+       const satY = centerY + Math.sin(satAngle) * satDist;
+       
+       const satSize = size * (0.2 + Math.random() * 0.3);
+       // 同样优化卫星菌落的粒子数量
+       const satSpores = Math.floor(satSize * 8); 
+       
+       for (let j = 0; j < satSpores; j++) {
+          const sAngle = Math.random() * Math.PI * 2;
+          const sDist = Math.pow(Math.random(), 2) * satSize;
+          const sX = satX + Math.cos(sAngle) * sDist;
+          const sY = satY + Math.sin(sAngle) * sDist;
+          
+          context.fillStyle = `rgba(20, 30, 20, ${0.1 + Math.random() * 0.3})`;
+          context.beginPath();
+          context.arc(sX, sY, Math.random() * 2 + 0.5, 0, Math.PI * 2);
+          context.fill();
+       }
+    }
+    
+    context.restore();
+  };
+
+  const generateRandomMold = (context = ctx, w = 600, h = 400, count = 1) => {
+    if (!context) return;
+    for (let i = 0; i < count; i++) {
+      const x = Math.random() * w * 0.8 + w * 0.1;
+      const y = Math.random() * h * 0.8 + h * 0.1;
+      const size = Math.random() * 60 + 40; // Size between 40 and 100
+      drawMoldColony(context, x, y, size, 1.2);
+    }
+  };
+
+  const handleCanvasClick = (e) => {
+    if (!ctx || !canvasRef.current) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Vary size based on random factor for organic feel
+    const size = Math.random() * 50 + 30;
+    drawMoldColony(ctx, x, y, size, 1.5);
+  };
+
+  const handleClear = () => {
+    if (!ctx || !canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    drawBackground(ctx, rect.width, rect.height);
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-xl max-w-3xl mx-auto shadow-sm">
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">霉斑生成模拟器 (Canvas)</h2>
+        <p className="text-gray-500 text-sm">点击画布的任意位置即可“种植”一团霉菌，或使用下方按钮操作。</p>
+      </div>
+
+      <div className="relative rounded-lg overflow-hidden shadow-md bg-white mb-6 border border-gray-200">
+        <canvas
+          ref={canvasRef}
+          style={{ width: '600px', height: '400px', cursor: 'crosshair' }}
+          onClick={handleCanvasClick}
+          className="block"
+        />
+        
+        {/* Helper overlay instruction */}
+        <div className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1.5 bg-white/70 backdrop-blur-sm rounded-full text-xs text-gray-600 font-medium pointer-events-none">
+          <MousePointerClick size={14} />
+          点击墙面滋生霉斑
+        </div>
+      </div>
+
+      <div className="flex gap-4">
+        <Button 
+          onClick={() => generateRandomMold(ctx, 600, 400, 3)}
+          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700"
+        >
+          <RefreshCw size={16} />
+          随机生成 3 处霉斑
+        </Button>
+        <Button 
+          onClick={handleClear}
+          variant="outline"
+          className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+        >
+          <Trash2 size={16} />
+          彻底清理墙面
+        </Button>
+      </div>
+      
+      <div className="mt-8 text-sm text-gray-500 bg-gray-100 p-4 rounded-lg w-full">
+        <h3 className="font-semibold text-gray-700 mb-2">💡 渲染技术解析：</h3>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>非均匀分布：</strong> 使用 <code>Math.pow(Math.random(), 2.5)</code> 使黑绿色的“孢子”粒子高度集中在核心，边缘呈现自然的稀疏感。</li>
+          <li><strong>正片叠底：</strong> <code>globalCompositeOperation = 'multiply'</code> 让霉菌看起来是渗透进墙面毛孔里，而不是漂浮在表面。</li>
+          <li><strong>微模糊处理：</strong> <code>ctx.filter = 'blur(0.5px)'</code> 模拟霉菌特有的“绒毛”质感。</li>
+          <li><strong>卫星菌落：</strong> 在主斑块周围随机生成几个小范围的卫星斑，模拟霉菌向外蔓延的生长方式。</li>
+        </ul>
+      </div>
+    </div>
+  );
+}

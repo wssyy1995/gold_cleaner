@@ -15,10 +15,10 @@ class ToolUnlockDialog extends BaseDialog {
     // 弹窗宽度为屏幕宽度的 3/4，高度自适应
     const screenWidth = options.screenWidth || 750;
     const dialogWidth = screenWidth * 0.75;
-    // 高度根据工具数量自适应：基础高度 + 每个工具占用高度
+    // 高度根据工具数量自适应：基础高度 + 每个工具占用高度（增加描述区域高度）
     const toolCount = (options.unlockedTools || []).length;
-    const baseHeight = 420;
-    const toolHeight = toolCount > 1 ? (toolCount - 1) * 80 : 0;
+    const baseHeight = 480;  // 增加高度容纳描述
+    const toolHeight = toolCount > 1 ? (toolCount - 1) * 100 : 0;
     const dialogHeight = baseHeight + toolHeight;
     
     super({
@@ -158,15 +158,15 @@ class ToolUnlockDialog extends BaseDialog {
     ctx.fill();
     ctx.stroke();
     
-    // 5. 绘制解锁的工具图片
+    // 5. 绘制解锁的工具图片和描述
     const toolCount = this.unlockedTools.length;
-    const toolSize = Math.min(cardWidth * 0.35, cardHeight * 0.7);
+    const toolSize = Math.min(cardWidth * 0.35, cardHeight * 0.5);
     const spacing = toolSize * 1.2;
     const startX = this.width / 2 - (toolCount - 1) * spacing / 2;
     
     this.unlockedTools.forEach((tool, index) => {
       const toolX = startX + index * spacing;
-      const toolY = cardY + cardHeight / 2;
+      const toolY = cardY + cardHeight * 0.35;  // 图片位置偏上
       
       // 工具图片
       if (tool.image) {
@@ -178,11 +178,24 @@ class ToolUnlockDialog extends BaseDialog {
         ctx.beginPath();
         ctx.arc(toolX, toolY, toolSize / 2, 0, Math.PI * 2);
         ctx.fill();
+      }
+      
+      // 工具名称（图片下方）
+      ctx.fillStyle = '#8b4513';
+      ctx.font = `bold ${Math.floor(22 * s)}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText(tool.name || '?', toolX, toolY + toolSize / 2 + 28 * s);
+      
+      // 工具描述（名称下方）
+      if (tool.description) {
+        ctx.fillStyle = '#666666';
+        ctx.font = `${Math.floor(16 * s)}px Arial`;
         
-        // 工具名称
-        ctx.fillStyle = '#333333';
-        ctx.font = `${Math.floor(20 * s)}px Arial`;
-        ctx.fillText(tool.name || '?', toolX, toolY + toolSize / 2 + 25 * s);
+        // 描述文字自动换行
+        const maxWidth = cardWidth * 0.9;
+        const lineHeight = 20 * s;
+        const descY = toolY + toolSize / 2 + 50 * s;
+        this._wrapText(ctx, tool.description, toolX, descY, maxWidth, lineHeight);
       }
     });
     
@@ -232,6 +245,36 @@ class ToolUnlockDialog extends BaseDialog {
     this.stars.forEach(star => {
       this._drawStar(ctx, star);
     });
+  }
+  
+  /**
+   * 自动换行绘制文字
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {string} text - 要绘制的文字
+   * @param {number} x - 中心X坐标
+   * @param {number} y - 起始Y坐标
+   * @param {number} maxWidth - 最大宽度
+   * @param {number} lineHeight - 行高
+   */
+  _wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    const chars = text.split('');
+    let line = '';
+    let currentY = y;
+    
+    for (let i = 0; i < chars.length; i++) {
+      const testLine = line + chars[i];
+      const metrics = ctx.measureText(testLine);
+      
+      if (metrics.width > maxWidth && i > 0) {
+        ctx.fillText(line, x, currentY);
+        line = chars[i];
+        currentY += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, x, currentY);
+    return currentY;  // 返回最后一行的Y坐标
   }
   
   /**

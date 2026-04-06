@@ -6,11 +6,17 @@
 export default class WaterIncrustationPreset {
   /**
    * 生成水渍数据
-   * @param {Object} config - 配置 { x, y, radius, count }
+   * @param {Object} config - 配置 { x, y, radius, count, rect: [{x,y}, {x,y}, {x,y}, {x,y}] }
    * @param {number} s - 屏幕缩放比例
    * @returns {Object} 水渍数据 { clusters, centerX, centerY, radius }
    */
   static generate(config, s) {
+    // 如果提供了4个坐标点，使用四边形区域
+    if (config.rect && Array.isArray(config.rect) && config.rect.length === 4) {
+      return this._generateQuadWaterIncru(config, s);
+    }
+    
+    // 否则使用圆形半径（原有逻辑）
     const centerX = config.x;
     const centerY = config.y;
     const radius = (config.radius || 60) * s;
@@ -21,11 +27,11 @@ export default class WaterIncrustationPreset {
     // 水渍参数
     const density = 20;      // 每簇斑点数量~20
     const hardness = 0.9;    // 硬度系数
-    const opacity = 0.8;     // 透明度基数（增加，让水渍更明显）
+    const opacity = 0.8;     // 透明度基数
     
     // 防重叠参数（宽松）
-    const minDistance = 10 * s; // 簇之间的最小距离（10像素）
-    const maxAttempts = 1;      // 只尝试1次，找不到就重叠
+    const minDistance = 10 * s;
+    const maxAttempts = 1;
     
     for (let i = 0; i < count; i++) {
       let cx, cy, clusterRadius;
@@ -49,7 +55,6 @@ export default class WaterIncrustationPreset {
           const dy = cy - existing.y;
           const distance = Math.sqrt(dx * dx + dy * dy);
           
-          // 如果距离太小，视为重叠
           if (distance < minDistance) {
             validPosition = false;
             break;
@@ -59,7 +64,7 @@ export default class WaterIncrustationPreset {
         attempts++;
       }
       
-      // 不管是否重叠，都添加这个簇（尝试1次，重叠也接受）
+      // 不管是否重叠，都添加这个簇
       clusters.push({
         x: cx,
         y: cy,
@@ -74,6 +79,98 @@ export default class WaterIncrustationPreset {
       centerY,
       radius
     };
+  }
+  
+  /**
+   * 在四边形区域内生成水垢
+   * @param {Object} config - 配置 { rect: [{x,y}, {x,y}, {x,y}, {x,y}], count }
+   * @param {number} s - 屏幕缩放比例
+   */
+  static _generateQuadWaterIncru(config, s) {
+    const quad = config.rect;
+    const count = config.count || 10;
+    
+    // 4个顶点
+    const p0 = { x: quad[0].x * s, y: quad[0].y * s };
+    const p1 = { x: quad[1].x * s, y: quad[1].y * s };
+    const p2 = { x: quad[2].x * s, y: quad[2].y * s };
+    const p3 = { x: quad[3].x * s, y: quad[3].y * s };
+    
+    // 计算中心点
+    const centerX = (p0.x + p1.x + p2.x + p3.x) / 4;
+    const centerY = (p0.y + p1.y + p2.y + p3.y) / 4;
+    
+    // 计算包围盒半径
+    const xs = [p0.x, p1.x, p2.x, p3.x];
+    const ys = [p0.y, p1.y, p2.y, p3.y];
+    const radius = Math.max(
+      Math.max(...xs) - Math.min(...xs),
+      Math.max(...ys) - Math.min(...ys)
+    ) / 2;
+    
+    const clusters = [];
+    
+    // 水渍参数
+    const density = 20;
+    const hardness = 0.9;
+    const opacity = 0.8;
+    
+    for (let i = 0; i < count; i++) {
+      // 随机选择其中一个三角形
+      const r = Math.random();
+      let cx, cy;
+      
+      if (r < 0.5) {
+        // 三角形1: p0, p1, p2
+        const point = this._randomPointInTriangle(p0, p1, p2);
+        cx = point.x;
+        cy = point.y;
+      } else {
+        // 三角形2: p0, p2, p3
+        const point = this._randomPointInTriangle(p0, p2, p3);
+        cx = point.x;
+        cy = point.y;
+      }
+      
+      const clusterRadius = (12 + Math.random() * 10) * s;
+      
+      clusters.push({
+        x: cx,
+        y: cy,
+        radius: clusterRadius,
+        spots: this._generateSpots(clusterRadius, density, hardness, opacity, s)
+      });
+    }
+    
+    return {
+      clusters,
+      centerX,
+      centerY,
+      radius
+    };
+  }
+  
+  /**
+   * 在三角形内生成随机点（均匀分布）
+   * @param {Object} a - 顶点A
+   * @param {Object} b - 顶点B
+   * @param {Object} c - 顶点C
+   */
+  static _randomPointInTriangle(a, b, c) {
+    let r1 = Math.random();
+    let r2 = Math.random();
+    
+    // 确保点在三角形内
+    if (r1 + r2 > 1) {
+      r1 = 1 - r1;
+      r2 = 1 - r2;
+    }
+    
+    // 重心坐标
+    const x = a.x + r1 * (b.x - a.x) + r2 * (c.x - a.x);
+    const y = a.y + r1 * (b.y - a.y) + r2 * (c.y - a.y);
+    
+    return { x, y };
   }
   
   /**

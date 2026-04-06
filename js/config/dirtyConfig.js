@@ -2,9 +2,16 @@
  * DirtyConfig 污垢类型配置
  * 定义所有污垢类型的属性和清洁配方
  */
-
+// 云存储环境配置
+const CLOUD_ENV = 'cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846';
 // 污垢类型定义
 export const DIRT_TYPES = {
+  preset_urine: { 
+    name: '尿渍', 
+    difficulty: 1,
+    recipes: [['cloth']],
+    operate_type: 'wipe'
+  },
   preset_mildew: { 
     name: '霉斑', 
     difficulty: 1,
@@ -79,8 +86,24 @@ export const DIRT_TYPES = {
   },
   socks:{
     name: '脏袜子', 
-    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_socks.png',
+    imgPath: `cloud://${CLOUD_ENV}/images/ui/dirty/ui_dirty_socks.png`,
     color: '#8B4513', 
+    difficulty: 1,
+    recipes: [['dc_basket']],
+    operate_type: 'throw',
+    scale: 1.1
+  },
+  socks2:{
+    name: '脏袜子2', 
+    imgPath: `cloud://${CLOUD_ENV}/images/ui/dirty/ui_dirty_socks2.png`,
+    difficulty: 1,
+    recipes: [['dc_basket']],
+    operate_type: 'throw',
+    scale: 1.1
+  },
+  socks3:{
+    name: '脏袜子3', 
+    imgPath: `cloud://${CLOUD_ENV}/images/ui/dirty/ui_dirty_socks3.png`,
     difficulty: 1,
     recipes: [['dc_basket']],
     operate_type: 'throw',

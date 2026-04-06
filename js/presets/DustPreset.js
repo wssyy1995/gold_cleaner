@@ -72,12 +72,12 @@ export default class DustPreset {
       p1.x * p0.y - p2.x * p1.y - p3.x * p2.y - p0.x * p3.y
     );
     
-    // 根据面积计算粒子数量（稍微多一点，因为要扩散）
-    const baseDensity = config.density || 200;
-    const numParticles = Math.max(50, Math.floor(baseDensity * (area / (100 * 100)) * 1.2));
+    // 根据面积计算粒子数量
+    const baseDensity = config.density || 150;
+    const numParticles = Math.max(50, Math.floor(baseDensity * (area / (100 * 100))));
     
     // 扩散范围（像素）- 可以稍微超出四边形边界
-    const spreadRange = 20 * s;
+    const spreadRange = 15 * s;
     
     // 将四边形分成两个三角形：(p0, p1, p2) 和 (p0, p2, p3)
     const particles = [];
@@ -339,6 +339,7 @@ export default class DustPreset {
           return;
         }
         
+        // 计算粒子实际渲染位置
         const px = rx + p.x;
         const py = ry + p.y;
         

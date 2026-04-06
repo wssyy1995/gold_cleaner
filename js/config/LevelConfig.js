@@ -35,10 +35,10 @@ const STAGE_1_LEVELS = [
             { x: 800, y: 395 },  // 点3
             { x: 220, y: 700 }   // 点4
           ],
-          density: 3000
+          density: 2000
         }]},
         {id: 2, x: 550, y: 950,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bed.png`,dirts: [
-          { type: 'socks', x: 400, y: 700,scale: 1.5 ,mirror:''}]}
+          { type: 'socks2', x: 400, y: 700,scale: 1.5 ,mirror:''},{ type: 'socks3', x: 600, y: 900,scale: 1.5 ,mirror:''}]}
     ],
     timeLimit: 120,
     targetScore: 100,
@@ -51,10 +51,27 @@ const STAGE_1_LEVELS = [
     name: '卫生间',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l2_home.png`,
     dirts: [
-      { type: 'preset_water_incru', x: 50, y: 540,radius:30,count:3 },
-      { type: 'preset_water_incru', x: 290, y: 360,radius:50,count:5 },
-      { type: 'preset_water_incru', x: 390, y: 380,radius:40,count:4 },
-      { type: 'preset_water_incru', x: 290, y: 530,radius:40,count:4 },
+      {
+        type: 'preset_urine',
+        rect: [
+          { x: 0, y: 450 },
+          { x: 100, y: 450 },
+          { x: 10, y: 550 },
+          { x: 100, y: 550 }
+        ],
+        count: 1
+      },
+      {
+        type: 'preset_urine',
+        rect: [
+          { x: 260, y: 300 },
+          { x: 260, y: 600 },
+          { x: 410, y: 300 },
+          { x: 410, y: 600 }
+        ],
+        process: 5,
+        count: 5
+      },
       { type: 'waterstain', x: 500, y: 1000 },
       { type: 'waterstain', x: 400, y: 900 },
 

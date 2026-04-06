@@ -6,12 +6,14 @@
 import MildewPreset from './MildewPreset';
 import WaterIncrustationPreset from './WaterIncrustationPreset';
 import DustPreset from './DustPreset';
+import UrinePreset from './UrinePreset';
 
 // 预制污垢类型映射
 const PRESET_MAP = {
   'preset_mildew': MildewPreset,
   'preset_water_incru': WaterIncrustationPreset,
-  'preset_dust': DustPreset
+  'preset_dust': DustPreset,
+  'preset_urine': UrinePreset
 };
 
 export default class PresetDirtRegistry {

@@ -28,7 +28,18 @@ export default class MildewPreset {
       });
     }
     
-    return { colonies, centerX, centerY, radius };
+    return { 
+      colonies, 
+      centerX, 
+      centerY, 
+      radius,
+      region: {
+        type: 'circle',
+        cx: centerX,
+        cy: centerY,
+        radius: radius
+      }
+    };
   }
   
   static _generateBlobs(size) {

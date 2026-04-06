@@ -1,0 +1,515 @@
+
+	      <!DOCTYPE html>
+<html>
+  <head>
+    <title>CodeSandbox</title>
+
+    <script type="importmap">
+      {"imports":{"react":"https://esm.sh/react@18.3.1","lucide-react":"https://esm.sh/lucide-react?external=react,react-dom","react-dom":"https://esm.sh/react-dom@18.3.1","react/jsx-runtime":"https://esm.sh/react@18.3.1/jsx-runtime","react-dom/client":"https://esm.sh/react-dom@18.3.1/client","tailwindcss/defaultTheme":"https://esm.sh/tailwindcss/defaultTheme","tailwindcss-animate":"https://esm.sh/tailwindcss-animate"}}
+    </script>
+
+    <script>
+      window.addEventListener("error", function (event) {
+        const errorObj = {
+          message: event.message,
+          source: event.filename,
+          lineno: event.lineno,
+          colno: event.colno,
+          stack: event.error ? event.error.stack : null
+        };
+        window.parent.postMessage(
+          { action: "error", error: JSON.stringify(errorObj) },
+          "*"
+        );
+        event.preventDefault();
+      });
+
+  function handleImportError(error) {
+    throw new Error('Import module failed: ' + error.target.src);
+  }
+
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      mutation.addedNodes.forEach(node => {
+        if (node.tagName === 'SCRIPT' && node.type === 'module') {
+          node.onerror = handleImportError;
+        }
+      });
+    });
+  });
+
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  document.querySelectorAll('script[type="module"]').forEach(script => {
+    script.onerror = handleImportError;
+  });
+
+  
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+
+
+    </script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,container-queries"></script>
+    <style type="text/tailwindcss">
+      @layer base {
+        :root {
+          --background: 0 0% 100%;
+          --foreground: 222.2 47.4% 11.2%;
+
+          --muted: 210 40% 96.1%;
+          --muted-foreground: 215.4 16.3% 46.9%;
+
+          --popover: 0 0% 100%;
+          --popover-foreground: 222.2 47.4% 11.2%;
+
+          --border: 214.3 31.8% 91.4%;
+          --input: 214.3 31.8% 91.4%;
+
+          --card: 0 0% 100%;
+          --card-foreground: 222.2 47.4% 11.2%;
+
+          --primary: 222.2 47.4% 11.2%;
+          --primary-foreground: 210 40% 98%;
+
+          --secondary: 210 40% 96.1%;
+          --secondary-foreground: 222.2 47.4% 11.2%;
+
+          --accent: 210 40% 96.1%;
+          --accent-foreground: 222.2 47.4% 11.2%;
+
+          --destructive: 0 100% 50%;
+          --destructive-foreground: 210 40% 98%;
+
+          --ring: 215 20.2% 65.1%;
+
+          --radius: 0.5rem;
+        }
+
+        .dark {
+          --background: 224 71% 4%;
+          --foreground: 213 31% 91%;
+
+          --muted: 223 47% 11%;
+          --muted-foreground: 215.4 16.3% 56.9%;
+
+          --accent: 216 34% 17%;
+          --accent-foreground: 210 40% 98%;
+
+          --popover: 224 71% 4%;
+          --popover-foreground: 215 20.2% 65.1%;
+
+          --border: 216 34% 17%;
+          --input: 216 34% 17%;
+
+          --card: 224 71% 4%;
+          --card-foreground: 213 31% 91%;
+
+          --primary: 210 40% 98%;
+          --primary-foreground: 222.2 47.4% 1.2%;
+
+          --secondary: 222.2 47.4% 11.2%;
+          --secondary-foreground: 210 40% 98%;
+
+          --destructive: 0 63% 31%;
+          --destructive-foreground: 210 40% 98%;
+
+          --ring: 216 34% 17%;
+
+          --radius: 0.5rem;
+        }
+      }
+    </style>
+    <script type="module">
+          import defaultTheme from "tailwindcss/defaultTheme"
+          import tailwindcssAnimate from "tailwindcss-animate"
+
+          const fontFamily = defaultTheme.fontFamily;
+
+          tailwind.config = {
+            darkMode: ["class"],
+        content: ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
+        theme: {
+          container: {
+            center: true,
+            padding: "2rem",
+            screens: {
+              "2xl": "1400px",
+            },
+          },
+          extend: {
+            colors: {
+              border: "hsl(var(--border))",
+              input: "hsl(var(--input))",
+              ring: "hsl(var(--ring))",
+              background: "hsl(var(--background))",
+              foreground: "hsl(var(--foreground))",
+              primary: {
+                DEFAULT: "hsl(var(--primary))",
+                foreground: "hsl(var(--primary-foreground))",
+              },
+              secondary: {
+                DEFAULT: "hsl(var(--secondary))",
+                foreground: "hsl(var(--secondary-foreground))",
+              },
+              destructive: {
+                DEFAULT: "hsl(var(--destructive))",
+                foreground: "hsl(var(--destructive-foreground))",
+              },
+              muted: {
+                DEFAULT: "hsl(var(--muted))",
+                foreground: "hsl(var(--muted-foreground))",
+              },
+              accent: {
+                DEFAULT: "hsl(var(--accent))",
+                foreground: "hsl(var(--accent-foreground))",
+              },
+              popover: {
+                DEFAULT: "hsl(var(--popover))",
+                foreground: "hsl(var(--popover-foreground))",
+              },
+              card: {
+                DEFAULT: "hsl(var(--card))",
+                foreground: "hsl(var(--card-foreground))",
+              },
+            },
+            borderRadius: {
+              lg: `var(--radius)`,
+              md: `calc(var(--radius) - 2px)`,
+              sm: "calc(var(--radius) - 4px)",
+            },
+            fontFamily: {
+              sans: [...fontFamily.sans],
+            },
+
+            keyframes: {
+              "accordion-down": {
+                from: { height: "0" },
+                to: { height: "var(--radix-accordion-content-height)" },
+              },
+              "accordion-up": {
+                from: { height: "var(--radix-accordion-content-height)" },
+                to: { height: "0" },
+              },
+            },
+            animation: {
+              "accordion-down": "accordion-down 0.2s ease-out",
+              "accordion-up": "accordion-up 0.2s ease-out",
+            },
+          },
+        },
+        plugins: [tailwindcssAnimate]
+      }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.27.0/babel.min.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-type="module">
+      		  import {createRoot} from "react-dom/client";
+            
+      		  import React, { useRef, useState, useEffect } from 'react';
+import { Eraser, Droplet, Paintbrush } from 'lucide-react';
+
+function RealisticFoamGenerator() {
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [brushSize, setBrushSize] = useState(40);
+
+  // Background context to preserve drawings
+  const bgCanvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    
+    // Create offscreen canvas for persistence
+    if (!bgCanvasRef.current) {
+      bgCanvasRef.current = document.createElement('canvas');
+      bgCanvasRef.current.width = canvas.width;
+      bgCanvasRef.current.height = canvas.height;
+      const bgCtx = bgCanvasRef.current.getContext('2d');
+      // Fill with a dark sink/water background so transparent bubbles show up well
+      bgCtx.fillStyle = '#1a1f24';
+      bgCtx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw initial state
+      ctx.drawImage(bgCanvasRef.current, 0, 0);
+    }
+  }, []);
+
+  const drawRealisticBubble = (ctx, x, y, r) => {
+    ctx.save();
+    ctx.translate(x, y);
+
+    // 1. Bubble Body (Opaque white center for dense micro-foam, semi-transparent for large bubbles)
+    const isMicro = r <= 4;
+    
+    const bodyGrad = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r);
+    if (isMicro) {
+      // Tiny bubbles are basically solid white
+      bodyGrad.addColorStop(0, `rgba(255, 255, 255, 0.9)`);
+      bodyGrad.addColorStop(0.8, `rgba(240, 245, 255, 0.8)`);
+      bodyGrad.addColorStop(1, `rgba(255, 255, 255, 0.95)`);
+    } else {
+      // Larger bubbles are more transparent in the middle but still have thick white edges
+      bodyGrad.addColorStop(0, `rgba(255, 255, 255, 0.05)`);
+      bodyGrad.addColorStop(0.6, `rgba(245, 250, 255, 0.2)`);
+      bodyGrad.addColorStop(0.9, `rgba(255, 255, 255, 0.6)`);
+      bodyGrad.addColorStop(1, `rgba(255, 255, 255, 0.8)`);
+    }
+
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+
+    // 2. Very faint, cool-toned outline for refraction (not dark/dirty)
+    ctx.lineWidth = Math.max(0.4, r * 0.03);
+    ctx.strokeStyle = `rgba(180, 200, 220, 0.15)`;
+    ctx.stroke();
+
+    // 3. Realistic Specular Highlights (only for noticeable bubbles)
+    if (r > 3) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      
+      // Main bright window/light reflection (top left)
+      ctx.beginPath();
+      ctx.arc(-r * 0.4, -r * 0.4, r * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Secondary smaller light reflection
+      ctx.beginPath();
+      ctx.arc(-r * 0.15, -r * 0.5, r * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bottom curved reflection (ambient light from below)
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.8, Math.PI * 0.15, Math.PI * 0.55);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = Math.max(1.5, r * 0.15);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+
+    // 4. Very subtle Iridescence for large bubbles
+    if (r > 12) {
+      const iriGrad = ctx.createLinearGradient(-r, -r, r, r);
+      iriGrad.addColorStop(0, 'rgba(255, 200, 255, 0.05)'); // Pinkish
+      iriGrad.addColorStop(0.5, 'rgba(200, 255, 255, 0.05)'); // Cyanish
+      iriGrad.addColorStop(1, 'rgba(255, 255, 200, 0.05)'); // Yellowish
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.9, 0, Math.PI * 2);
+      ctx.fillStyle = iriGrad;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  };
+
+  const spawnFoamCluster = (x, y) => {
+    const bgCtx = bgCanvasRef.current.getContext('2d');
+    const mainCtx = canvasRef.current.getContext('2d');
+    
+    // Reduced density to let it breathe and show individual bubble shapes
+    const microCount = Math.floor(brushSize * 1.5);
+    const mediumCount = Math.floor(brushSize * 0.6);
+    const macroCount = Math.floor(brushSize * 0.15);
+
+    // Arrays to hold bubbles for depth sorting (draw large on top)
+    const bubblesToDraw = [];
+
+    // First, draw a much softer white underlay
+    bgCtx.save();
+    bgCtx.beginPath();
+    bgCtx.arc(x, y, brushSize * 0.9, 0, Math.PI * 2);
+    const underlayGrad = bgCtx.createRadialGradient(x, y, 0, x, y, brushSize * 0.9);
+    underlayGrad.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+    underlayGrad.addColorStop(0.6, 'rgba(255, 255, 255, 0.05)');
+    underlayGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    bgCtx.fillStyle = underlayGrad;
+    bgCtx.fill();
+    bgCtx.restore();
+
+    // 1. Generate Micro bubbles (Scattered wider)
+    for (let i = 0; i < microCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radiusOffset = Math.random() * brushSize * 1.2;
+      const bx = x + Math.cos(angle) * radiusOffset;
+      const by = y + Math.sin(angle) * radiusOffset;
+      const br = Math.random() * 2.5 + 1; // 1-3.5px
+      bubblesToDraw.push({ x: bx, y: by, r: br });
+    }
+
+    // 2. Generate Medium bubbles
+    for (let i = 0; i < mediumCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radiusOffset = Math.random() * brushSize * 1.1;
+      const bx = x + Math.cos(angle) * radiusOffset;
+      const by = y + Math.sin(angle) * radiusOffset;
+      const br = Math.random() * 5 + 3; // 3-8px
+      bubblesToDraw.push({ x: bx, y: by, r: br });
+    }
+
+    // 3. Generate Macro bubbles (Large top bubbles)
+    for (let i = 0; i < macroCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radiusOffset = Math.random() * brushSize * 0.9;
+      const bx = x + Math.cos(angle) * radiusOffset;
+      const by = y + Math.sin(angle) * radiusOffset;
+      const br = Math.random() * 14 + 6; // 6-20px
+      bubblesToDraw.push({ x: bx, y: by, r: br });
+    }
+
+    // Sort by radius ascending (draw smallest first, largest on top)
+    bubblesToDraw.sort((a, b) => a.r - b.r);
+
+    // Draw to background canvas for persistence
+    bubblesToDraw.forEach(b => {
+      drawRealisticBubble(bgCtx, b.x, b.y, b.r);
+    });
+
+    // Update main canvas
+    mainCtx.drawImage(bgCanvasRef.current, 0, 0);
+  };
+
+  const handlePointerDown = (e) => {
+    setIsDrawing(true);
+    const rect = canvasRef.current.getBoundingClientRect();
+    spawnFoamCluster(e.clientX - rect.left, e.clientY - rect.top);
+  };
+
+  const handlePointerMove = (e) => {
+    if (!isDrawing) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    // Spacing check could be added here, but leaving it as continuous drawing
+    spawnFoamCluster(e.clientX - rect.left, e.clientY - rect.top);
+  };
+
+  const handlePointerUp = () => {
+    setIsDrawing(false);
+  };
+
+  const clearCanvas = () => {
+    const bgCtx = bgCanvasRef.current.getContext('2d');
+    const mainCtx = canvasRef.current.getContext('2d');
+    
+    // Reset to dark background
+    bgCtx.fillStyle = '#1a1f24';
+    bgCtx.fillRect(0, 0, bgCanvasRef.current.width, bgCanvasRef.current.height);
+    mainCtx.drawImage(bgCanvasRef.current, 0, 0);
+  };
+
+  const spawnRandomPatch = () => {
+    const canvas = canvasRef.current;
+    const patchX = canvas.width / 2 + (Math.random() - 0.5) * 150;
+    const patchY = canvas.height / 2 + (Math.random() - 0.5) * 150;
+    
+    // Simulate multiple clicks to build up a large dense patch
+    for(let i=0; i<15; i++) {
+      const offsetX = (Math.random() - 0.5) * 80;
+      const offsetY = (Math.random() - 0.5) * 80;
+      spawnFoamCluster(patchX + offsetX, patchY + offsetY);
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-neutral-900 text-neutral-200 font-sans">
+      {/* Sidebar Controls */}
+      <div className="w-72 p-6 flex flex-col gap-6 bg-neutral-800 border-r border-neutral-700 shadow-xl z-10">
+        <div>
+          <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
+            <Droplet size={20} className="text-blue-400" />
+            Airy White Foam
+          </h2>
+          <p className="text-xs text-neutral-400">Natural realistic bubble generator</p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <label className="text-neutral-300 flex items-center gap-2">
+                <Paintbrush size={16} /> Brush Size
+              </label>
+              <span className="text-neutral-400">{brushSize}px</span>
+            </div>
+            <input 
+              type="range" 
+              min="10" 
+              max="100" 
+              value={brushSize}
+              onChange={(e) => setBrushSize(parseInt(e.target.value))}
+              className="w-full accent-blue-500"
+            />
+          </div>
+        </div>
+
+        <div className="pt-4 flex flex-col gap-3 mt-auto">
+          <button 
+            onClick={spawnRandomPatch}
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-md font-medium transition-colors flex items-center justify-center gap-2 shadow-lg"
+          >
+            <Droplet size={18} />
+            Spawn Foam Patch
+          </button>
+          
+          <button 
+            onClick={clearCanvas}
+            className="w-full py-2.5 bg-neutral-700 hover:bg-neutral-600 text-white rounded-md font-medium transition-colors flex items-center justify-center gap-2"
+          >
+            <Eraser size={18} />
+            Clear Surface
+          </button>
+        </div>
+      </div>
+
+      {/* Canvas Area */}
+      <div className="flex-1 relative overflow-hidden flex items-center justify-center bg-black cursor-crosshair">
+        <canvas
+          ref={canvasRef}
+          width={800}
+          height={600}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+          className="bg-[#1a1f24] shadow-2xl rounded-lg touch-none"
+          style={{ width: '800px', height: '600px' }}
+        />
+        
+        <div className="absolute top-4 right-4 pointer-events-none text-neutral-500 text-sm">
+          Click and drag to generate realistic white foam
+        </div>
+      </div>
+    </div>
+  );
+}
+      		  createRoot(document.getElementById("root")).render(
+             <>
+      		    <RealisticFoamGenerator />
+              </>
+      		    );
+              window.parent.postMessage({ action: "ready" }, "*");
+    </script>
+  </body>
+</html>

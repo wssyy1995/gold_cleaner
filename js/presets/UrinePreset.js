@@ -75,7 +75,11 @@ export default class UrinePreset {
       clusters,
       centerX,
       centerY,
-      radius
+      radius,
+      region: {
+        type: 'quad',
+        points: [p0, p1, p2, p3]
+      }
     };
   }
   

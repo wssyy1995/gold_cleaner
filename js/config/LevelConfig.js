@@ -18,6 +18,30 @@ const STAGE_1_LEVELS = [
     name: '老年人卧室',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l1_home.png`,
     dirts: [
+      // {
+      //   type: 'preset_liquid',
+      //   rect: [
+      //     { x: 0, y: 450 },
+      //     { x: 100, y: 450 },
+      //     { x: 10, y: 550 },
+      //     { x: 100, y: 550 }
+      //   ],
+      //   liquid_type:'water',
+      //   perspective:'top-down',
+      //   count: 3
+      // },
+      // {
+      //   type: 'preset_liquid',
+      //   rect: [
+      //     { x: 0, y: 950 },
+      //     { x: 100, y: 950 },
+      //     { x: 10, y: 1150 },
+      //     { x: 100, y: 1150 }
+      //   ],
+      //   liquid_type:'coffee',
+      //   perspective:'front',
+      //   count: 3
+      // },
       { type: 'banana', x: 320, y: 885},
       { type: 'paper2', x: 267, y: 700 },
       { type: 'apple', x: 405, y: 875 },
@@ -52,17 +76,17 @@ const STAGE_1_LEVELS = [
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l2_home.png`,
     dirts: [
       {
-        type: 'preset_urine',
+        type: 'preset_water_incru',
         rect: [
           { x: 0, y: 450 },
           { x: 100, y: 450 },
           { x: 10, y: 550 },
           { x: 100, y: 550 }
         ],
-        count: 1
+        count: 3
       },
       {
-        type: 'preset_urine',
+        type: 'preset_water_incru',
         rect: [
           { x: 260, y: 300 },
           { x: 260, y: 600 },
@@ -70,17 +94,23 @@ const STAGE_1_LEVELS = [
           { x: 410, y: 600 }
         ],
         process: 5,
-        count: 5
+        count: 20
       },
       { type: 'waterstain', x: 500, y: 1000 },
       { type: 'waterstain', x: 400, y: 900 },
 
     ],
     dirts_deep_area: [
-      { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
-        { type: 'preset_mildew', x: 220, y: 300,radius:60,count:10}]},
-        {id: 2, x: 550, y: 950,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bed.png`,dirts: [
-          { type: 'socks', x: 400, y: 600 }]}
+      { id: 1,x: 400, y: 800,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l2_toilet.png`,dirts: [
+        { type: 'preset_urine', rect: [
+          { x: 200, y: 650 },
+          { x: 500, y: 550 },
+          { x: 200, y: 950 },
+          { x: 500, y: 950 }
+        ],
+        count: 10}]},
+        {id: 2, x: 100, y: 700,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l2_sink.png`,dirts: [
+          { type: 'preset_mildew', x: 400, y: 600,count:3 }]}
     ],
     timeLimit: 100,
     targetScore: 150,

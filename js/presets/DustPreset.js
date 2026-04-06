@@ -44,7 +44,13 @@ export default class DustPreset {
       clusters,
       centerX,
       centerY,
-      radius
+      radius,
+      region: {
+        type: 'circle',
+        cx: centerX,
+        cy: centerY,
+        radius: radius
+      }
     };
   }
   
@@ -127,7 +133,11 @@ export default class DustPreset {
       }],
       centerX,
       centerY,
-      radius
+      radius,
+      region: {
+        type: 'quad',
+        points: [p0, p1, p2, p3]
+      }
     };
   }
   

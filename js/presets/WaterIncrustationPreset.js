@@ -77,7 +77,13 @@ export default class WaterIncrustationPreset {
       clusters,
       centerX,
       centerY,
-      radius
+      radius,
+      region: {
+        type: 'circle',
+        cx: centerX,
+        cy: centerY,
+        radius: radius
+      }
     };
   }
   
@@ -146,7 +152,11 @@ export default class WaterIncrustationPreset {
       clusters,
       centerX,
       centerY,
-      radius
+      radius,
+      region: {
+        type: 'quad',
+        points: [p0, p1, p2, p3]
+      }
     };
   }
   
@@ -209,9 +219,9 @@ export default class WaterIncrustationPreset {
           let pRadiusX = spotSize * (0.7 + Math.random() * 0.5);
           let pRadiusY = spotSize * (0.7 + Math.random() * 0.5);
           
-          // 较大的斑点受重力影响，y方向拉伸
-          if (sizeRandom > 0.1 && (pAngle > Math.PI * 0.1 && pAngle < Math.PI * 0.9)) {
-            const gravityStretch = 1 + (sizeRandom * 3) + Math.random();
+          // 较大的斑点受重力影响，y方向拉伸（减弱效果）
+          if (sizeRandom > 0.3 && (pAngle > Math.PI * 0.2 && pAngle < Math.PI * 0.8)) {
+            const gravityStretch = 1 + (sizeRandom * 1.5) + Math.random() * 0.5;
             pRadiusY = pRadiusY * gravityStretch;
           }
           

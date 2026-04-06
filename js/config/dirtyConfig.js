@@ -12,6 +12,12 @@ export const DIRT_TYPES = {
     recipes: [['cloth']],
     operate_type: 'wipe'
   },
+  preset_liquid: { 
+    name: '液体污渍', 
+    difficulty: 1,
+    recipes: [['cloth']],
+    operate_type: 'wipe'
+  },
   preset_mildew: { 
     name: '霉斑', 
     difficulty: 1,
@@ -21,8 +27,8 @@ export const DIRT_TYPES = {
   preset_water_incru: { 
     name: '水垢', 
     difficulty: 1,
-    recipes: [['cloth']],
-    operate_type: 'wipe'
+    recipes: [['common_spray','cloth']],
+    operate_type: 'spray_wipe'
   },
   preset_dust: { 
     name: '灰尘', 
@@ -124,7 +130,7 @@ export const DIRT_TYPES = {
     color: '#654321', 
     difficulty: 2,
     scale: 1.2,
-    recipes: [['cloth']],
+    recipes: [['mop']],
     operate_type: 'wipe'
   },
   blackmark: { 

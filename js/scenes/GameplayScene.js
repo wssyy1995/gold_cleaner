@@ -13,6 +13,7 @@ import { BASE_TOOLS, PREMIUM_TOOLS, getTool, GlobalToolImageCache } from '../con
 import { getLevel } from '../config/LevelConfig';
 import { DIRT_TYPES, GlobalDirtImageCache } from '../config/dirtyConfig';
 import PresetDirtRegistry from '../presets/PresetDirtRegistry';
+import FoamGenerator from '../presets/FoamGenerator';
 import { GlobalPreviewCache } from './HomeScene';
 import { globalEvent } from '../core/EventEmitter';
 import { getGame } from '../../app';
@@ -749,12 +750,12 @@ class GameplayScene extends Scene {
       // 使用 updateData 方法更新工具，确保槽位位置正确更新
       this.toolSlot.updateData({
         tools: this.tools,
-        selectedIndex: 0  // 选中新添加的第一个工具
+        selectedIndex: -1  // 不默认选中任何工具
       });
     }
     
-    // 设置当前工具索引为0（新工具）
-    this.currentToolIndex = 0;
+    // 设置当前工具索引为-1（不选中任何工具）
+    this.currentToolIndex = -1;
     
     console.log('[GameplayScene] 新工具已添加到工具槽:', this.newUnlockedTools.map(t => t.name).join(', '));
     
@@ -2152,11 +2153,14 @@ class GameplayScene extends Scene {
         this.strokeState.pendingComplete = false;
         this.strokeState.totalDistance = 0;
         
-        // 根据工具类型完成清洁
-        if (this.activeTool && this.activeTool.id === 'cloth') {
-          this._completeWipeClean(dirt);
-        } else if (this.activeTool && this.activeTool.id === 'broom') {
-          this._completeSweepClean(dirt);
+        // 根据污垢的 operate_type 完成清洁
+        const dirtType = DIRT_TYPES[dirt.type];
+        if (dirtType) {
+          if (dirtType.operate_type === 'wipe') {
+            this._completeWipeClean(dirt);
+          } else if (dirtType.operate_type === 'sweep') {
+            this._completeSweepClean(dirt);
+          }
         }
       }
     }
@@ -2482,7 +2486,7 @@ class GameplayScene extends Scene {
       
       // 检查是否是预制污垢类型
       if (dirt.presetType) {
-        this._renderPresetDirt(ctx, dirt, cx, cy, radius, pulseAlpha, s);
+        this._renderPresetDirt(ctx, dirt, cx, cy, radius, pulseAlpha, s, gameAreaY);
         return;
       }
       
@@ -2515,6 +2519,17 @@ class GameplayScene extends Scene {
       this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, process, s);
     });
     
+    // 第三阶段：渲染 spray_wipe 的等候图标（第一阶段完成，等待第二阶段）
+    this.dirtObjects.forEach(dirt => {
+      if (dirt.state === 'clean') return;
+      if (dirt.cleaningStage !== 1) return; // 只在第一阶段完成时显示
+      
+      const cx = dirt.x;
+      const cy = dirt.y + gameAreaY;
+      
+      this._renderWaitingIcon(ctx, cx, cy, s);
+    });
+    
     // 绘制活动工具（如果在页面上，包括拖动状态）
     // 包括收回动画期间（activeTool 可能为 null，但动画还在进行）
     if (this.activeTool || (this.toolAnim.active && this.toolAnim.isDespawning)) {
@@ -2532,20 +2547,49 @@ class GameplayScene extends Scene {
    * @param {number} pulseAlpha - 脉冲透明度
    * @param {number} s - 屏幕缩放比例
    */
-  _renderPresetDirt(ctx, dirt, cx, cy, radius, pulseAlpha, s) {
+  _renderPresetDirt(ctx, dirt, cx, cy, radius, pulseAlpha, s, gameAreaY) {
     // 计算划动清洁进度（从下往上消失）
+    // spray_wipe 类型：第一阶段不裁切，第二阶段根据划动进度裁切
     const strokeCount = dirt.strokeCount || 0;
     let remainingRatio = 1;
-    if (strokeCount >= 3) {
-      remainingRatio = 0;
-    } else if (strokeCount === 2) {
-      remainingRatio = 2 / 4;
-    } else if (strokeCount === 1) {
-      remainingRatio = 3 / 4;
+    
+    // 获取污垢类型
+    const dirtType = DIRT_TYPES[dirt.type];
+    const isSprayWipe = dirtType && dirtType.operate_type === 'spray_wipe';
+    
+    if (isSprayWipe) {
+      // spray_wipe 类型：
+      // - 第一阶段 (cleaningStage === 0 或 1)：不裁切，完整显示
+      // - 第二阶段划动中：根据 opacity 计算剩余比例
+      if (dirt.cleaningStage === 2) {
+        remainingRatio = 0; // 已完成
+      } else if (dirt.cleaningStage === 1 && dirt.opacity !== undefined) {
+        // 第二阶段划动中，使用 opacity 作为剩余比例
+        remainingRatio = dirt.opacity;
+      } else {
+        // 第一阶段或等待阶段，完整显示
+        remainingRatio = 1;
+      }
+    } else {
+      // 普通 wipe 类型：根据 strokeCount 裁切
+      if (strokeCount >= 3) {
+        remainingRatio = 0;
+      } else if (strokeCount === 2) {
+        remainingRatio = 2 / 4;
+      } else if (strokeCount === 1) {
+        remainingRatio = 3 / 4;
+      }
     }
     
     // 使用 PresetDirtRegistry 渲染（传入实际渲染坐标 cx, cy）
     PresetDirtRegistry.render(ctx, dirt, s, pulseAlpha, remainingRatio, cx, cy);
+    
+    // 渲染泡沫（如果在第一阶段或第二阶段）
+    // 注意：泡沫坐标是屏幕绝对坐标，而污垢渲染也是使用绝对坐标（cy = dirt.y + gameAreaY）
+    // 所以泡沫不需要额外的坐标转换
+    if (dirt.foamGenerator && dirt.foamGenerator.hasFoam()) {
+      dirt.foamGenerator.render(ctx, s);
+    }
   }
 
   /**
@@ -2701,6 +2745,56 @@ class GameplayScene extends Scene {
       // 重置阴影
       ctx.shadowBlur = 0;
     }
+    
+    ctx.restore();
+  }
+  
+  /**
+   * 渲染 spray_wipe 的等候图标（第一阶段完成，等待第二阶段）
+   * 显示一个时钟/沙漏图标提示用户需要使用 cloth
+   */
+  _renderWaitingIcon(ctx, cx, cy, s) {
+    const iconSize = 40 * s;
+    const x = cx - iconSize / 2;
+    const y = cy - iconSize / 2 - 60 * s; // 在污垢上方显示
+    
+    ctx.save();
+    
+    // 绘制圆形背景
+    ctx.beginPath();
+    ctx.arc(cx, y + iconSize / 2, iconSize / 2 + 4 * s, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fill();
+    ctx.strokeStyle = '#FFA500'; // 橙色边框
+    ctx.lineWidth = 2 * s;
+    ctx.stroke();
+    
+    // 绘制时钟图标（简化版）
+    ctx.beginPath();
+    ctx.arc(cx, y + iconSize / 2, iconSize / 2 - 6 * s, 0, Math.PI * 2);
+    ctx.strokeStyle = '#666666';
+    ctx.lineWidth = 3 * s;
+    ctx.stroke();
+    
+    // 时钟指针（12点方向）
+    ctx.beginPath();
+    ctx.moveTo(cx, y + iconSize / 2);
+    ctx.lineTo(cx, y + iconSize / 2 - 8 * s);
+    ctx.strokeStyle = '#666666';
+    ctx.lineWidth = 2 * s;
+    ctx.stroke();
+    
+    // 时钟指针（3点方向）
+    ctx.beginPath();
+    ctx.moveTo(cx, y + iconSize / 2);
+    ctx.lineTo(cx + 6 * s, y + iconSize / 2);
+    ctx.stroke();
+    
+    // 绘制提示文字
+    ctx.fillStyle = '#666666';
+    ctx.font = `${12 * s}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('请用抹布', cx, y + iconSize + 15 * s);
     
     ctx.restore();
   }
@@ -3290,22 +3384,36 @@ class GameplayScene extends Scene {
       }
     }
     
-    // 【新功能】手指直接滑动到 wipe/sweep 污垢上触发清洁
+    // 【新功能】手指直接滑动到 wipe/sweep/spray_wipe 污垢上触发清洁
     // 不需要点击，直接滑动即可开始划动清洁
-    if (!this.isDraggingTool && this.activeTool && 
-        (this.activeTool.id === 'cloth' || this.activeTool.id === 'broom')) {
+    if (!this.isDraggingTool && this.activeTool) {
       const nearbyDirt = this._findNearbyDirt(x, y);
       if (nearbyDirt && nearbyDirt.state !== 'clean') {
         const dirtType = DIRT_TYPES[nearbyDirt.type];
-        // 检查工具是否匹配污垢类型
-        const isMatch = (this.activeTool.id === 'cloth' && dirtType.operate_type === 'wipe') ||
-                       (this.activeTool.id === 'broom' && dirtType.operate_type === 'sweep');
+        // 检查工具是否匹配污垢的 recipes
+        const recipes = dirtType.recipes || [];
+        const allTools = recipes.flat();
         
-        if (isMatch && !this.strokeState.active) {
+        // wipe/sweep 类型匹配
+        const isWipeSweep = allTools.includes(this.activeTool.id) && 
+                           (dirtType.operate_type === 'wipe' || dirtType.operate_type === 'sweep');
+        
+        // spray_wipe 第二阶段匹配（cloth 工具 + cleaningStage === 1）
+        const isSprayWipeStage2 = dirtType.operate_type === 'spray_wipe' && 
+                                  nearbyDirt.cleaningStage === 1 && 
+                                  this.activeTool && this.activeTool.id === 'cloth';
+        
+        if ((isWipeSweep || isSprayWipeStage2) && !this.strokeState.active) {
           // 自动开始划动清洁模式（工具跳到手指上）
           this.isDraggingTool = true;  // 重要：让工具跟随手指
-          // 开始划动（不立即更新，等下一次 touchmove 再计算距离）
-          this._startStrokeClean(nearbyDirt, x, y);
+          
+          if (isWipeSweep) {
+            // 开始划动（不立即更新，等下一次 touchmove 再计算距离）
+            this._startStrokeClean(nearbyDirt, x, y);
+          } else if (isSprayWipeStage2) {
+            // spray_wipe 第二阶段
+            this._startSprayWipeStage2(nearbyDirt, x, y);
+          }
           return true;
         }
       }
@@ -3320,23 +3428,38 @@ class GameplayScene extends Scene {
       // 更新工具位置（跟随手指，但有边界限制）
       this.toolPosition = { x, y: clampedY };
       
-      // cloth / broom 工具：进入划动清洁模式
-      if (this.activeTool.id === 'cloth' || this.activeTool.id === 'broom') {
-        // 如果还没有开始清洁，先检查是否在匹配的污垢上
-        if (!this.strokeState.active) {
-          const nearbyDirt = this._findNearbyDirt(x, y);
-          if (nearbyDirt && nearbyDirt.state !== 'clean') {
-            const dirtType = DIRT_TYPES[nearbyDirt.type];
-            const isMatch = (this.activeTool.id === 'cloth' && dirtType.operate_type === 'wipe') ||
-                           (this.activeTool.id === 'broom' && dirtType.operate_type === 'sweep');
-            if (isMatch) {
-              // 开始划动清洁（不立即更新，等下一次 touchmove）
-              this._startStrokeClean(nearbyDirt, x, clampedY);
-            }
+      // wipe / sweep / spray_wipe 第二阶段：进入划动清洁模式
+      const nearbyDirt = this._findNearbyDirt(x, y);
+      if (nearbyDirt && nearbyDirt.state !== 'clean') {
+        const dirtType = DIRT_TYPES[nearbyDirt.type];
+        const recipes = dirtType.recipes || [];
+        const allTools = recipes.flat();
+        
+        // 检查是否匹配 wipe/sweep 类型
+        const isWipeSweep = allTools.includes(this.activeTool.id) && 
+                           (dirtType.operate_type === 'wipe' || dirtType.operate_type === 'sweep');
+        
+        // 检查是否匹配 spray_wipe 第二阶段（cloth 工具 + cleaningStage === 1）
+        const isSprayWipeStage2 = dirtType.operate_type === 'spray_wipe' && 
+                                  nearbyDirt.cleaningStage === 1 && 
+                                  this.activeTool && this.activeTool.id === 'cloth';
+        
+        if (isWipeSweep) {
+          // wipe/sweep 类型：如果还没有开始清洁，先开始划动清洁
+          if (!this.strokeState.active) {
+            this._startStrokeClean(nearbyDirt, x, clampedY);
+          } else {
+            // 已经在清洁中，继续更新划动进度
+            this._updateStrokeClean(x, clampedY);
           }
-        } else {
-          // 已经在清洁中，继续更新划动进度
-          this._updateStrokeClean(x, clampedY);
+        } else if (isSprayWipeStage2) {
+          // spray_wipe 第二阶段：开始或继续划动清洁
+          if (!this.strokeState.active || this.strokeState.dirt !== nearbyDirt) {
+            this._startSprayWipeStage2(nearbyDirt, x, clampedY);
+          } else {
+            // 已经在清洁中，继续更新划动进度
+            this._updateStrokeClean(x, clampedY);
+          }
         }
       } else {
         // 其他工具原有逻辑
@@ -3630,6 +3753,164 @@ class GameplayScene extends Scene {
   }
 
   /**
+   * 处理 spray_wipe 二阶段清洁
+   * 第一阶段：common_spray 点击3次
+   * 第二阶段：cloth 滑动/拖动3次
+   */
+  _handleSprayWipeClean(dirt, x, y) {
+    const dirtType = DIRT_TYPES[dirt.type];
+    if (!dirtType) return;
+    
+    const recipes = dirtType.recipes || [];
+    const allTools = recipes.flat();
+    
+    // 初始化二阶段清洁状态
+    if (dirt.cleaningStage === undefined) {
+      dirt.cleaningStage = 0; // 0: 未开始, 1: 第一阶段完成(等待), 2: 完成
+      dirt.stageProgress = 0; // 当前阶段进度
+    }
+    
+    // 第一阶段：使用 common_spray
+    if (dirt.cleaningStage === 0) {
+      // 检查是否使用了正确的工具
+      if (!this.activeTool || this.activeTool.id !== 'common_spray') {
+        // 工具不匹配，提示用户选择 common_spray
+        return;
+      }
+      
+      // 初始化第一阶段进度和泡沫生成器
+      if (dirt.stageProgress === 0) {
+        // 使用配置的 process 值，默认3次
+        const process = dirt.process || 3;
+        dirt.maxStageProgress = process;
+        dirt.maxStrokes = process; // 用于进度条显示
+        dirt.strokeCount = 0;
+        
+        // 初始化泡沫生成器
+        if (!dirt.foamGenerator) {
+          dirt.foamGenerator = new FoamGenerator({
+            brushSize: 30
+          });
+        }
+      }
+      
+      // 增加进度
+      dirt.stageProgress++;
+      dirt.strokeCount = dirt.stageProgress; // 同步进度条
+      
+      // 在点击位置生成泡沫
+      if (dirt.foamGenerator) {
+        const s = this.screenWidth / 750;
+        // 直接在点击位置生成小泡沫
+        dirt.foamGenerator.spawnFoamCluster(x, y, s);
+        console.log(`[GameplayScene] 生成泡沫，当前气泡数: ${dirt.foamGenerator.getBubbleCount()}`);
+      }
+      
+      // 震动反馈
+      haptic.light();
+      
+      console.log(`[GameplayScene] spray_wipe 第一阶段: ${dirt.stageProgress}/${dirt.maxStageProgress}`);
+      
+      // 检查第一阶段是否完成
+      if (dirt.stageProgress >= dirt.maxStageProgress) {
+        // 第一阶段完成，进入等待状态
+        dirt.cleaningStage = 1;
+        dirt.stageProgress = 0;
+        dirt.strokeCount = 0; // 重置进度条，等待第二阶段
+        
+        // 弹回工具
+        this._spawnTool();
+        
+        console.log('[GameplayScene] spray_wipe 第一阶段完成，等待 cloth');
+      }
+      return;
+    }
+    
+    // 第二阶段：使用 cloth
+    if (dirt.cleaningStage === 1) {
+      // 检查是否使用了正确的工具
+      if (!this.activeTool || this.activeTool.id !== 'cloth') {
+        // 工具不匹配，提示用户选择 cloth
+        return;
+      }
+      
+      // 开始划动清洁（类似 wipe）
+      if (!this.strokeState.active || this.strokeState.dirt !== dirt) {
+        this._startSprayWipeStage2(dirt, x, y);
+      }
+    }
+  }
+  
+  /**
+   * 开始 spray_wipe 第二阶段清洁
+   */
+  _startSprayWipeStage2(dirt, x, y) {
+    const s = this.screenWidth / 750;
+    const gameAreaY = this.screenHeight * 0.08;
+    
+    this.isDraggingTool = true;
+    this.toolPosition = { x, y };
+    this.selectedDirt = dirt;
+    
+    // 使用配置的 process 值，默认3次
+    const process = dirt.process || 3;
+    
+    this.strokeState = {
+      active: true,
+      dirt: dirt,
+      strokeCount: 0,
+      maxStrokes: process, // 使用配置的进度格数
+      lastPos: { x, y: y - gameAreaY },
+      totalDistance: 0,
+      minStrokeDistance: 60 * s,
+      isStage2: true // 标记是第二阶段
+    };
+    
+    dirt.strokeCount = 0;
+    dirt.maxStrokes = process;
+    
+    console.log(`[GameplayScene] spray_wipe 第二阶段开始，需要划动 ${process} 次`);
+  }
+  
+  /**
+   * 完成 spray_wipe 二阶段清洁
+   */
+  _completeSprayWipeClean(dirt) {
+    dirt.cleaningStage = 2;
+    dirt.state = 'clean';
+    dirt.isHighlighted = false;
+    
+    // 清除泡沫
+    if (dirt.foamGenerator) {
+      dirt.foamGenerator.clear();
+    }
+    
+    // 添加亮晶晶特效
+    const s = this.screenWidth / 750;
+    const gameAreaY = this.screenHeight * 0.08;
+    this._addShineEffect(dirt.x, dirt.y + gameAreaY, s);
+    
+    // 增加清洁度
+    this.cleanProgress = Math.min(this.cleanProgress + 10, 100);
+    if (this.topBar) {
+      this.topBar.updateData({ progress: this.cleanProgress });
+    }
+    
+    console.log('[GameplayScene] spray_wipe 二阶段清洁完成');
+    
+    // 清理状态并弹回工具
+    this.isDraggingTool = false;
+    this.selectedDirt = null;
+    this.strokeState.active = false;
+    if (this.activeTool) {
+      this._spawnTool();
+    }
+    
+    // 检查是否全部完成
+    this._checkAllCleaned();
+  }
+
+  /**
    * broom 工具拖动时的特殊处理
    * 检测附近的 sweep 类型污垢，处理清扫进度
    */
@@ -3860,9 +4141,11 @@ class GameplayScene extends Scene {
       return;
     }
     
-    // wipe 类型：点击后如果 cloth 已弹出，自动进入 Z 字绘制模式
+    // wipe 类型：点击后如果工具匹配，自动进入划动清洁模式
     if (dirtType.operate_type === 'wipe') {
-      if (this.activeTool && this.activeTool.id === 'cloth') {
+      const recipes = dirtType.recipes || [];
+      const allTools = recipes.flat();
+      if (this.activeTool && allTools.includes(this.activeTool.id)) {
         // 只有不在划动清洁中，或点击了不同的污垢时才重新开始
         if (!this.strokeState.active || this.strokeState.dirt !== dirt) {
           this._startStrokeClean(dirt, x, y);
@@ -3871,14 +4154,22 @@ class GameplayScene extends Scene {
       return;
     }
     
-    // sweep 类型：点击后如果 broom 已弹出，自动进入 Z 字绘制模式
+    // sweep 类型：点击后如果工具匹配，自动进入划动清洁模式
     if (dirtType.operate_type === 'sweep') {
-      if (this.activeTool && this.activeTool.id === 'broom') {
+      const recipes = dirtType.recipes || [];
+      const allTools = recipes.flat();
+      if (this.activeTool && allTools.includes(this.activeTool.id)) {
         // 只有不在划动清洁中，或点击了不同的污垢时才重新开始
         if (!this.strokeState.active || this.strokeState.dirt !== dirt) {
           this._startStrokeClean(dirt, x, y);
         }
       }
+      return;
+    }
+    
+    // spray_wipe 二阶段清洁类型
+    if (dirtType.operate_type === 'spray_wipe') {
+      this._handleSprayWipeClean(dirt, x, y);
       return;
     }
     
@@ -4960,6 +5251,14 @@ class GameplayScene extends Scene {
       
       console.log(`[GameplayScene] ✅ 划动计数: ${state.strokeCount}/${state.maxStrokes} (dirt.strokeCount: ${dirt.strokeCount})`);
       
+      // spray_wipe 第二阶段：同时减少泡沫
+      if (state.isStage2 && dirt.foamGenerator) {
+        dirt.foamGenerator.reduceByStroke(state.strokeCount, state.maxStrokes);
+        // 同时减少污垢的不透明度（视觉上的清洁效果）
+        dirt.opacity = 1 - (state.strokeCount / state.maxStrokes);
+        console.log(`[GameplayScene] 泡沫减少，剩余: ${dirt.foamGenerator.getBubbleCount()}, 污垢透明度: ${dirt.opacity.toFixed(2)}`);
+      }
+      
       // 触发震动反馈（每完成一次划动）
       if (typeof wx !== 'undefined' && wx.vibrateShort) {
         wx.vibrateShort({ type: 'light' });
@@ -4968,9 +5267,21 @@ class GameplayScene extends Scene {
       // 检查是否完成所有划动（使用 dirt.strokeCount 判断）
       if (dirt.strokeCount >= state.maxStrokes) {
         console.log('[GameplayScene] 划动完成，300ms后清洁完成');
-        // 延迟300ms后完成清洁，让用户看到第3个格子
-        state.pendingComplete = true;
-        state.pendingCompleteTime = now + 300;
+        
+        // 判断是否是 spray_wipe 的第二阶段
+        if (state.isStage2) {
+          // 延迟300ms后完成二阶段清洁
+          state.pendingComplete = true;
+          state.pendingCompleteTime = now + 300;
+          // 延迟执行二阶段完成
+          setTimeout(() => {
+            this._completeSprayWipeClean(dirt);
+          }, 300);
+        } else {
+          // 普通划动清洁，延迟300ms后完成
+          state.pendingComplete = true;
+          state.pendingCompleteTime = now + 300;
+        }
         return;
       }
     }

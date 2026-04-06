@@ -57,7 +57,7 @@ export const BASE_TOOLS = [
     description: '特殊道具！可以帮助找到一处隐藏垃圾。',
     efficiency: 1.0,
     type: 'base',
-    unlockLevel: 2
+    unlockLevel: 3
   },
   {
     id: 'brush',
@@ -72,14 +72,23 @@ export const BASE_TOOLS = [
   },
   {
     id: 'common_spray',
-    name: '万能清洁喷雾',
+    name: '万能清洁剂',
     icon: '🧴',
     imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_common_spray.png',
     color: '#AB47BC',
     description: '喷洒清洁剂，对大部分污渍有效，对顽固污渍作用较弱',
     efficiency: 0.5, // 喷雾本身清洁力低，但可组合
     type: 'auxiliary',
-    unlockLevel: 3
+    unlockLevel: 2
+  },
+  {
+    id: 'mop',
+    name: '吸水拖把',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_mop.png',
+    description: '强力吸水拖把',
+    efficiency: 0.5, // 喷雾本身清洁力低，但可组合
+    type: 'auxiliary',
+    unlockLevel: 2
   },
   {
     id: 'vacuum',

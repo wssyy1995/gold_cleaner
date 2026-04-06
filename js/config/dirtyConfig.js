@@ -12,20 +12,13 @@ export const DIRT_TYPES = {
     operate_type: 'wipe'
   },
   preset_water_incru: { 
-    name: '水渍', 
-    difficulty: 1,
-    recipes: [['cloth']],
-    operate_type: 'wipe'
-  },
-  preset_water_incre: { 
-    name: '水渍', 
+    name: '水垢', 
     difficulty: 1,
     recipes: [['cloth']],
     operate_type: 'wipe'
   },
   preset_dust: { 
     name: '灰尘', 
-    color: '#8B4513', 
     difficulty: 1,
     recipes: [['cloth']],
     operate_type: 'wipe'

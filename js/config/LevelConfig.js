@@ -18,15 +18,25 @@ const STAGE_1_LEVELS = [
     name: '老年人卧室',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l1_home.png`,
     dirts: [
-      { type: 'banana', x: 320, y: 910},
-      { type: 'paper2', x: 265, y: 730 },
-      { type: 'apple', x: 405, y: 890 },
-      { type: 'pants', x: 450, y: 750 },
-      { type: 'blackmark', x: 135, y: 800 ,scale: 1.2}
+      { type: 'banana', x: 320, y: 885},
+      { type: 'paper2', x: 267, y: 700 },
+      { type: 'apple', x: 405, y: 875 },
+      { type: 'pants', x: 450, y: 740 },
+      { type: 'blackmark', x: 135, y: 775 ,scale: 1.2}
     ],
     dirts_deep_area: [
       { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
-        { type: 'paper', x: 300, y: 420 }]},
+        {
+          type: 'preset_dust',
+          process:6,
+          rect: [
+            { x: -10, y: 395 },   // 点1
+            { x: 790, y: 55 },  // 点2
+            { x: 800, y: 395 },  // 点3
+            { x: 220, y: 700 }   // 点4
+          ],
+          density: 3000
+        }]},
         {id: 2, x: 550, y: 950,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bed.png`,dirts: [
           { type: 'socks', x: 400, y: 700,scale: 1.5 ,mirror:''}]}
     ],
@@ -41,13 +51,12 @@ const STAGE_1_LEVELS = [
     name: '卫生间',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l2_home.png`,
     dirts: [
-      { type: 'preset_water_incru', x: 50, y: 560,radius:30,count:3 },
-      { type: 'preset_water_incru', x: 290, y: 380,radius:50,count:5 },
-      { type: 'preset_water_incru', x: 390, y: 400,radius:40,count:4 },
-      { type: 'preset_water_incru', x: 290, y: 550,radius:40,count:4 },
-      { type: 'waterstain', x: 500, y: 1100 },
-      { type: 'waterstain', x: 400, y: 1200 },
-      { type: 'waterstain', x: 3300, y: 1150 }
+      { type: 'preset_water_incru', x: 50, y: 540,radius:30,count:3 },
+      { type: 'preset_water_incru', x: 290, y: 360,radius:50,count:5 },
+      { type: 'preset_water_incru', x: 390, y: 380,radius:40,count:4 },
+      { type: 'preset_water_incru', x: 290, y: 530,radius:40,count:4 },
+      { type: 'waterstain', x: 500, y: 1000 },
+      { type: 'waterstain', x: 400, y: 900 },
 
     ],
     dirts_deep_area: [

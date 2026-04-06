@@ -31,7 +31,7 @@ class Toast {
       bgColor: '#FBBF24',      // 黄色背景
       borderColor: '#000000',   // 黑色边框
       borderWidth: 4,           // 边框宽度（加粗）
-      shadowOffset: 6,          // 阴影偏移（加大）
+      shadowOffset: 5,          // 阴影偏移（加大）
       shadowColor: '#000000',   // 阴影颜色
       textColor: '#000000',     // 文字颜色
       fontWeight: 'bold',
@@ -271,7 +271,7 @@ class Toast {
     ctx.fillText(this.icon, iconCenterX, iconCenterY + 2 * s); // 微调垂直居中
     
     // ===== 绘制文字 =====
-    ctx.font = `bold ${22 * s}px sans-serif`; // 字体增大（16->20）
+    ctx.font = `bold ${23 * s}px sans-serif`; // 字体增大
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = this.style.textColor;

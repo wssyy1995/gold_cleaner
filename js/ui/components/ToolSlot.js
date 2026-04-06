@@ -65,10 +65,10 @@ class ToolSlot {
     const W = this.screenWidth;
     const H = this.screenHeight;
     
-    // 容器高度占底部 12% 区域的 90%（底部现在是 12%，不是 10%）
+    // 容器高度保持原来基于 12% 的计算（不随底部区域变大而变大）
     this.containerH = H * 0.12 * 0.90;
-    // 往上移动 10px
-    this.containerY = H * 0.88 + (H * 0.12 - this.containerH) / 2 ;
+    // 容器 Y 位置：在底部 14% 区域内垂直居中
+    this.containerY = H * 0.86 + (H * 0.14 - this.containerH) / 2;
     
     // 左右边距（屏幕宽度的 2%）
     this.sidePadding = W * 0.02;

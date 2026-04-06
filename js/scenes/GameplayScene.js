@@ -963,10 +963,6 @@ class GameplayScene extends Scene {
    * @param {Object} dirtType - 污垢类型定义
    */
   _generatePresetDirt(dirtConfig, i, s, dirtType) {
-    // 配置中的坐标是设计尺寸（750x1334），需要适配当前屏幕
-    const x = (dirtConfig.x || 300) * s;
-    const y = (dirtConfig.y || 400) * s;
-    
     // 使用配置的 radius（默认30），这是霉斑分布范围的半径
     const radius = (dirtConfig.radius || 30) * s;
     const scale = dirtConfig.scale ?? 1;
@@ -974,7 +970,18 @@ class GameplayScene extends Scene {
     // 污垢的碰撞区域大小基于 radius（直径）
     const circleSize = radius * 2 * scale;
     
-    // 生成预制污垢数据（传入已缩放的坐标）
+    // 配置中的坐标是设计尺寸（750x1334），需要适配当前屏幕
+    // 但如果提供了 rect（4个坐标点），则不缩放坐标，由 preset 自己处理
+    let x, y;
+    if (dirtConfig.rect && Array.isArray(dirtConfig.rect)) {
+      x = dirtConfig.x || 300;
+      y = dirtConfig.y || 400;
+    } else {
+      x = (dirtConfig.x || 300) * s;
+      y = (dirtConfig.y || 400) * s;
+    }
+    
+    // 生成预制污垢数据（传入配置）
     const scaledConfig = {
       ...dirtConfig,
       x: x,
@@ -982,22 +989,45 @@ class GameplayScene extends Scene {
     };
     const presetData = PresetDirtRegistry.generate(dirtConfig.type, scaledConfig, s);
     
+    // 计算碰撞区域尺寸
+    let dirtWidth, dirtHeight, dirtX, dirtY;
+    if (dirtConfig.rect && Array.isArray(dirtConfig.rect)) {
+      // 对于四边形区域灰尘，使用四边形的中心点和包围盒尺寸
+      const quad = dirtConfig.rect;
+      const xs = quad.map(p => p.x * s);
+      const ys = quad.map(p => p.y * s);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      dirtX = (minX + maxX) / 2;
+      dirtY = (minY + maxY) / 2;
+      dirtWidth = maxX - minX;
+      dirtHeight = maxY - minY;
+    } else {
+      dirtX = x;
+      dirtY = y;
+      dirtWidth = circleSize;
+      dirtHeight = circleSize;
+    }
+    
     this.dirtObjects.push({
       id: i,
       type: dirtConfig.type,
       name: dirtType.name,
-      x: x,
-      y: y,
-      width: circleSize,
-      height: circleSize,
-      size: circleSize,
+      x: dirtX,
+      y: dirtY,
+      width: dirtWidth,
+      height: dirtHeight,
+      size: Math.max(dirtWidth, dirtHeight),
       scale: scale,
       mirror: dirtConfig.mirror,
       state: 'dirty',
       selected: false,
       cleaning: false,
       strokeCount: 0,
-      maxStrokes: 3,
+      maxStrokes: dirtConfig.process || 3,  // 使用配置中的 process 字段
+      process: dirtConfig.process || 3,     // 保存原始 process 值
       currentRecipe: dirtType.recipes[0],
       currentStep: 0,
       recipes: dirtType.recipes,
@@ -2312,13 +2342,13 @@ class GameplayScene extends Scene {
 
   /**
    * 渲染房间视图
-   * 布局：顶部 8% 浅棕黄色，中间 80% 游戏区域，底部 12% 浅棕黄色（工具槽）
+   * 布局：顶部 9% 浅棕黄色，中间 77% 游戏区域，底部 14% 浅棕黄色（工具槽）
    */
   _renderRoomView(ctx, s) {
     // 区域划分（总和 100%）
-    const topAreaHeight = this.screenHeight * 0.08;    // 顶部 8%
-    const gameAreaHeight = this.screenHeight * 0.80;   // 中间 80%（游戏区域）
-    const bottomAreaHeight = this.screenHeight * 0.12; // 底部 12%（原来是10%，现在填满剩余空间）
+    const topAreaHeight = this.screenHeight * 0.09;    // 顶部 9%
+    const gameAreaHeight = this.screenHeight * 0.77;   // 中间 77%（游戏区域）
+    const bottomAreaHeight = this.screenHeight * 0.14; // 底部 14%
     
     const gameAreaY = topAreaHeight;  // 游戏区域起始 Y
     const bottomAreaY = gameAreaY + gameAreaHeight; // 底部区域起始 Y
@@ -2359,9 +2389,18 @@ class GameplayScene extends Scene {
       this._renderTutorialClothDirtHint(ctx, s);
     }
 
-    // 4. 绘制底部 10% 浅棕黄色背景（工具槽区域）
+    // 4. 绘制底部 15% 浅棕黄色背景（工具槽区域）
     ctx.fillStyle = lightBrown;
     ctx.fillRect(0, bottomAreaY, this.screenWidth, bottomAreaHeight);
+    
+    // 4.1 在底部区域顶部绘制自然的阴影过渡（从上往下渐隐）
+    const shadowHeight = 20 * s;  // 阴影高度（20px 基准）
+    const shadowGrad = ctx.createLinearGradient(0, bottomAreaY, 0, bottomAreaY + shadowHeight);
+    shadowGrad.addColorStop(0, 'rgba(120, 70, 30, 0.25)');   // 顶部：半透明深棕色
+    shadowGrad.addColorStop(0.5, 'rgba(120, 70, 30, 0.10)'); // 中间：更淡
+    shadowGrad.addColorStop(1, 'rgba(120, 70, 30, 0)');      // 底部：完全透明
+    ctx.fillStyle = shadowGrad;
+    ctx.fillRect(0, bottomAreaY, this.screenWidth, Math.min(shadowHeight, bottomAreaHeight));
 
     // 5. 绘制 TopBar（在顶部区域）
     if (this.topBar) {
@@ -2460,14 +2499,20 @@ class GameplayScene extends Scene {
     // 第二阶段：在所有污垢之上渲染进度条（确保层级最高）
     this.dirtObjects.forEach(dirt => {
       if (dirt.state === 'clean') return;
-      if (dirt.strokeCount <= 0 || dirt.strokeCount > dirt.maxStrokes) return;
+      
+      // 获取进度格数量：优先使用 dirt.process，其次使用 maxStrokes
+      const process = dirt.process || dirt.maxStrokes || 3;
+
+      
+      // 判断是否显示进度条：有进度且未超过总进度
+      if (dirt.strokeCount <= 0 || dirt.strokeCount > process) return;
       
       const cx = dirt.x;
       const cy = dirt.y + gameAreaY;
       const highlightScale = dirt.highlightScale || 1;
       const radius = (dirt.width / 2) * highlightScale;
       
-      this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, dirt.maxStrokes, s);
+      this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, process, s);
     });
     
     // 绘制活动工具（如果在页面上，包括拖动状态）
@@ -2610,13 +2655,13 @@ class GameplayScene extends Scene {
   }
 
   /**
-   * 渲染划动清洁进度条（三格蓝色能量条）
+   * 渲染划动清洁进度条（支持动态格数）
    * @param {CanvasRenderingContext2D} ctx - Canvas上下文
    * @param {number} cx - 中心X坐标
    * @param {number} cy - 中心Y坐标
    * @param {number} radius - 污垢半径
    * @param {number} strokeCount - 当前划动次数
-   * @param {number} maxStrokes - 最大划动次数
+   * @param {number} maxStrokes - 最大划动次数（可从 dirt.process 获取）
    * @param {number} s - 屏幕缩放比例
    */
   _renderStrokeProgress(ctx, cx, cy, radius, strokeCount, maxStrokes, s) {
@@ -3269,7 +3314,7 @@ class GameplayScene extends Scene {
     // 处理工具拖动
     if (this.isDraggingTool && this.activeTool) {
       // 限制工具不能拖动到工具槽下方
-      const toolSlotTopY = this.screenHeight * 0.88; // 工具槽顶部Y坐标
+      const toolSlotTopY = this.screenHeight * 0.86; // 工具槽顶部Y坐标（底部14%区域）
       const clampedY = Math.min(y, toolSlotTopY); // 限制y不超过工具槽顶部
       
       // 更新工具位置（跟随手指，但有边界限制）
@@ -3422,8 +3467,9 @@ class GameplayScene extends Scene {
       const dy = gameY - dirt.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
       
-      // 检测范围更大（圆圈半径 + 50px），方便拖动时涂抹
-      if (distance <= dirt.size / 2 + 50) {
+      // 检测范围：灰尘用 10px，其他用 50px
+      const detectRange = (dirt.type === 'preset_dust') ? 10 : 50;
+      if (distance <= dirt.size / 2 + detectRange) {
         return dirt;
       }
     }
@@ -3446,7 +3492,7 @@ class GameplayScene extends Scene {
       }
     });
     
-    // 查找附近的 wipe 类型污垢（40px 范围，擦拭范围比高亮范围大）
+    // 查找附近的 wipe 类型污垢
     let nearbyDirt = null;
     for (let i = this.dirtObjects.length - 1; i >= 0; i--) {
       const dirt = this.dirtObjects[i];
@@ -3460,20 +3506,24 @@ class GameplayScene extends Scene {
       const dy = gameY - dirt.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
       
-      // 40px 范围内可擦拭
-      if (distance <= dirt.size / 2 + 40) {
+      // 根据污垢类型设置检测范围
+      // preset_dust 灰尘使用更严格的范围（10px），其他用 40px
+      const detectRange = (dirt.type === 'preset_dust') ? 10 : 40;
+      
+      if (distance <= dirt.size / 2 + detectRange) {
         nearbyDirt = dirt;
         break;
       }
     }
     
     if (nearbyDirt) {
-      // 高亮效果（20px 范围内显示白光，40px 范围内可擦拭）
+      // 高亮效果：灰尘用 5px 范围，其他用 20px
+      const highlightRange = (nearbyDirt.type === 'preset_dust') ? 5 : 20;
       const dx = x - nearbyDirt.x;
       const dy = gameY - nearbyDirt.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
       
-      if (distance <= nearbyDirt.size / 2 + 20) {
+      if (distance <= nearbyDirt.size / 2 + highlightRange) {
         nearbyDirt.isHighlighted = true;
         nearbyDirt.highlightScale = 1; // 不再放大，只显示白光
       }
@@ -3500,7 +3550,7 @@ class GameplayScene extends Scene {
   _updateWipeProgress(dirt) {
     // 初始化擦拭进度
     if (dirt.wipeProgress === undefined) {
-      dirt.wipeProgress = 0; // 0-5，5次完成
+      dirt.wipeProgress = 0; // 0-1，根据 process 字段决定实际次数
       dirt.wipeCount = 0;    // 经过次数
     }
     
@@ -3508,10 +3558,17 @@ class GameplayScene extends Scene {
     if (!this.clothInDirt) {
       // 工具刚进入污垢区域
       this.clothInDirt = true;
-      dirt.wipeCount++;
-      dirt.wipeProgress = Math.min(dirt.wipeCount / 5, 1); // 5次完成
       
-      console.log(`[GameplayScene] 擦拭进度: ${dirt.wipeCount}/5, ${dirt.name}`);
+      // 获取需要的擦拭次数：优先使用 process，其次使用 maxStrokes，默认5
+      const requiredWipes = dirt.process || dirt.maxStrokes || 5;
+      
+      dirt.wipeCount++;
+      dirt.wipeProgress = Math.min(dirt.wipeCount / requiredWipes, 1);
+      
+      // 同步 strokeCount 用于进度条显示
+      dirt.strokeCount = dirt.wipeCount;
+      
+      console.log(`[GameplayScene] 擦拭进度: ${dirt.wipeCount}/${requiredWipes}, ${dirt.name}`);
       
       // 轻微震动反馈（仅在 iOS/Android 平台）
       haptic.light();
@@ -3519,8 +3576,8 @@ class GameplayScene extends Scene {
       // 播放擦拭音效（如果有）
       // this._playWipeSound();
       
-      // 5次后完成清洁
-      if (dirt.wipeCount >= 5) {
+      // 达到所需次数后完成清洁
+      if (dirt.wipeCount >= requiredWipes) {
         this._completeWipeClean(dirt);
       }
     }
@@ -4311,7 +4368,17 @@ class GameplayScene extends Scene {
     this.dirtObjects = area.dirts
       .filter((d, index) => {
         // 过滤掉已清洁的污垢
-        const dirtId = d.id || `${d.x}-${d.y}`;
+        let dirtId;
+        if (d.id) {
+          dirtId = d.id;
+        } else if (d.rect && Array.isArray(d.rect)) {
+          // 四边形使用4个点的平均值作为ID
+          const avgX = d.rect.reduce((sum, p) => sum + p.x, 0) / 4;
+          const avgY = d.rect.reduce((sum, p) => sum + p.y, 0) / 4;
+          dirtId = `${avgX.toFixed(0)}-${avgY.toFixed(0)}`;
+        } else {
+          dirtId = `${d.x}-${d.y}`;
+        }
         const isCleaned = area.cleanedDirts.includes(dirtId);
         if (isCleaned) {
           console.log(`[GameplayScene] 过滤掉已清洁污垢: ${dirtId}`);
@@ -4330,43 +4397,83 @@ class GameplayScene extends Scene {
         const baseCircleSize = 60 * s;
         const circleSize = baseCircleSize * scale;
         
-        // ID 必须与过滤时使用的逻辑一致：d.id || `${d.x}-${d.y}`
-        const dirtId = dirtConfig.id || `${dirtConfig.x}-${dirtConfig.y}`;
+        // ID 必须与过滤时使用的逻辑一致
+        let dirtId;
+        if (dirtConfig.id) {
+          dirtId = dirtConfig.id;
+        } else if (dirtConfig.rect && Array.isArray(dirtConfig.rect)) {
+          // 四边形灰尘使用4个点的平均值作为 ID
+          const avgX = dirtConfig.rect.reduce((sum, p) => sum + p.x, 0) / 4;
+          const avgY = dirtConfig.rect.reduce((sum, p) => sum + p.y, 0) / 4;
+          dirtId = `${avgX.toFixed(0)}-${avgY.toFixed(0)}`;
+        } else {
+          dirtId = `${dirtConfig.x}-${dirtConfig.y}`;
+        }
         
         // 检查是否是预制污垢类型
         const isPreset = dirtConfig.type.startsWith('preset_');
         let presetData = null;
         let presetType = null;
         
+        // 计算污垢位置和尺寸
+        let dirtX, dirtY, dirtWidth, dirtHeight, dirtSize;
+        if (dirtConfig.rect && Array.isArray(dirtConfig.rect)) {
+          // 四边形区域灰尘（如 preset_dust）
+          const quad = dirtConfig.rect;
+          const xs = quad.map(p => p.x);
+          const ys = quad.map(p => p.y);
+          const minX = Math.min(...xs);
+          const maxX = Math.max(...xs);
+          const minY = Math.min(...ys);
+          const maxY = Math.max(...ys);
+          dirtX = (minX + maxX) / 2 * s;
+          dirtY = (minY + maxY) / 2 * s;
+          dirtWidth = (maxX - minX) * s;
+          dirtHeight = (maxY - minY) * s;
+          dirtSize = Math.max(dirtWidth, dirtHeight);
+        } else {
+          // 普通圆形污垢
+          dirtX = (dirtConfig.x || 300) * s;
+          dirtY = (dirtConfig.y || 400) * s;
+          dirtWidth = circleSize;
+          dirtHeight = circleSize;
+          dirtSize = circleSize;
+        }
+        
         if (isPreset) {
-          // 传入已缩放的坐标
+          // 传入配置（坐标保持设计尺寸，由 preset 自己处理缩放）
           const scaledConfig = {
             ...dirtConfig,
-            x: dirtConfig.x * s,
-            y: dirtConfig.y * s
+            x: dirtConfig.x || dirtX / s,
+            y: dirtConfig.y || dirtY / s
           };
           presetData = PresetDirtRegistry.generate(dirtConfig.type, scaledConfig, s);
           presetType = dirtConfig.type;
         }
         
+        // 获取进度格数量：优先使用配置中的 process，其次使用 maxStrokes，默认3
+        const process = dirtConfig.process || dirtConfig.maxStrokes || 3;
+
+        
         return {
           id: dirtId,
-          originalX: dirtConfig.x, // 保存原始坐标用于标识
-          originalY: dirtConfig.y,
+          originalX: dirtConfig.x || dirtX / s, // 保存原始坐标用于标识
+          originalY: dirtConfig.y || dirtY / s,
           type: dirtConfig.type,
           name: dirtType.name,
-          x: dirtConfig.x * s,
-          y: dirtConfig.y * s,
-          width: circleSize,
-          height: circleSize,
-          size: circleSize,
+          x: dirtX,
+          y: dirtY,
+          width: dirtWidth,
+          height: dirtHeight,
+          size: dirtSize,
           scale: scale,             // 缩放比例（用于渲染）
           mirror: dirtConfig.mirror, // 镜像方向：'horizontal' | 'vertical' | undefined
           state: 'dirty',
           selected: false,
           cleaning: false,
           strokeCount: 0,
-          maxStrokes: 3,
+          maxStrokes: process,     // 使用 process 字段作为总进度格数
+          process: process,        // 保存原始 process 值供进度条使用
           currentRecipe: dirtType.recipes[0],
           currentStep: 0,
           recipes: dirtType.recipes,
@@ -4766,12 +4873,15 @@ class GameplayScene extends Scene {
     // 保留之前的进度（如果有的话）
     const existingStrokeCount = dirt.strokeCount || 0;
     
+    // 获取需要的擦拭次数：优先使用 process，其次使用 maxStrokes，默认3
+    const requiredStrokes = dirt.process || dirt.maxStrokes || 3;
+    
     const gameAreaY = this.screenHeight * 0.08;
     this.strokeState = {
       active: true,
       dirt: dirt,
       strokeCount: existingStrokeCount,  // 从之前的进度继续
-      maxStrokes: 3,
+      maxStrokes: requiredStrokes,
       lastPos: { x, y: y - gameAreaY },
       totalDistance: 0,
       minStrokeDistance: 60 * (this.screenWidth / 750)
@@ -4779,7 +4889,7 @@ class GameplayScene extends Scene {
     
     // 在污垢对象上记录当前划动次数，用于渲染进度条
     dirt.strokeCount = existingStrokeCount;  // 保留之前的进度
-    dirt.maxStrokes = 3;
+    dirt.maxStrokes = requiredStrokes;
     
     // 高亮显示目标污垢
     dirt.isHighlighted = true;
@@ -4981,13 +5091,13 @@ class GameplayScene extends Scene {
     const slotIndex = this.currentToolIndex;
     const slotPos = this.toolSlot ? this.toolSlot.slotPositions[slotIndex] : null;
     
-    // 工具槽区域
-    const toolSlotTopY = this.screenHeight * 0.88;
-    const toolSlotHeight = this.screenHeight * 0.12;
+    // 工具槽区域（基于当前 ToolSlot 的实际位置）
+    const toolSlotTopY = this.screenHeight * 0.86;  // 底部14%区域的起始
+    const toolSlotHeight = this.screenHeight * 0.15 * 0.90;  // 容器高度（基于15%的90%）
     const toolSlotBottomY = toolSlotTopY + toolSlotHeight;
     
-    // 目标位置：工具槽上方居中（静止时再往上10px）
-    const targetY = toolSlotTopY - 50; // 工具槽上方50px
+    // 目标位置：工具槽上方（向下移动后调整）
+    const targetY = toolSlotTopY - 45; // 工具槽上方45px（比之前低20px）
     
     if (slotPos) {
       // 从槽位位置开始动画
@@ -5032,10 +5142,10 @@ class GameplayScene extends Scene {
     
     const slotIndex = this.currentToolIndex;
     
-    // 获取槽位位置
+    // 获取槽位位置（基于当前 ToolSlot 的实际位置）
     const slotPos = this.toolSlot ? this.toolSlot.slotPositions[slotIndex] : null;
-    const toolSlotTopY = this.screenHeight * 0.88;
-    const toolSlotHeight = this.screenHeight * 0.12;
+    const toolSlotTopY = this.screenHeight * 0.85;  // 底部15%区域的起始
+    const toolSlotHeight = this.screenHeight * 0.15 * 0.90;  // 容器高度
     const toolSlotBottomY = toolSlotTopY + toolSlotHeight;
     
     // 启动收回动画（反向的弹出动画）

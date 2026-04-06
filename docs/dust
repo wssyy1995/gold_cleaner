@@ -1,0 +1,249 @@
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { Eraser, Sparkles } from 'lucide-react';
+
+const DustSimulator = () => {
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const lastPosRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width || canvas.clientWidth || 800;
+    const height = rect.height || canvas.clientHeight || 600;
+    
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+  }, []);
+
+  const drawDustCluster = useCallback((ctx, x, y, densityMultiplier = 1) => {
+    const baseDensity = 150 * densityMultiplier; 
+    const spreadRadius = 40; 
+
+    for (let i = 0; i < baseDensity; i++) {
+      const radius = spreadRadius * Math.pow(Math.random(), 1.5);
+      const angle = Math.random() * Math.PI * 2;
+      const offsetX = x + Math.cos(angle) * radius;
+      const offsetY = y + Math.sin(angle) * radius;
+
+      const particleType = Math.random();
+
+      const r = Math.floor(Math.random() * 30 + 130); 
+      const g = Math.floor(Math.random() * 30 + 130); 
+      const b = Math.floor(Math.random() * 30 + 120); 
+      
+      if (particleType < 0.65) {
+        // 1. 最细碎的底灰 (细腻、柔软、半透明)
+        const opacity = Math.random() * 0.35 + 0.15;
+        const size = Math.random() * 0.8 + 0.2; 
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+        ctx.fillRect(offsetX, offsetY, size, size); 
+        
+      } else if (particleType < 0.85) {
+        // 2. 【核心调整】增强“颗粒感”的砂砾/硬质灰尘
+        // 更深、更实、轮廓稍微明显一点，制造出真实的沙粒感和颗粒感
+        const gritSize = Math.random() * 1.5 + 0.5; 
+        const gritOpacity = Math.random() * 0.4 + 0.5; // 0.5~0.9，更不透明
+        const darkR = r - 40; // 颜色更深
+        const darkG = g - 40;
+        const darkB = b - 40;
+        
+        ctx.fillStyle = `rgba(${darkR}, ${darkG}, ${darkB}, ${gritOpacity})`;
+        
+        // 随机旋转一些不规则的长方形颗粒
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.rotate(Math.random() * Math.PI);
+        ctx.fillRect(0, 0, gritSize, gritSize * (Math.random() * 0.5 + 0.5)); 
+        ctx.restore();
+
+      } else if (particleType < 0.95) {
+        // 3. 灰尘团 (絮状绒毛) - 边缘柔和
+        const opacity = Math.random() * 0.35 + 0.15;
+        const size = Math.random() * 1.5 + 0.5;
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity * 0.4})`; 
+        ctx.beginPath();
+        ctx.arc(offsetX, offsetY, size, 0, Math.PI * 2);
+        ctx.fill();
+        
+      } else {
+        // 4. 细微纤维/毛发
+        const opacity = Math.random() * 0.35 + 0.15;
+        const length = Math.random() * 8 + 2;
+        ctx.strokeStyle = `rgba(${r - 20}, ${g - 20}, ${b - 20}, ${opacity + 0.3})`;
+        ctx.lineWidth = Math.random() * 0.3 + 0.2; 
+        
+        ctx.beginPath();
+        ctx.moveTo(offsetX, offsetY);
+        const cpX = offsetX + (Math.random() - 0.5) * length * 2;
+        const cpY = offsetY + (Math.random() - 0.5) * length * 2;
+        const endX = offsetX + (Math.random() - 0.5) * length;
+        const endY = offsetY + (Math.random() - 0.5) * length;
+        
+        ctx.quadraticCurveTo(cpX, cpY, endX, endY);
+        ctx.stroke();
+      }
+    }
+  }, []);
+
+  const startDrawing = (e) => {
+    if (isProcessing) return;
+    setIsDrawing(true);
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    
+    lastPosRef.current = { x, y };
+    
+    const ctx = canvas.getContext('2d');
+    drawDustCluster(ctx, x, y, 1.5);
+  };
+
+  const draw = (e) => {
+    if (!isDrawing || isProcessing) return;
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    
+    const dx = x - lastPosRef.current.x;
+    const dy = y - lastPosRef.current.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance > 5) {
+      const ctx = canvas.getContext('2d');
+      drawDustCluster(ctx, x, y, 1.0);
+      lastPosRef.current = { x, y };
+    }
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+    lastPosRef.current = null;
+  };
+
+  const fillScreen = () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    
+    const stepY = 25; 
+    const stepX = 25;
+    
+    let currentY = 0;
+
+    const renderChunk = () => {
+      for (let x = 0; x <= width; x += stepX) {
+        const jitterX = x + (Math.random() - 0.5) * 20;
+        const jitterY = currentY + (Math.random() - 0.5) * 20;
+        
+        drawDustCluster(ctx, jitterX, jitterY, 0.8); 
+      }
+      
+      currentY += stepY;
+      
+      if (currentY <= height) {
+        requestAnimationFrame(renderChunk);
+      } else {
+        setIsProcessing(false);
+      }
+    };
+    
+    requestAnimationFrame(renderChunk);
+  };
+
+  const clearCanvas = () => {
+    if (isProcessing) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+  };
+
+  return (
+    <div className="w-full max-w-4xl mx-auto p-6 bg-slate-50 rounded-xl shadow-lg border border-slate-200 font-sans">
+      <div className="flex justify-between items-end mb-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">桌面灰尘模拟器</h2>
+          <p className="text-sm text-slate-500 mt-1">在细腻中加入硬质砂砾，提升真实颗粒感</p>
+        </div>
+        
+        <div className="flex space-x-3">
+          <button 
+            onClick={clearCanvas}
+            disabled={isProcessing}
+            className="flex items-center px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm disabled:opacity-50"
+          >
+            <Eraser className="w-4 h-4 mr-2" />
+            擦除灰尘
+          </button>
+          
+          <button 
+            onClick={fillScreen}
+            disabled={isProcessing}
+            className="flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors shadow-sm disabled:opacity-50"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            一键落灰
+          </button>
+        </div>
+      </div>
+
+      <div className="relative rounded-lg overflow-hidden shadow-inner border border-slate-200 bg-white">
+        {isProcessing && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+            <div className="px-4 py-2 bg-slate-800/80 text-white rounded-full text-sm animate-pulse shadow-lg backdrop-blur-sm">
+              正在生成灰尘沉积...
+            </div>
+          </div>
+        )}
+        
+        <canvas
+          ref={canvasRef}
+          onMouseDown={startDrawing}
+          onMouseMove={draw}
+          onMouseUp={stopDrawing}
+          onMouseLeave={stopDrawing}
+          onTouchStart={startDrawing}
+          onTouchMove={draw}
+          onTouchEnd={stopDrawing}
+          className="w-full h-[600px] cursor-crosshair touch-none"
+          style={{ display: 'block', backgroundColor: '#ffffff' }}
+        />
+      </div>
+      
+      <div className="mt-4 text-xs text-slate-400 text-center flex justify-center space-x-6">
+        <span>✨ 包含微尘、深色砂砾、絮状物和纤维</span>
+        <span>🖱️ 鼠标拖拽手动“撒灰”</span>
+        <span>🚀 层次更分明的物理质感</span>
+      </div>
+    </div>
+  );
+};
+
+export default DustSimulator;

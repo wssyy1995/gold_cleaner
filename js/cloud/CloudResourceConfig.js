@@ -19,6 +19,8 @@ export const PRELOAD_CLOUD_FILE_IDS = {
   'ui-icon-pass': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/icon/ui-icon-pass.png',
   // 错误工具提示表情
   'ui_icon_sad': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/icon/ui_icon_sad.png',
+  // 清洁提示图标（喷雾后提示擦拭）
+  'ui_icon_cleaning': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/icon/ui_icon_cleaning.png',
   // 主页背景图（根据用户进度动态选择 stage）
   'bg-stage1-home': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage1-home.png',
   'bg-stage2-home': 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/backgrounds/bg-stage2-home.png',

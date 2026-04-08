@@ -1,128 +1,255 @@
-import React, { useRef, useEffect, useState } from 'react';
+PremiumGuidanceShowcase
+发布
+import React, { useState, useEffect } from 'react';
+import { Hand, Sparkles, MousePointer2, MoveRight, ArrowRight, Eraser } from 'lucide-react';
 
-export default function StainEffect() {
-  const canvasRef = useRef(null);
-  const [key, setKey] = useState(0);
+export default function GuidanceShowcase() {
+  const [activeMode, setActiveMode] = useState(1);
+  const [status, setStatus] = useState('idle'); // idle -> spraying -> dissolving -> sliding -> stable
+  const [progress, setProgress] = useState(0);
+
+  const modes = [
+    { id: 1, name: '微磨砂胶囊', desc: '灵动岛风格的半透明磨砂 UI，内部极其微弱地暗示左右滑动，现代且克制。' },
+    { id: 2, name: '幻影擦拭', desc: '不使用图标。一块半透明“幻影抹布”自动做物理擦拭演示，勾起玩家强迫症。' },
+    { id: 3, name: '边缘脱落', desc: '泡沫角落微微卷起，像一张等待被撕掉的贴纸，利用本能的“可供性”暗示。' },
+    { id: 4, name: '星芒与涟漪', desc: '纯粹情感暗示。泡沫高亮处闪烁星芒并扩散波纹，代表“一切就绪等待擦拭”。' },
+    { id: 5, name: '焦点流光', desc: '四周非泡沫区域压暗15%，泡沫表面闪过一道光效沿着擦拭轨迹流淌，电影级无感引导。' }
+  ];
+
+  // 模拟5秒物理生命周期
+  const handleSpray = () => {
+    if (status !== 'idle') return;
+    setStatus('spraying');
+    setProgress(0);
+
+    // 0-1.5s 起泡膨胀
+    setTimeout(() => setStatus('dissolving'), 1500);
+    
+    // 1.5-3.5s 溶解变色
+    setTimeout(() => setStatus('sliding'), 3500);
+    
+    // 3.5-5.0s 重力滑落 -> 进入稳定引导态
+    setTimeout(() => setStatus('stable'), 5000);
+  };
+
+  const reset = () => {
+    setStatus('idle');
+    setProgress(0);
+  };
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-
-    // 清空画布
-    ctx.clearRect(0, 0, width, height);
-
-    // 绘制瓷砖背景
-    ctx.fillStyle = '#f4f4f4';
-    ctx.fillRect(0, 0, width, height);
-    ctx.strokeStyle = '#dcdcdc';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < width; i += 40) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, height);
-      ctx.stroke();
+    let timer;
+    if (status !== 'idle' && status !== 'stable') {
+      timer = setInterval(() => {
+        setProgress(p => Math.min(p + 2, 100)); // 5000ms / 50ms = 100 steps
+      }, 50);
     }
-    for (let j = 0; j < height; j += 40) {
-      ctx.beginPath();
-      ctx.moveTo(0, j);
-      ctx.lineTo(width, j);
-      ctx.stroke();
-    }
-
-    // 添加轻微的背景噪点增加真实感
-    ctx.fillStyle = 'rgba(0,0,0,0.03)';
-    for(let i = 0; i < 6000; i++){
-      ctx.fillRect(Math.random() * width, Math.random() * height, 1.5, 1.5);
-    }
-
-    // 污渍中心点和基础半径
-    const centerX = width / 2 + (Math.random() * 60 - 30);
-    const centerY = height / 2 + (Math.random() * 60 - 30);
-    const baseRadius = 70 + Math.random() * 50;
-
-    // 关键：正片叠底模式，让污渍“渗入”瓷砖缝隙
-    ctx.globalCompositeOperation = 'multiply';
-
-    // 生成不规则的边缘点
-    const points = [];
-    const numPoints = 14;
-    for (let i = 0; i < numPoints; i++) {
-      const angle = (i / numPoints) * Math.PI * 2;
-      const radius = baseRadius * (0.5 + Math.random() * 0.7);
-      points.push({
-        x: centerX + Math.cos(angle) * radius,
-        y: centerY + Math.sin(angle) * radius
-      });
-    }
-
-    // 设置深黄色/浓茶色的径向渐变
-    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, baseRadius * 1.3);
-    // 中心部分：较深的亮黄色
-    gradient.addColorStop(0, 'rgba(255, 180, 0, 0.65)'); 
-    // 中间过渡：深琥珀色
-    gradient.addColorStop(0.7, 'rgba(210, 140, 0, 0.85)'); 
-    // 边缘干涸圈（咖啡环效应）：深褐色/暗黄色，颜色最重
-    gradient.addColorStop(1, 'rgba(160, 90, 0, 0.95)');   
-
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-
-    // 使用贝塞尔曲线连接各个点，形成圆滑但不规则的液体边缘
-    for (let i = 0; i < numPoints; i++) {
-      const nextIndex = (i + 1) % numPoints;
-      const xc = (points[i].x + points[nextIndex].x) / 2;
-      const yc = (points[i].y + points[nextIndex].y) / 2;
-      ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
-    }
-    ctx.closePath();
-    ctx.fill();
-
-    // 添加周围的飞溅小液滴
-    const numSplatters = 15 + Math.random() * 25;
-    for (let i = 0; i < numSplatters; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = baseRadius * (0.9 + Math.random() * 1.2);
-      const r = 1 + Math.random() * 5;
-      const sx = centerX + Math.cos(angle) * dist;
-      const sy = centerY + Math.sin(angle) * dist;
-
-      const sGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
-      sGrad.addColorStop(0, 'rgba(255, 180, 0, 0.75)');
-      sGrad.addColorStop(1, 'rgba(160, 90, 0, 0.95)');
-      
-      ctx.fillStyle = sGrad;
-      ctx.beginPath();
-      ctx.arc(sx, sy, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 恢复默认混合模式
-    ctx.globalCompositeOperation = 'source-over';
-
-  }, [key]);
+    return () => clearInterval(timer);
+  }, [status]);
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 bg-gray-100 rounded-lg w-full max-w-2xl mx-auto">
-      <h2 className="text-xl font-bold mb-4 text-gray-800">深黄色污渍模拟 (Canvas)</h2>
-      <div className="bg-white p-1 rounded-md shadow-lg border border-gray-300">
-        <canvas 
-          ref={canvasRef} 
-          width={400} 
-          height={400} 
-          className="rounded cursor-pointer"
-          onClick={() => setKey(k => k + 1)}
-        />
+    <div className="flex flex-col md:flex-row h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-800">
+      
+      {/* 侧边控制栏 */}
+      <div className="w-full md:w-80 bg-white shadow-xl z-20 p-6 flex flex-col h-full border-r border-slate-100 shrink-0">
+        <h2 className="text-xl font-bold mb-1 tracking-tight">清洁指引实验室</h2>
+        <p className="text-xs text-slate-400 mb-6">高级解压感 UI 原型演示</p>
+
+        <div className="flex-1 overflow-y-auto space-y-3 pb-8 pr-2">
+          {modes.map((mode) => (
+            <div 
+              key={mode.id}
+              onClick={() => { setActiveMode(mode.id); reset(); }}
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                activeMode === mode.id 
+                  ? 'border-blue-500 bg-blue-50 shadow-sm ring-1 ring-blue-500/20' 
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              <h3 className={`font-semibold text-sm mb-1 ${activeMode === mode.id ? 'text-blue-700' : 'text-slate-700'}`}>
+                方案 {mode.id}: {mode.name}
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">{mode.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="pt-4 border-t border-slate-100 mt-auto">
+          <div className="flex items-center justify-between mb-3 text-xs text-slate-400">
+            <span>状态: {status === 'idle' ? '待命' : status === 'stable' ? '已稳定 (显示指引)' : '溶解反应中...'}</span>
+            <span className="font-mono">{status === 'stable' ? '5.0s' : `${(progress * 0.05).toFixed(1)}s`}</span>
+          </div>
+          
+          <button 
+            onClick={status === 'stable' ? reset : handleSpray}
+            disabled={status !== 'idle' && status !== 'stable'}
+            className={`w-full py-3 rounded-xl font-medium text-sm transition-all shadow-sm flex justify-center items-center gap-2 ${
+              status === 'idle' 
+                ? 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
+                : status === 'stable'
+                  ? 'bg-slate-800 text-white hover:bg-slate-900 active:scale-95'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            {status === 'idle' ? (
+              <>点击喷洒泡沫开始测试</>
+            ) : status === 'stable' ? (
+              <><Eraser size={16} /> 模拟擦除并重置</>
+            ) : (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            )}
+          </button>
+        </div>
       </div>
-      <p className="mt-3 text-sm text-gray-500">点击上方画布或下方按钮生成新的随机形状</p>
-      <button 
-        onClick={() => setKey(k => k + 1)}
-        className="mt-5 px-6 py-2 bg-yellow-600 text-white font-medium rounded-md hover:bg-yellow-700 transition-colors shadow-sm"
-      >
-        重新生成污渍
-      </button>
+
+      {/* 演示区域 */}
+      <div className="flex-1 relative bg-gradient-to-b from-sky-200 to-sky-100 flex items-center justify-center overflow-hidden">
+        
+        {/* 背景：模拟窗外模糊风景 */}
+        <div className="absolute inset-0 opacity-40 blur-sm pointer-events-none" 
+             style={{ 
+               backgroundImage: 'radial-gradient(circle at 50% 30%, #fff 0%, transparent 60%)',
+             }} 
+        />
+        
+        {/* 方案5的暗角 (Cinematic Vignette) */}
+        <div 
+          className="absolute inset-0 pointer-events-none transition-opacity duration-1000 z-10"
+          style={{
+            background: 'radial-gradient(circle at center, transparent 30%, rgba(0,0,15,0.4) 100%)',
+            opacity: (activeMode === 5 && status === 'stable') ? 1 : 0
+          }}
+        />
+
+        {/* 核心玻璃板与污垢区 */}
+        <div className="relative w-80 h-96 bg-white/10 backdrop-blur-sm border border-white/30 rounded-3xl shadow-2xl flex items-center justify-center overflow-hidden z-20">
+          
+          {/* 模拟污垢底层 */}
+          <div className="absolute inset-0 flex items-center justify-center opacity-70">
+            <svg viewBox="0 0 200 200" className="w-48 h-48 text-stone-700/80 filter drop-shadow-sm blur-[1px]">
+              <path fill="currentColor" d="M100 20C40 20 20 60 20 100C20 140 40 180 100 180C160 180 180 140 180 100C180 60 160 20 100 20Z" />
+              <circle cx="70" cy="70" r="15" fill="currentColor" className="opacity-50" />
+              <circle cx="140" cy="110" r="10" fill="currentColor" className="opacity-40" />
+            </svg>
+          </div>
+
+          {/* 泡沫层容器 */}
+          {status !== 'idle' && (
+            <div className={`relative w-48 h-48 transition-all duration-[3000ms] ease-out ${status === 'spraying' ? 'scale-90 opacity-0' : 'scale-100 opacity-100'}`}>
+              
+              {/* 基础泡沫块 (带变色和收缩) */}
+              <div 
+                className={`absolute inset-0 m-auto w-40 h-40 bg-white rounded-full transition-all duration-3000 ease-in-out blur-[2px] shadow-[inset_0_-10px_20px_rgba(0,0,0,0.1)]`}
+                style={{
+                  transform: `scale(${status === 'spraying' ? 0.2 : status === 'stable' ? 0.95 : 1})`,
+                  backgroundColor: status === 'stable' || status === 'sliding' ? '#f5ede4' : '#ffffff', // 溶解变色
+                  opacity: 0.95
+                }}
+              >
+                {/* 方案3：边缘脱落 (卷起效果) */}
+                <div 
+                  className="absolute top-0 right-0 w-16 h-16 transition-all duration-1000 z-30"
+                  style={{
+                    opacity: (activeMode === 3 && status === 'stable') ? 1 : 0,
+                    transform: (activeMode === 3 && status === 'stable') ? 'translate(5px, -5px) scale(1)' : 'translate(0,0) scale(0.8)',
+                    transformOrigin: 'bottom left'
+                  }}
+                >
+                  {/* 模拟折角与阴影 */}
+                  <div className="absolute inset-0 bg-white rounded-tr-full shadow-[-4px_4px_10px_rgba(0,0,0,0.2)]"
+                       style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }} />
+                  <ArrowRight className="absolute top-2 right-2 w-4 h-4 text-slate-400 rotate-[-45deg] animate-pulse" />
+                </div>
+              </div>
+              
+              {/* 重力水滴 */}
+              <div 
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#f5ede4] rounded-full blur-[1px] transition-all duration-[2000ms] ease-in"
+                style={{
+                  transform: (status === 'sliding' || status === 'stable') ? 'translateY(60px) scaleY(1.5)' : 'translateY(0) scaleY(1)',
+                  opacity: (status === 'sliding' || status === 'stable') ? 0.8 : 0
+                }}
+              />
+              <div 
+                className="absolute bottom-8 right-10 w-3 h-3 bg-[#f5ede4] rounded-full blur-[1px] transition-all duration-[2500ms] ease-in delay-300"
+                style={{
+                  transform: (status === 'sliding' || status === 'stable') ? 'translateY(40px) scaleY(1.8)' : 'translateY(0) scaleY(1)',
+                  opacity: (status === 'sliding' || status === 'stable') ? 0.7 : 0
+                }}
+              />
+
+              {/* 方案4：星芒与涟漪 */}
+              {activeMode === 4 && status === 'stable' && (
+                <>
+                  <div className="absolute top-4 right-8 w-24 h-24 rounded-full border-2 border-white/60 animate-ping opacity-0" style={{ animationDuration: '3s' }} />
+                  <Sparkles className="absolute top-6 right-10 w-8 h-8 text-white drop-shadow-[0_0_8px_rgba(255,255,255,1)] animate-pulse" />
+                  <Sparkles className="absolute bottom-10 left-8 w-5 h-5 text-white/80 drop-shadow-[0_0_5px_rgba(255,255,255,0.8)] animate-pulse delay-500" />
+                </>
+              )}
+
+              {/* 方案5：焦点流光 (扫光动画) */}
+              {activeMode === 5 && status === 'stable' && (
+                <div className="absolute inset-0 overflow-hidden rounded-full mask-image-radial z-20">
+                  <div className="absolute top-0 -left-[100%] w-[50%] h-full bg-gradient-to-r from-transparent via-white/70 to-transparent skew-x-[-20deg] animate-[shimmer_2.5s_infinite_ease-in-out]" />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 独立悬浮层 UI */}
+          
+          {/* 方案1：微磨砂胶囊 */}
+          <div 
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-3 px-5 py-2.5 rounded-full bg-white/20 backdrop-blur-md border border-white/40 shadow-[0_8px_30px_rgb(0,0,0,0.12)] transition-all duration-1000 z-50 pointer-events-none"
+            style={{ 
+              opacity: (activeMode === 1 && status === 'stable') ? 1 : 0,
+              transform: `translate(-50%, ${(activeMode === 1 && status === 'stable') ? '0' : '10px'})`
+            }}
+          >
+            <Hand size={18} className="text-white/90 drop-shadow-sm animate-[swipeRight_2s_infinite_ease-in-out]" />
+            <div className="w-10 h-1 bg-white/20 rounded-full overflow-hidden">
+              <div className="h-full bg-white/60 w-1/3 rounded-full animate-[swipeRight_2s_infinite_ease-in-out]" />
+            </div>
+          </div>
+
+          {/* 方案2：幻影擦拭演示 */}
+          <div 
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 pointer-events-none z-40 transition-opacity duration-1000"
+            style={{ opacity: (activeMode === 2 && status === 'stable') ? 1 : 0 }}
+          >
+            <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] rounded-2xl border border-white/50 shadow-xl animate-[ghostWipe_3s_infinite_ease-in-out] flex items-center justify-center">
+              <MoveRight className="text-white/80 w-8 h-8" />
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <style jsx>{`
+        @keyframes shimmer {
+          0% { left: -100%; opacity: 0; }
+          20% { opacity: 1; }
+          80% { opacity: 1; }
+          100% { left: 200%; opacity: 0; }
+        }
+        @keyframes swipeRight {
+          0%, 100% { transform: translateX(-4px); }
+          50% { transform: translateX(12px); }
+        }
+        @keyframes ghostWipe {
+          0% { transform: translate(-40px, -10px) rotate(-10deg) scale(0.9); opacity: 0; }
+          20% { transform: translate(-40px, -10px) rotate(-10deg) scale(1); opacity: 0.8; }
+          70% { transform: translate(40px, 10px) rotate(5deg) scale(1); opacity: 0.8; }
+          100% { transform: translate(40px, 10px) rotate(5deg) scale(0.9); opacity: 0; }
+        }
+        .mask-image-radial {
+          mask-image: radial-gradient(circle, black 40%, transparent 100%);
+          -webkit-mask-image: radial-gradient(circle, black 40%, transparent 100%);
+        }
+      `}</style>
     </div>
   );
 }
+
+由Gemini 3.1 Pro生成
+立即将此artifact转换为网站

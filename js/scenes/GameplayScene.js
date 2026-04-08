@@ -25,7 +25,7 @@ import PauseMenu from '../ui/dialogs/PauseMenu';
 import LevelCompleteDialog from '../ui/dialogs/LevelCompleteDialog';
 import SettlementDialog from '../ui/dialogs/SettlementDialog';
 import ToolUnlockDialog from '../ui/dialogs/ToolUnlockDialog';
-import { GlobalFingerImageCache } from './LoadingScene';
+import { GlobalFingerImageCache, GlobalCleaningIconCache } from './LoadingScene';
 import haptic from '../utils/HapticFeedback';
 
 /**
@@ -2143,6 +2143,13 @@ class GameplayScene extends Scene {
     // 更新工具槽（滑动惯性）
     if (this.toolSlot) this.toolSlot.update(deltaTime);
     
+    // 更新 spray_wipe 污垢的泡沫反应动画
+    this.dirtObjects.forEach(dirt => {
+      if (dirt.cleaningStage === 1 && dirt.foamGenerator) {
+        dirt.foamGenerator.update();
+      }
+    });
+    
     // 检查划动清洁延迟完成
     if (this.strokeState.pendingComplete) {
       const now = Date.now();
@@ -2519,10 +2526,11 @@ class GameplayScene extends Scene {
       this._renderStrokeProgress(ctx, cx, cy, radius, dirt.strokeCount, process, s);
     });
     
-    // 第三阶段：渲染 spray_wipe 的等候图标（第一阶段完成，等待第二阶段）
+    // 第三阶段：渲染 spray_wipe 的等候图标（泡沫反应稳定态后显示）
     this.dirtObjects.forEach(dirt => {
       if (dirt.state === 'clean') return;
       if (dirt.cleaningStage !== 1) return; // 只在第一阶段完成时显示
+      if (!dirt.showWaitingIcon) return; // 只有进入稳定态后才显示
       
       const cx = dirt.x;
       const cy = dirt.y + gameAreaY;
@@ -2751,50 +2759,67 @@ class GameplayScene extends Scene {
   
   /**
    * 渲染 spray_wipe 的等候图标（第一阶段完成，等待第二阶段）
-   * 显示一个时钟/沙漏图标提示用户需要使用 cloth
+   * 方案1：微磨砂胶囊 - 灵动岛风格的半透明磨砂 UI
    */
   _renderWaitingIcon(ctx, cx, cy, s) {
-    const iconSize = 40 * s;
-    const x = cx - iconSize / 2;
-    const y = cy - iconSize / 2 - 60 * s; // 在污垢上方显示
+    const capsuleWidth = 110 * s;  // 变大：70 -> 110
+    const capsuleHeight = 42 * s;  // 变大：28 -> 42
+    const x = cx - capsuleWidth / 2;
+    const y = cy - 80 * s; // 放到更上方：-50 -> -80
     
     ctx.save();
     
-    // 绘制圆形背景
-    ctx.beginPath();
-    ctx.arc(cx, y + iconSize / 2, iconSize / 2 + 4 * s, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    // 动画时间
+    const time = Date.now() / 1000;
+    const swipeOffset = Math.sin(time * Math.PI * 1.3) * 6 * s; // 左右滑动动画，速度加快 30%
+    
+    // 绘制胶囊背景（微磨砂效果）- 使用 _drawRoundRect
+    // 深色背景确保在背景图上清晰可见
+    ctx.fillStyle = 'rgba(40, 45, 55, 0.75)';
+    this._drawRoundRect(ctx, x, y, capsuleWidth, capsuleHeight, capsuleHeight / 2);
     ctx.fill();
-    ctx.strokeStyle = '#FFA500'; // 橙色边框
-    ctx.lineWidth = 2 * s;
+    
+    // 边框 - 浅色边框增加对比
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1.5 * s;
     ctx.stroke();
     
-    // 绘制时钟图标（简化版）
-    ctx.beginPath();
-    ctx.arc(cx, y + iconSize / 2, iconSize / 2 - 6 * s, 0, Math.PI * 2);
-    ctx.strokeStyle = '#666666';
-    ctx.lineWidth = 3 * s;
-    ctx.stroke();
+    // 绘制清洁图标（从图片加载）- 静止不动
+    const iconImg = GlobalCleaningIconCache.get();
+    if (iconImg) {
+      const iconSize = 32 * s;
+      const iconX = cx - 38 * s; // 往左移动 16px（原来是 -22）
+      const iconY = y + capsuleHeight / 2 - iconSize / 2;
+      
+      // 确保图标在最上层，不使用阴影避免模糊
+      ctx.drawImage(iconImg, iconX, iconY, iconSize, iconSize);
+    } else {
+      // 备用：绘制简化手形
+      const handX = cx - 18 * s + swipeOffset;
+      const handY = y + capsuleHeight / 2;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.beginPath();
+      ctx.arc(handX, handY - 3 * s, 6 * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
     
-    // 时钟指针（12点方向）
-    ctx.beginPath();
-    ctx.moveTo(cx, y + iconSize / 2);
-    ctx.lineTo(cx, y + iconSize / 2 - 8 * s);
-    ctx.strokeStyle = '#666666';
-    ctx.lineWidth = 2 * s;
-    ctx.stroke();
+    // 绘制滑动进度条
+    const barWidth = 37 * s;  // + 5px 总计
+    const barHeight = 8 * s;  // 调整为 8
+    const barX = cx + 10 * s;  // 往左移动 2px（原来是 12）
+    const barY = y + capsuleHeight / 2 - barHeight / 2;
     
-    // 时钟指针（3点方向）
-    ctx.beginPath();
-    ctx.moveTo(cx, y + iconSize / 2);
-    ctx.lineTo(cx + 6 * s, y + iconSize / 2);
-    ctx.stroke();
+    // 进度条背景
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    this._drawRoundRect(ctx, barX, barY, barWidth, barHeight, barHeight / 2);
+    ctx.fill();
     
-    // 绘制提示文字
-    ctx.fillStyle = '#666666';
-    ctx.font = `${12 * s}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText('请用抹布', cx, y + iconSize + 15 * s);
+    // 进度条滑块（带动画）- 纯白色
+    const sliderWidth = barWidth / 3;
+    const sliderX = barX + (barWidth - sliderWidth) / 2 + swipeOffset * 0.5;
+    ctx.fillStyle = '#FFFFFF';
+    this._drawRoundRect(ctx, sliderX, barY, sliderWidth, barHeight, barHeight / 2);
+    ctx.fill();
     
     ctx.restore();
   }
@@ -3813,20 +3838,32 @@ class GameplayScene extends Scene {
       
       // 检查第一阶段是否完成
       if (dirt.stageProgress >= dirt.maxStageProgress) {
-        // 第一阶段完成，进入等待状态
+        // 第一阶段完成，启动5秒泡沫反应时间线
         dirt.cleaningStage = 1;
         dirt.stageProgress = 0;
         dirt.strokeCount = 0; // 重置进度条，等待第二阶段
+        dirt.showWaitingIcon = false; // 先不显示等待图标
         
         // 弹回工具
         this._spawnTool();
         
-        console.log('[GameplayScene] spray_wipe 第一阶段完成，等待 cloth');
+        // 启动泡沫5秒反应时间线
+        if (dirt.foamGenerator) {
+          dirt.foamGenerator.startReaction(() => {
+            // 5秒后进入稳定态，显示等待图标
+            dirt.showWaitingIcon = true;
+            console.log('[GameplayScene] 泡沫反应完成，显示等待图标');
+          });
+        }
+        
+        console.log('[GameplayScene] spray_wipe 第一阶段完成，启动5秒泡沫反应');
       }
       return;
     }
     
     // 第二阶段：使用 cloth
+    // 注意：只要 cleaningStage === 1 就可以开始清洁，不需要等待 showWaitingIcon
+    // 这样熟练用户可以在5秒反应期间就开始清洁
     if (dirt.cleaningStage === 1) {
       // 检查是否使用了正确的工具
       if (!this.activeTool || this.activeTool.id !== 'cloth') {

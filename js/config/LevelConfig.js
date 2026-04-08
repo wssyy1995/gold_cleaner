@@ -30,18 +30,18 @@ const STAGE_1_LEVELS = [
       //   perspective:'top-down',
       //   count: 3
       // },
-      // {
-      //   type: 'preset_liquid',
-      //   rect: [
-      //     { x: 0, y: 950 },
-      //     { x: 100, y: 950 },
-      //     { x: 10, y: 1150 },
-      //     { x: 100, y: 1150 }
-      //   ],
-      //   liquid_type:'coffee',
-      //   perspective:'front',
-      //   count: 3
-      // },
+      {
+        type: 'preset_liquid',
+        rect: [
+          { x: 200, y: 1000 },
+          { x: 200, y: 1200 },
+          { x: 500, y: 1000 },
+          { x: 500, y: 1200 }
+        ],
+        liquid_type:'water',
+        view:'front',
+        count: 1
+      },
       { type: 'banana', x: 320, y: 885},
       { type: 'paper2', x: 267, y: 700 },
       { type: 'apple', x: 405, y: 875 },
@@ -96,9 +96,18 @@ const STAGE_1_LEVELS = [
         process: 5,
         count: 20
       },
-      { type: 'waterstain', x: 500, y: 1000 },
-      { type: 'waterstain', x: 400, y: 900 },
-
+      {
+        type: 'preset_liquid',
+        rect: [
+          { x: 200, y: 1200 },
+          { x: 200, y: 1200 },
+          { x: 500, y: 1400 },
+          { x: 500, y: 1400 }
+        ],
+        liquid_type:'water',
+        view:'front',
+        count: 2
+      }
     ],
     dirts_deep_area: [
       { id: 1,x: 400, y: 800,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l2_toilet.png`,dirts: [

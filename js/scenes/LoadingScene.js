@@ -24,6 +24,14 @@ export const GlobalFingerImageCache = {
   has() { return !!this._image; }
 };
 
+// 全局清洁提示图标缓存（喷雾后提示擦拭）
+export const GlobalCleaningIconCache = {
+  _image: null,
+  set(img) { this._image = img; },
+  get() { return this._image; },
+  has() { return !!this._image; }
+};
+
 class LoadingScene extends Scene {
   constructor() {
     super({ name: 'LoadingScene' });
@@ -837,6 +845,12 @@ class LoadingScene extends Scene {
     if (this.cachedImages['ui_icon_sad']) {
       GlobalToolImageCache.set('ui_icon_sad', this.cachedImages['ui_icon_sad']);
       console.log('[LoadingScene] 同步 sad 表情到全局缓存');
+    }
+    
+    // 同步清洁提示图标到全局缓存
+    if (this.cachedImages['ui_icon_cleaning']) {
+      GlobalCleaningIconCache.set(this.cachedImages['ui_icon_cleaning']);
+      console.log('[LoadingScene] 同步清洁提示图标到全局缓存');
     }
   }
 

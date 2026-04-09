@@ -1,16 +1,16 @@
 /**
  * LiquidPreset.js
  * 液体污渍预制污垢生成器
- * 参考 docs/liquid 实现
+ * 严格按照 docs/liquid (LiquidPuddle_0408.html) 实现
  * 
  * 支持：
  * - 多种液体类型：water, coffee, tea, ketchup, soysauce
  * - 两种视角：top（俯视图）, perspective（透视图）
  * - 不规则边缘形状 + 散落水滴
- * - 3D厚度效果
+ * - 7层 2.5D 渲染效果
  */
 
-// 液体配置文件 - 严格按文档
+// 液体配置文件 - 完全按文档
 const LIQUID_PROFILES = {
   water: {
     name: '清水',
@@ -82,10 +82,12 @@ export default class LiquidPreset {
     
     const profile = LIQUID_PROFILES[liquidType] || LIQUID_PROFILES.water;
     
+    // 计算区域中心和半径
     let centerX, centerY, radius;
     let regionPoints = [];
     
     if (config.rect && Array.isArray(config.rect) && config.rect.length === 4) {
+      // 四边形区域
       const quad = config.rect;
       const p0 = { x: quad[0].x * s, y: quad[0].y * s };
       const p1 = { x: quad[1].x * s, y: quad[1].y * s };
@@ -104,34 +106,66 @@ export default class LiquidPreset {
       
       regionPoints = [p0, p1, p2, p3];
     } else {
+      // 圆形区域（后备）
       centerX = config.x * s;
       centerY = config.y * s;
       radius = (config.radius || 60) * s;
     }
     
+    // 生成多个水洼，避免重叠
     const puddles = [];
+    const minDistance = radius * 0.8; // 最小间距
+    const maxAttempts = 2; // 最大尝试次数（快速失败）
+    
     for (let i = 0; i < count; i++) {
       let px, py;
+      let validPosition = false;
+      let attempts = 0;
       
-      if (regionPoints.length === 4) {
-        const r = Math.random();
-        if (r < 0.5) {
-          const point = this._randomPointInTriangle(regionPoints[0], regionPoints[1], regionPoints[2]);
-          px = point.x;
-          py = point.y;
+      // 尝试找到不重叠的位置
+      while (!validPosition && attempts < maxAttempts) {
+        attempts++;
+        
+        if (regionPoints.length === 4) {
+          // 在四边形内随机生成
+          const r = Math.random();
+          if (r < 0.5) {
+            const point = this._randomPointInTriangle(regionPoints[0], regionPoints[1], regionPoints[2]);
+            px = point.x;
+            py = point.y;
+          } else {
+            const point = this._randomPointInTriangle(regionPoints[0], regionPoints[2], regionPoints[3]);
+            px = point.x;
+            py = point.y;
+          }
         } else {
-          const point = this._randomPointInTriangle(regionPoints[0], regionPoints[2], regionPoints[3]);
-          px = point.x;
-          py = point.y;
+          // 在圆形内随机生成
+          const angle = Math.random() * Math.PI * 2;
+          const dist = Math.sqrt(Math.random()) * radius * 0.8;
+          px = centerX + Math.cos(angle) * dist;
+          py = centerY + Math.sin(angle) * dist;
         }
-      } else {
-        const angle = Math.random() * Math.PI * 2;
-        const dist = Math.sqrt(Math.random()) * radius * 0.8;
-        px = centerX + Math.cos(angle) * dist;
-        py = centerY + Math.sin(angle) * dist;
+        
+        // 检查与已有水洼的距离
+        validPosition = true;
+        for (const existing of puddles) {
+          const dx = px - existing.cx;
+          const dy = py - existing.cy;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          if (distance < minDistance) {
+            validPosition = false;
+            break;
+          }
+        }
       }
       
-      puddles.push(this._generatePuddle(px, py, radius * 0.4, viewType, s));
+      // 如果找不到合适位置，跳过这个水洼
+      if (!validPosition) {
+        console.log(`[LiquidPreset] 警告: 无法找到不重叠的位置，跳过第 ${i + 1} 个水洼`);
+        continue;
+      }
+      
+      puddles.push(this._generatePuddle(px, py, radius * 1.2, viewType, s));
     }
     
     return {
@@ -154,17 +188,23 @@ export default class LiquidPreset {
     };
   }
   
+  /**
+   * 生成单个水洼 - 完全按文档算法
+   */
   static _generatePuddle(cx, cy, size, viewType, s) {
+    // 视角压扁因子：top=1, perspective=0.38
     const squashFactor = viewType === 'top' ? 1 : 0.38;
     
+    // 随机相位
     const phase1 = Math.random() * Math.PI * 2;
     const phase2 = Math.random() * Math.PI * 2;
     const phase3 = Math.random() * Math.PI * 2;
     const phase4 = Math.random() * Math.PI * 2;
     
+    // 30个点的不规则边缘
     const numPoints = 30;
     const angleStep = (Math.PI * 2) / numPoints;
-    const points = [];
+    const basePoints = [];
     
     for (let i = 0; i < numPoints; i++) {
       const angle = i * angleStep;
@@ -174,21 +214,23 @@ export default class LiquidPreset {
         Math.sin(angle * 4 + phase3) * 0.2 +
         Math.cos(angle * 6 + phase4) * 0.15;
       
-      const r = size + wave * size * 0.37;
+      const r = size * 0.32 + wave * size * 0.12;
       
-      points.push({
+      basePoints.push({
         x: cx + Math.cos(angle) * r,
         y: cy + Math.sin(angle) * r * squashFactor
       });
     }
     
-    const path = this._getSmoothPath(points);
+    // 生成平滑路径
+    const mainPath = this._getPath(basePoints);
     
+    // 生成散落水滴
     const droplets = [];
     const numDroplets = 2 + Math.floor(Math.random() * 4);
     for (let i = 0; i < numDroplets; i++) {
       const dropAngle = Math.random() * Math.PI * 2;
-      const dist = size * 1.4 + Math.random() * size * 0.3;
+      const dist = size * 0.45 + Math.random() * size * 0.1;
       const dropCx = cx + Math.cos(dropAngle) * dist;
       const dropCy = cy + Math.sin(dropAngle) * dist * squashFactor;
       const dropSize = (5 + Math.random() * 12) * s;
@@ -204,18 +246,19 @@ export default class LiquidPreset {
       }
       
       droplets.push({
-        path: this._getSmoothPath(dropPoints),
+        path: this._getPath(dropPoints),
         cx: dropCx,
         cy: dropCy,
         size: dropSize
       });
     }
     
+    // 生成内部高光点
     const innerHighlights = [];
     const numSpots = 1;
     for (let i = 0; i < numSpots; i++) {
       const spotAngle = Math.PI * 1.15 + (i * 0.15) + (Math.random() * 0.1);
-      const spotDist = size * 0.55 + (i * size * 0.1) + (Math.random() * size * 0.08);
+      const spotDist = size * 0.22 + (i * size * 0.04) + (Math.random() * size * 0.03);
       const spotCx = cx + Math.cos(spotAngle) * spotDist;
       const spotCy = cy + Math.sin(spotAngle) * spotDist * squashFactor;
       
@@ -225,10 +268,13 @@ export default class LiquidPreset {
       innerHighlights.push({ cx: spotCx, cy: spotCy, rx, ry });
     }
     
-    return { cx, cy, size, path, droplets, innerHighlights };
+    return { cx, cy, size, mainPath, droplets, innerHighlights };
   }
   
-  static _getSmoothPath(points) {
+  /**
+   * Catmull-Rom 样条曲线生成路径 - 完全按文档
+   */
+  static _getPath(points) {
     const tension = 0.25;
     let path = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
     
@@ -249,6 +295,9 @@ export default class LiquidPreset {
     return path;
   }
   
+  /**
+   * 在三角形内生成随机点
+   */
   static _randomPointInTriangle(a, b, c) {
     let r1 = Math.random();
     let r2 = Math.random();
@@ -264,6 +313,9 @@ export default class LiquidPreset {
     };
   }
   
+  /**
+   * 渲染液体污渍
+   */
   static render(ctx, dirt, s, pulseAlpha = 1, remainingRatio = 1, cx, cy) {
     if (!dirt.presetData?.puddles) return;
     
@@ -274,13 +326,20 @@ export default class LiquidPreset {
     ctx.save();
     ctx.globalAlpha = pulseAlpha;
     
+    // 裁剪（清洁进度）
     if (remainingRatio < 1) {
       const clipHeight = dirt.presetData.radius * 2 * remainingRatio;
       ctx.beginPath();
-      ctx.rect(cx - dirt.presetData.radius, cy - dirt.presetData.radius + (dirt.presetData.radius * 2 - clipHeight), dirt.presetData.radius * 2, clipHeight);
+      ctx.rect(
+        cx - dirt.presetData.radius,
+        cy - dirt.presetData.radius + (dirt.presetData.radius * 2 - clipHeight),
+        dirt.presetData.radius * 2,
+        clipHeight
+      );
       ctx.clip();
     }
     
+    // 渲染每个水洼
     puddles.forEach(puddle => {
       this._renderPuddle(ctx, puddle, profile, viewType, offsetX, offsetY, s);
     });
@@ -288,105 +347,124 @@ export default class LiquidPreset {
     ctx.restore();
   }
   
+  /**
+   * 渲染单个水洼 - 完全按文档 7 层结构
+   */
   static _renderPuddle(ctx, puddle, profile, viewType, offsetX, offsetY, s) {
-    const { path, droplets, innerHighlights, cx, cy } = puddle;
+    const { mainPath, droplets, innerHighlights, cx, cy } = puddle;
     const pcx = cx + offsetX;
     const pcy = cy + offsetY;
     
+    // 阴影参数
     const shadowDx = viewType === 'perspective' ? 3 * s : 1 * s;
     const shadowDy = viewType === 'perspective' ? 5 * s : 2 * s;
     const shadowBlur = viewType === 'perspective' ? 2 * s : 1 * s;
     
     ctx.save();
     
-    // 阴影
+    // 应用阴影
     ctx.shadowColor = profile.shadowColor;
     ctx.shadowBlur = shadowBlur;
     ctx.shadowOffsetX = shadowDx;
     ctx.shadowOffsetY = shadowDy;
     
-    // Layer 1: 基础填充
-    ctx.fillStyle = this._createBodyGradient(ctx, pcx, pcy, profile);
-    ctx.fill(new Path2D(path));
+    // ===== MAIN PUDDLE GROUP =====
     
+    // Layer 1: Base fill (water-body gradient)
+    ctx.fillStyle = this._createWaterBodyGradient(ctx, pcx, pcy, profile);
+    ctx.fill(new Path2D(mainPath));
+    
+    // 关闭阴影
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
     
-    // 创建裁剪路径
+    // 创建 clipPath
     ctx.save();
-    ctx.clip(new Path2D(path));
+    ctx.clip(new Path2D(mainPath));
     
-    // Layer 2: 边缘色调 - 增强3D感
+    // Layer 2: Edge tint - thicker stroke clipped inside
     const edgeTintGrad = ctx.createLinearGradient(pcx - puddle.size, pcy - puddle.size, pcx + puddle.size, pcy + puddle.size);
-    edgeTintGrad.addColorStop(0, this._hexToRgba(profile.edgeTint, 0.15));
-    edgeTintGrad.addColorStop(0.5, this._hexToRgba(profile.edgeTint, profile.edgeTintOpacity * 0.7));
+    edgeTintGrad.addColorStop(0, this._hexToRgba(profile.edgeTint, 0.1));
+    edgeTintGrad.addColorStop(0.5, this._hexToRgba(profile.edgeTint, profile.edgeTintOpacity * 0.6));
     edgeTintGrad.addColorStop(1, this._hexToRgba(profile.edgeTint, profile.edgeTintOpacity));
     ctx.strokeStyle = edgeTintGrad;
-    ctx.lineWidth = 12 * s;
-    ctx.stroke(new Path2D(path));
+    ctx.lineWidth = 10 * s;
+    ctx.stroke(new Path2D(mainPath));
     
-    // Layer 3: 左上内阴影（3D厚度）
+    // Layer 3: Top-left inner shadow (Surface tension / Edge thickness)
     const innerDarkGrad = ctx.createLinearGradient(pcx - puddle.size, pcy - puddle.size, pcx + puddle.size, pcy + puddle.size);
-    innerDarkGrad.addColorStop(0, this._hexToRgba(profile.strokeColor, 0.5));
-    innerDarkGrad.addColorStop(0.2, this._hexToRgba(profile.strokeColor, 0.3));
-    innerDarkGrad.addColorStop(0.4, this._hexToRgba(profile.strokeColor, 0.1));
-    innerDarkGrad.addColorStop(0.6, 'transparent');
+    innerDarkGrad.addColorStop(0, this._hexToRgba(profile.strokeColor, 0.35));
+    innerDarkGrad.addColorStop(0.25, this._hexToRgba(profile.strokeColor, 0.1));
+    innerDarkGrad.addColorStop(0.5, 'transparent');
     innerDarkGrad.addColorStop(1, 'transparent');
     ctx.strokeStyle = innerDarkGrad;
-    ctx.lineWidth = 15 * s;
-    ctx.stroke(new Path2D(path));
+    ctx.lineWidth = 12 * s;
+    // 模拟 soft-blur: 通过透明度实现
+    ctx.globalAlpha = 0.8;
+    ctx.stroke(new Path2D(mainPath));
+    ctx.globalAlpha = 1;
     
-    // Layer 4: 右下边缘光（3D光泽）
-    const rimGrad = ctx.createLinearGradient(pcx - puddle.size, pcy - puddle.size, pcx + puddle.size, pcy + puddle.size);
-    rimGrad.addColorStop(0, 'transparent');
-    rimGrad.addColorStop(0.55, 'transparent');
-    rimGrad.addColorStop(0.8, 'rgba(255,255,255,0.5)');
-    rimGrad.addColorStop(0.95, 'rgba(255,255,255,0.85)');
-    rimGrad.addColorStop(1, 'rgba(255,255,255,0.95)');
-    ctx.strokeStyle = rimGrad;
-    ctx.lineWidth = 10 * s;
-    ctx.stroke(new Path2D(path));
+    // Layer 4: Bottom-right rim light (Caustic reflection)
+    const rimLightGrad = ctx.createLinearGradient(pcx - puddle.size, pcy - puddle.size, pcx + puddle.size, pcy + puddle.size);
+    rimLightGrad.addColorStop(0, 'transparent');
+    rimLightGrad.addColorStop(0.6, 'transparent');
+    rimLightGrad.addColorStop(0.85, 'rgba(255,255,255,0.4)');
+    rimLightGrad.addColorStop(1, 'rgba(255,255,255,0.7)');
+    ctx.strokeStyle = rimLightGrad;
+    ctx.lineWidth = 8 * s;
+    ctx.globalAlpha = 0.8;
+    ctx.stroke(new Path2D(mainPath));
+    ctx.globalAlpha = 1;
     
-    // Layer 5: 柔和内发光 - 使用填充而不是描边
-    const glowGrad = ctx.createRadialGradient(pcx, pcy, puddle.size * 0.4, pcx, pcy, puddle.size * 0.85);
-    glowGrad.addColorStop(0, 'transparent');
-    glowGrad.addColorStop(0.7, profile.innerGlowColor);
-    glowGrad.addColorStop(1, 'transparent');
-    ctx.fillStyle = glowGrad;
-    ctx.fill(new Path2D(path));
+    // Layer 5: Inner white glow - wide blurred stroke
+    ctx.strokeStyle = profile.innerGlowColor;
+    ctx.lineWidth = 14 * s;
+    // 模拟 inner-glow-blur
+    ctx.globalAlpha = 0.6;
+    ctx.stroke(new Path2D(mainPath));
+    ctx.globalAlpha = 1;
     
-    // Layer 6: 内部高光点
+    // Layer 6: Inner Reflection Spots
     innerHighlights.forEach(spot => {
+      const sx = spot.cx + offsetX;
+      const sy = spot.cy + offsetY;
+      
+      // Main Highlight
       ctx.fillStyle = profile.innerSpotColor;
       ctx.beginPath();
-      ctx.ellipse(spot.cx + offsetX, spot.cy + offsetY, spot.rx, spot.ry, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx, sy, spot.rx, spot.ry, 0, 0, Math.PI * 2);
       ctx.fill();
       
+      // Small Secondary Highlight (to the right)
       ctx.beginPath();
-      ctx.ellipse(spot.cx + offsetX + spot.rx * 1.5, spot.cy + offsetY, spot.rx * 0.3, spot.ry * 0.3, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx + spot.rx * 1.5, sy, spot.rx * 0.3, spot.ry * 0.3, 0, 0, Math.PI * 2);
       ctx.fill();
     });
     
     ctx.restore();
     
-    // Layer 7: 外轮廓
+    // Layer 7: Outer stroke (volumetric natural edge)
     const outlineGrad = ctx.createLinearGradient(pcx - puddle.size, pcy - puddle.size, pcx + puddle.size, pcy + puddle.size);
-    outlineGrad.addColorStop(0, this._hexToRgba(profile.strokeColor, 0.35));
-    outlineGrad.addColorStop(0.5, this._hexToRgba(profile.strokeColor, 0.65));
-    outlineGrad.addColorStop(1, this._hexToRgba(profile.strokeColor, 0.95));
+    outlineGrad.addColorStop(0, this._hexToRgba(profile.strokeColor, 0.3));
+    outlineGrad.addColorStop(0.5, this._hexToRgba(profile.strokeColor, 0.7));
+    outlineGrad.addColorStop(1, this._hexToRgba(profile.strokeColor, 1));
     ctx.strokeStyle = outlineGrad;
     ctx.lineWidth = 2 * s;
-    ctx.stroke(new Path2D(path));
+    ctx.stroke(new Path2D(mainPath));
     
     ctx.restore();
     
+    // ===== SCATTERED DROPLETS =====
     droplets.forEach(drop => {
       this._renderDroplet(ctx, drop, profile, offsetX, offsetY, s);
     });
   }
   
+  /**
+   * 渲染水滴
+   */
   static _renderDroplet(ctx, drop, profile, offsetX, offsetY, s) {
     const { path, cx, cy, size } = drop;
     const dx = cx + offsetX;
@@ -394,35 +472,52 @@ export default class LiquidPreset {
     
     ctx.save();
     
-    ctx.fillStyle = this._createBodyGradient(ctx, dx, dy, profile);
+    // Droplet body
+    ctx.fillStyle = this._createWaterBodyGradient(ctx, dx, dy, profile);
     ctx.fill(new Path2D(path));
     
+    // Clip path for droplet
     ctx.save();
     ctx.clip(new Path2D(path));
     
-    ctx.strokeStyle = this._hexToRgba(profile.strokeColor, 0.35);
+    // Top-left dark tension
+    const innerDarkGrad = ctx.createLinearGradient(dx - size, dy - size, dx + size, dy + size);
+    innerDarkGrad.addColorStop(0, this._hexToRgba(profile.strokeColor, 0.35));
+    innerDarkGrad.addColorStop(0.25, this._hexToRgba(profile.strokeColor, 0.1));
+    innerDarkGrad.addColorStop(0.5, 'transparent');
+    ctx.strokeStyle = innerDarkGrad;
     ctx.lineWidth = 4 * s;
     ctx.stroke(new Path2D(path));
     
+    // Bottom-right rim light
     const rimGrad = ctx.createLinearGradient(dx - size, dy - size, dx + size, dy + size);
     rimGrad.addColorStop(0, 'transparent');
     rimGrad.addColorStop(0.6, 'transparent');
-    rimGrad.addColorStop(0.85, 'rgba(255,255,255,0.45)');
-    rimGrad.addColorStop(1, 'rgba(255,255,255,0.75)');
+    rimGrad.addColorStop(0.85, 'rgba(255,255,255,0.4)');
+    rimGrad.addColorStop(1, 'rgba(255,255,255,0.7)');
     ctx.strokeStyle = rimGrad;
     ctx.lineWidth = 3 * s;
     ctx.stroke(new Path2D(path));
     
+    // Soft inner glow
     ctx.strokeStyle = profile.innerGlowColor;
     ctx.lineWidth = 6 * s;
+    ctx.globalAlpha = 0.6;
     ctx.stroke(new Path2D(path));
+    ctx.globalAlpha = 1;
     
     ctx.restore();
     
-    ctx.strokeStyle = profile.strokeColor;
+    // Outer stroke
+    const outlineGrad = ctx.createLinearGradient(dx - size, dy - size, dx + size, dy + size);
+    outlineGrad.addColorStop(0, this._hexToRgba(profile.strokeColor, 0.3));
+    outlineGrad.addColorStop(0.5, this._hexToRgba(profile.strokeColor, 0.7));
+    outlineGrad.addColorStop(1, this._hexToRgba(profile.strokeColor, 1));
+    ctx.strokeStyle = outlineGrad;
     ctx.lineWidth = 1.2 * s;
     ctx.stroke(new Path2D(path));
     
+    // Dual highlights
     ctx.fillStyle = 'rgba(255,255,255,0.88)';
     ctx.beginPath();
     ctx.ellipse(dx - size * 0.2, dy - size * 0.2, size * 0.28, size * 0.18, 0, 0, Math.PI * 2);
@@ -436,7 +531,10 @@ export default class LiquidPreset {
     ctx.restore();
   }
   
-  static _createBodyGradient(ctx, cx, cy, profile) {
+  /**
+   * 创建 water-body 渐变
+   */
+  static _createWaterBodyGradient(ctx, cx, cy, profile) {
     const grad = ctx.createLinearGradient(cx - 50, cy - 50, cx + 50, cy + 50);
     grad.addColorStop(0, this._hexToRgba(profile.bodyColors[0], profile.bodyOpacities[0]));
     grad.addColorStop(0.5, this._hexToRgba(profile.bodyColors[1], profile.bodyOpacities[1]));
@@ -444,6 +542,9 @@ export default class LiquidPreset {
     return grad;
   }
   
+  /**
+   * hex 转 rgba
+   */
   static _hexToRgba(hex, alpha) {
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);

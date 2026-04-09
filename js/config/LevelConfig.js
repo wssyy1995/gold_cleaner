@@ -18,30 +18,6 @@ const STAGE_1_LEVELS = [
     name: '老年人卧室',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l1_home.png`,
     dirts: [
-      // {
-      //   type: 'preset_liquid',
-      //   rect: [
-      //     { x: 0, y: 450 },
-      //     { x: 100, y: 450 },
-      //     { x: 10, y: 550 },
-      //     { x: 100, y: 550 }
-      //   ],
-      //   liquid_type:'water',
-      //   perspective:'top-down',
-      //   count: 3
-      // },
-      {
-        type: 'preset_liquid',
-        rect: [
-          { x: 200, y: 1000 },
-          { x: 200, y: 1200 },
-          { x: 500, y: 1000 },
-          { x: 500, y: 1200 }
-        ],
-        liquid_type:'water',
-        view:'front',
-        count: 1
-      },
       { type: 'banana', x: 320, y: 885},
       { type: 'paper2', x: 267, y: 700 },
       { type: 'apple', x: 405, y: 875 },
@@ -99,10 +75,10 @@ const STAGE_1_LEVELS = [
       {
         type: 'preset_liquid',
         rect: [
-          { x: 200, y: 1200 },
-          { x: 200, y: 1200 },
-          { x: 500, y: 1400 },
-          { x: 500, y: 1400 }
+          { x: 200, y: 900 },
+          { x: 200, y: 900 },
+          { x: 500, y: 1200 },
+          { x: 500, y: 1200 }
         ],
         liquid_type:'water',
         view:'front',

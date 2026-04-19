@@ -309,7 +309,7 @@ class GameplayScene extends Scene {
     };
     
     // 回退按钮
-    this.backBtnDeepArea = null;
+    // backBtnDeepArea 已移至 TopBar
   }
 
   async onLoad(data = {}) {
@@ -764,6 +764,7 @@ class GameplayScene extends Scene {
   }
 
   _initUI() {
+    console.log(`[_initUI] 开始初始化UI，关卡${this.levelId}`);
     const s = this.screenWidth / 750;
     
     // 从 LevelConfig 获取时间限制
@@ -774,6 +775,7 @@ class GameplayScene extends Scene {
     // 如果有新解锁的工具，先不包含它们，等点击收取后再添加
     const unlockedToolIds = (this.newUnlockedTools || []).map(t => t.id);
     this.tools = BASE_TOOLS.filter(t => t.unlockLevel <= this.levelId && !unlockedToolIds.includes(t.id));
+    console.log(`[_initUI] 关卡${this.levelId} 工具列表:`, this.tools.map(t => t.id).join(', '));
     this.currentToolIndex = 0;
     
     // 新的 TopBar 组件（替换原有顶部 UI）
@@ -784,34 +786,18 @@ class GameplayScene extends Scene {
       progress: 0,
       timeText: `${this.timeLimit}s`,
       paused: false,
-      onPauseClick: () => this._showPauseMenu()
-    });
-    
-    // 通关按钮（调试用，自动完成本关）- 放在 TopBar 下方
-    this.winBtn = new Button({
-      x: 20 * s, y: 150 * s, width: 120 * s, height: 60 * s,
-      text: '通关', fontSize: 28 * s,
-      bgColor: '#4CAF50', textColor: '#FFFFFF',
-      borderRadius: 12 * s,
-      shadow: { color: 'rgba(0,0,0,0.3)', blur: 8, offsetX: 0, offsetY: 4 },
-      onClick: () => {
-        this._onWinClick();
-      }
-    });
-    
-    // 返回按钮（调试用）- 放在通关按钮下方
-    this.backBtn = new Button({ 
-      x: 20 * s, y: 220 * s, width: 100 * s, height: 50 * s, 
-      text: '← 返回', fontSize: 24 * s, 
-      bgColor: 'rgba(0,0,0,0.3)', textColor: '#FFFFFF', 
-      borderRadius: 8 * s,
-      onClick: () => {
+      inDeepArea: false, // 初始在一级背景
+      onPauseClick: () => this._showPauseMenu(),
+      onWinClick: () => this._onWinClick(),  // 点击关卡数字通关（调试用）
+      onExitClick: () => {  // 一级背景：退出按钮（返回主页）
         if (this.viewMode === 'zoom') {
           this._exitZoomView();
         } else {
-          // 使用 scene:pop 返回上一个场景（HomeScene）
           globalEvent.emit('scene:pop');
         }
+      },
+      onReturnClick: () => {  // 二级背景：返回按钮（返回一级背景）
+        this._exitDeepArea();
       }
     });
 
@@ -2135,10 +2121,9 @@ class GameplayScene extends Scene {
     }
     
     // 更新按钮
-    if (this.backBtn) this.backBtn.update(deltaTime);
-    if (this.winBtn) this.winBtn.update(deltaTime);
+    // backBtn 和 winBtn 已移至 TopBar
     if (this.exitZoomBtn) this.exitZoomBtn.update(deltaTime);
-    if (this.backBtnDeepArea) this.backBtnDeepArea.update(deltaTime);
+    // backBtnDeepArea 已移至 TopBar
     
     // 更新工具槽（滑动惯性）
     if (this.toolSlot) this.toolSlot.update(deltaTime);
@@ -2416,18 +2401,21 @@ class GameplayScene extends Scene {
     // 5. 绘制 TopBar（在顶部区域）
     if (this.topBar) {
       this.topBar.render(ctx);
+    } else {
+      console.log('[onRender] topBar 不存在');
     }
     
     // UI元素（调试按钮）
-    if (this.backBtn) this.backBtn.onRender(ctx);
-    if (this.winBtn) this.winBtn.onRender(ctx);
+    // backBtn 和 winBtn 已移至 TopBar
     
     // 绘制回退按钮（在二级背景中）
-    if (this.backBtnDeepArea) this.backBtnDeepArea.onRender(ctx);
+    // backBtnDeepArea 已移至 TopBar
 
     // 6. 绘制 ToolSlot 组件（在底部区域）
     if (this.toolSlot) {
       this.toolSlot.render(ctx);
+    } else {
+      console.log('[onRender] toolSlot 不存在');
     }
     
     // 6.5 渲染被动引导：工具槽金色边框高亮
@@ -2535,7 +2523,7 @@ class GameplayScene extends Scene {
       const cx = dirt.x;
       const cy = dirt.y + gameAreaY;
       
-      this._renderWaitingIcon(ctx, cx, cy, s);
+      this._renderWaitingIcon(ctx, cx, cy, s, dirt.width);
     });
     
     // 绘制活动工具（如果在页面上，包括拖动状态）
@@ -2597,6 +2585,37 @@ class GameplayScene extends Scene {
     // 所以泡沫不需要额外的坐标转换
     if (dirt.foamGenerator && dirt.foamGenerator.hasFoam()) {
       dirt.foamGenerator.render(ctx, s);
+    }
+    
+    // 渲染 common_spray 工具图片效果（点击时显示，带摆动动画）
+    if (dirt.sprayToolEffect && dirt.sprayToolEffect.visible) {
+      const toolImg = GlobalToolImageCache.get('common_spray');
+      if (toolImg) {
+        const toolSize = dirt.sprayToolEffect.toolSize || (60 * s);
+        
+        ctx.save();
+        ctx.translate(dirt.sprayToolEffect.x, dirt.sprayToolEffect.y);
+        
+        // 摆动动画：向左倾斜15度，回正，重复1次（总共120ms）
+        if (dirt.sprayToolEffect.animating) {
+          const elapsed = Date.now() - dirt.sprayToolEffect.startTime;
+          const totalDuration = 120; // 总动画时长120ms
+          // 进度 0-1
+          const progress = Math.min(elapsed / totalDuration, 1);
+          // 正弦波：0 -> -15度 -> 0
+          const rotation = -Math.sin(progress * Math.PI) * (Math.PI / 12); // 15度 = PI/12
+          ctx.rotate(rotation);
+        }
+        
+        ctx.drawImage(
+          toolImg,
+          -toolSize / 2,
+          -toolSize / 2,
+          toolSize,
+          toolSize
+        );
+        ctx.restore();
+      }
     }
   }
 
@@ -2761,17 +2780,19 @@ class GameplayScene extends Scene {
    * 渲染 spray_wipe 的等候图标（第一阶段完成，等待第二阶段）
    * 方案1：微磨砂胶囊 - 灵动岛风格的半透明磨砂 UI
    */
-  _renderWaitingIcon(ctx, cx, cy, s) {
-    const capsuleWidth = 110 * s;  // 变大：70 -> 110
-    const capsuleHeight = 42 * s;  // 变大：28 -> 42
+  _renderWaitingIcon(ctx, cx, cy, s, dirtWidth) {
+    // 固定宽度 150，高度自适应（保持 0.38 宽高比）
+    const CAPSULE_WIDTH = 150;
+    const capsuleWidth = CAPSULE_WIDTH * s;
+    const capsuleHeight = capsuleWidth * 0.38;  // 高度自适应
     const x = cx - capsuleWidth / 2;
-    const y = cy - 80 * s; // 放到更上方：-50 -> -80
+    const y = cy - capsuleHeight - 25 * s; // 放到污垢上方 25px 处
     
     ctx.save();
     
     // 动画时间
     const time = Date.now() / 1000;
-    const swipeOffset = Math.sin(time * Math.PI * 1.3) * 6 * s; // 左右滑动动画，速度加快 30%
+    const swipeOffset = Math.sin(time * Math.PI * 1.3) * (6 * s); // 左右滑动动画，固定6px振幅
     
     // 绘制胶囊背景（微磨砂效果）- 使用 _drawRoundRect
     // 深色背景确保在背景图上清晰可见
@@ -2781,32 +2802,32 @@ class GameplayScene extends Scene {
     
     // 边框 - 浅色边框增加对比
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.lineWidth = 1.5 * s;
+    ctx.lineWidth = Math.max(1, 1.5 * s);
     ctx.stroke();
     
     // 绘制清洁图标（从图片加载）- 静止不动
     const iconImg = GlobalCleaningIconCache.get();
+    const iconSize = capsuleHeight * 0.76;  // 图标大小根据胶囊高度自适应（32/42≈0.76）
     if (iconImg) {
-      const iconSize = 32 * s;
-      const iconX = cx - 38 * s; // 往左移动 16px（原来是 -22）
+      const iconX = cx - capsuleWidth * 0.29 - 2 * s;  // 再往左移动2px
       const iconY = y + capsuleHeight / 2 - iconSize / 2;
       
       // 确保图标在最上层，不使用阴影避免模糊
       ctx.drawImage(iconImg, iconX, iconY, iconSize, iconSize);
     } else {
       // 备用：绘制简化手形
-      const handX = cx - 18 * s + swipeOffset;
+      const handX = cx - capsuleWidth * 0.15 + swipeOffset;
       const handY = y + capsuleHeight / 2;
       ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
       ctx.beginPath();
-      ctx.arc(handX, handY - 3 * s, 6 * s, 0, Math.PI * 2);
+      ctx.arc(handX, handY - capsuleHeight * 0.07, capsuleHeight * 0.14, 0, Math.PI * 2);
       ctx.fill();
     }
     
-    // 绘制滑动进度条
-    const barWidth = 37 * s;  // + 5px 总计
-    const barHeight = 8 * s;  // 调整为 8
-    const barX = cx + 10 * s;  // 往左移动 2px（原来是 12）
+    // 绘制滑动进度条（根据胶囊尺寸自适应）
+    const barWidth = capsuleWidth * 0.28;   // 宽度根据胶囊宽度自适应
+    const barHeight = capsuleHeight * 0.19;  // 高度根据胶囊高度自适应
+    const barX = cx + capsuleWidth * 0.07;   // 位置根据胶囊宽度自适应
     const barY = y + capsuleHeight / 2 - barHeight / 2;
     
     // 进度条背景
@@ -2816,7 +2837,7 @@ class GameplayScene extends Scene {
     
     // 进度条滑块（带动画）- 纯白色
     const sliderWidth = barWidth / 3;
-    const sliderX = barX + (barWidth - sliderWidth) / 2 + swipeOffset * 0.5;
+    const sliderX = barX + (barWidth - sliderWidth) / 2 + swipeOffset;
     ctx.fillStyle = '#FFFFFF';
     this._drawRoundRect(ctx, sliderX, barY, sliderWidth, barHeight, barHeight / 2);
     ctx.fill();
@@ -3320,8 +3341,9 @@ class GameplayScene extends Scene {
       return true;
     }
     
-    if (this.backBtn && this.backBtn.onTouchStart(x, y)) return true;
-    if (this.winBtn && this.winBtn.onTouchStart(x, y)) return true;
+    // backBtn 和 winBtn 已移至 TopBar
+    // 检查 TopBar 点击
+    if (this.topBar && this.topBar.onTouchStart(x, y)) return true;
 
     
     // 检查是否正在拖动活动工具
@@ -3361,9 +3383,7 @@ class GameplayScene extends Scene {
     }
     
     // 检查回退按钮点击（在二级背景中）
-    if (this.deepArea.isActive && this.backBtnDeepArea && this.backBtnDeepArea.onTouchStart(x, y)) {
-      return true;
-    }
+    // backBtnDeepArea 已移至 TopBar
     
     // 检查二级背景区域双击（只在主关卡且没有弹窗时）
     if (!this.deepArea.isActive && !this.deepArea.transition.active) {
@@ -3530,13 +3550,10 @@ class GameplayScene extends Scene {
       return true;
     }
     
-    if (this.backBtn && this.backBtn.onTouchEnd(x, y)) return true;
-    if (this.winBtn && this.winBtn.onTouchEnd(x, y)) return true;
+    // backBtn 和 winBtn 已移至 TopBar
     
     // 检查回退按钮点击（在二级背景中）
-    if (this.deepArea.isActive && this.backBtnDeepArea && this.backBtnDeepArea.onTouchEnd(x, y)) {
-      return true;
-    }
+    // backBtnDeepArea 已移至 TopBar
     
     // 处理 ToolSlot 的触摸结束（用于选中工具）
     if (this.toolSlot) {
@@ -3582,21 +3599,78 @@ class GameplayScene extends Scene {
     // 将屏幕坐标转换为游戏区域坐标（减去顶部 8%）
     const gameAreaY = this.screenHeight * 0.08;
     const gameY = y - gameAreaY;
+    const s = this.screenWidth / 750;
     
     for (let i = this.dirtObjects.length - 1; i >= 0; i--) {
       const dirt = this.dirtObjects[i];
       if (dirt.state === 'clean') continue;
       
-      // 圆圈碰撞检测
-      const dx = x - dirt.x;
-      const dy = gameY - dirt.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      if (distance <= dirt.size / 2 + 10) { // +10px 容差
-        return dirt;
+      // 检查是否有 rect 配置（四边形区域）
+      if (dirt.presetData?.region?.type === 'quad') {
+        // 四边形内检测
+        const points = dirt.presetData.region.points;
+        if (this._isPointInQuad({x, y: gameY}, points)) {
+          return dirt;
+        }
+      } else {
+        // 圆形碰撞检测
+        const dx = x - dirt.x;
+        const dy = gameY - dirt.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance <= dirt.size / 2 + 10) {
+          return dirt;
+        }
       }
     }
     return null;
+  }
+  
+  /**
+   * 判断点是否在四边形内（向外扩展100px的容差）
+   */
+  _isPointInQuad(point, quad) {
+    const [p0, p1, p2, p3] = quad;
+    const EXPAND = 100; // 向外扩展100px（共100px容差）
+    
+    // 计算四边形的中心
+    const centerX = (p0.x + p1.x + p2.x + p3.x) / 4;
+    const centerY = (p0.y + p1.y + p2.y + p3.y) / 4;
+    
+    // 将四边形向外扩展100px
+    const expandPoint = (p) => {
+      const dx = p.x - centerX;
+      const dy = p.y - centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist === 0) return p;
+      const ratio = (dist + EXPAND) / dist;
+      return {
+        x: centerX + dx * ratio,
+        y: centerY + dy * ratio
+      };
+    };
+    
+    const e0 = expandPoint(p0);
+    const e1 = expandPoint(p1);
+    const e2 = expandPoint(p2);
+    const e3 = expandPoint(p3);
+    
+    // 检测点是否在扩展后的四边形内
+    return this._isPointInTriangle(point, e0, e1, e2) || 
+           this._isPointInTriangle(point, e0, e2, e3);
+  }
+  
+  /**
+   * 判断点是否在三角形内（叉积法）
+   */
+  _isPointInTriangle(p, a, b, c) {
+    // 计算三个叉积
+    const cross1 = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    const cross2 = (c.x - b.x) * (p.y - b.y) - (c.y - b.y) * (p.x - b.x);
+    const cross3 = (a.x - c.x) * (p.y - c.y) - (a.y - c.y) * (p.x - c.x);
+    
+    // 如果三个叉积同号（都>=0 或都<=0），点在三角形内或边上
+    return (cross1 >= 0 && cross2 >= 0 && cross3 >= 0) || 
+           (cross1 <= 0 && cross2 <= 0 && cross3 <= 0);
   }
   
   /**
@@ -3823,13 +3897,35 @@ class GameplayScene extends Scene {
       dirt.stageProgress++;
       dirt.strokeCount = dirt.stageProgress; // 同步进度条
       
-      // 在点击位置生成泡沫
+      // 时序控制：
+      // 1. 立即显示 common_spray 工具图片，播放摆动动画，同时生成泡沫
+      // 2. 100ms 后图片消失
+      
+      const s2 = this.screenWidth / 750;
+      const toolSize = this.toolSlot ? this.toolSlot.slotSize : (80 * s2);
+      
+      // 立即显示工具图片，开始摆动动画，同时生成泡沫
+      dirt.sprayToolEffect = {
+        x: x + 30 * s2,  // 右上方偏移
+        y: y - 30 * s2,
+        toolSize: toolSize,  // 使用工具槽的工具大小
+        startTime: Date.now(),
+        visible: true,
+        animating: true  // 标记正在动画
+      };
+      
+      // 同时生成泡沫
       if (dirt.foamGenerator) {
         const s = this.screenWidth / 750;
-        // 直接在点击位置生成小泡沫
-        dirt.foamGenerator.spawnFoamCluster(x, y, s);
-        console.log(`[GameplayScene] 生成泡沫，当前气泡数: ${dirt.foamGenerator.getBubbleCount()}`);
+        dirt.foamGenerator.spawnFoamCluster(x, y, s, dirt.width);
       }
+      
+      // 100ms 后图片消失
+      setTimeout(() => {
+        if (dirt.sprayToolEffect) {
+          dirt.sprayToolEffect.visible = false;
+        }
+      }, 100);
       
       // 震动反馈
       haptic.light();
@@ -3892,21 +3988,28 @@ class GameplayScene extends Scene {
     // 使用配置的 process 值，默认3次
     const process = dirt.process || 3;
     
+    // 如果已经有进度，保留进度（避免切换污垢后回来重置）
+    const existingStrokeCount = dirt.strokeCount || 0;
+    
     this.strokeState = {
       active: true,
       dirt: dirt,
-      strokeCount: 0,
-      maxStrokes: process, // 使用配置的进度格数
+      strokeCount: existingStrokeCount,  // 保留已有进度
+      maxStrokes: process,
       lastPos: { x, y: y - gameAreaY },
       totalDistance: 0,
       minStrokeDistance: 60 * s,
-      isStage2: true // 标记是第二阶段
+      isStage2: true
     };
     
-    dirt.strokeCount = 0;
+    // 保留 dirt 的进度，不要重置
+    dirt.strokeCount = existingStrokeCount;
     dirt.maxStrokes = process;
     
-    console.log(`[GameplayScene] spray_wipe 第二阶段开始，需要划动 ${process} 次`);
+    // 一旦开始二阶段清洁，立即隐藏灵动岛
+    dirt.showWaitingIcon = false;
+    
+    console.log(`[GameplayScene] spray_wipe 第二阶段，当前进度 ${existingStrokeCount}/${process}`);
   }
   
   /**
@@ -4103,7 +4206,22 @@ class GameplayScene extends Scene {
       const allTools = recipes.flat();
       
       // 检查当前弹出的工具是否在该污垢的 recipe 中
-      if (!allTools.includes(this.activeTool.id)) {
+      let toolMatched = allTools.includes(this.activeTool.id);
+      
+      // spray_wipe 类型特殊处理：根据阶段检查工具
+      if (toolMatched && dirtType.operate_type === 'spray_wipe') {
+        const stage = dirt.cleaningStage || 0;
+        // 第一阶段（0）：应该用 common_spray，不是 cloth
+        if (stage === 0 && this.activeTool.id === 'cloth') {
+          toolMatched = false;
+        }
+        // 第二阶段（1）：应该用 cloth，不是 common_spray
+        if (stage === 1 && this.activeTool.id === 'common_spray') {
+          toolMatched = false;
+        }
+      }
+      
+      if (!toolMatched) {
         // 工具不匹配：显示生气 emoji
         this._showAngryEmoji();
       }
@@ -4591,6 +4709,11 @@ class GameplayScene extends Scene {
     this.deepArea.isActive = true;
     this.deepArea.currentAreaId = area.id;
     
+    // 更新 TopBar 为二级背景模式（显示返回图标）
+    if (this.topBar) {
+      this.topBar.setMode(true);
+    }
+    
     // 记录该区域已被访问过（进入后不再显示金圈）
     if (!this.deepArea.visitedAreas.includes(area.id)) {
       this.deepArea.visitedAreas.push(area.id);
@@ -4619,7 +4742,7 @@ class GameplayScene extends Scene {
     this._startTransition(true);
     
     // 创建回退按钮
-    this._createBackButton();
+    // 返回按钮已移至 TopBar
   }
   
   /**
@@ -4650,6 +4773,11 @@ class GameplayScene extends Scene {
     // 恢复主关卡状态
     this.deepArea.isActive = false;
     this.deepArea.currentAreaId = null;
+    
+    // 更新 TopBar 为一级背景模式（显示退出图标）
+    if (this.topBar) {
+      this.topBar.setMode(false);
+    }
     this.bgImage = this.deepArea.originalBgImage;
     this.dirtObjects = this.deepArea.originalDirts;
     
@@ -4660,7 +4788,7 @@ class GameplayScene extends Scene {
     this._startTransition(false);
     
     // 移除回退按钮
-    this.backBtnDeepArea = null;
+    // backBtnDeepArea 已移至 TopBar
     
     // 检查是否还有其他未访问、未清洁的二级背景
     const hasOtherUncleanedArea = this.deepArea.areas.some(area => {
@@ -4974,28 +5102,7 @@ class GameplayScene extends Scene {
     ctx.restore();
   }
   
-  /**
-   * 创建回退按钮
-   */
-  _createBackButton() {
-    const s = this.screenWidth / 750;
-    
-    const Button = require('../ui/components/Button').default;
-    this.backBtnDeepArea = new Button({
-      x: 20 * s, 
-      y: 100 * s, 
-      width: 140 * s, 
-      height: 50 * s, 
-      text: '← 回到房间', 
-      fontSize: 24 * s, 
-      bgColor: 'rgba(0,0,0,0.5)', 
-      textColor: '#FFFFFF', 
-      borderRadius: 8 * s,
-      onClick: () => {
-        this._exitDeepArea();
-      }
-    });
-  }
+  // 返回按钮已移至 TopBar，无需单独创建
   
   /**
    * 检查一级背景是否全部清洁完成，触发新人引导提示二级背景

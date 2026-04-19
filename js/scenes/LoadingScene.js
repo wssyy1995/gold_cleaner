@@ -73,6 +73,10 @@ class LoadingScene extends Scene {
     this.fingerImage = null;
     this.fingerImageLoaded = false;
     
+    // 加载扫帚图片（跟随进度条）
+    this.broomImage = null;
+    this.broomImageLoaded = false;
+    
     // 需要加载的资源列表
     this.resourcesToLoad = [];
     this.loadedCount = 0;
@@ -361,10 +365,10 @@ class LoadingScene extends Scene {
     });
 
     this.progressBar = new ProgressBar({
-      x: centerX - 250 * s,
-      y: 750 * s,
-      width: 500 * s,
-      height: 16 * s,
+      x: centerX - 120 * s ,  
+      y: 1200 * s,                    
+      width: 435 * s,      
+      height: 18 * s,
       progress: 0,
       bgColor: '#E8E8E8',
       fillColor: '#4A90D9',
@@ -374,23 +378,9 @@ class LoadingScene extends Scene {
       animated: true
     });
 
-    this.percentText = new Text({
-      x: centerX,
-      y: 790 * s,
-      text: '0%',
-      fontSize: 24 * s,
-      color: '#4A90D9',
-      align: 'center'
-    });
+    // 进度文字已移除
 
-    this.tipText = new Text({
-      x: centerX,
-      y: 850 * s,
-      text: this.tips[0],
-      fontSize: 24 * s,
-      color: '#999999',
-      align: 'center'
-    });
+    // tipText 已移除
 
     this.versionText = new Text({
       x: centerX,
@@ -434,6 +424,16 @@ class LoadingScene extends Scene {
       console.log('[LoadingScene] 本地背景加载完成');
     } catch (e) {
       console.log('[LoadingScene] 本地背景加载失败，使用默认背景:', e.message);
+    }
+    
+    // 加载扫帚图片（跟随进度条）
+    try {
+      const broomPath = 'images/backgrounds/ui_loading_broom.png';
+      this.broomImage = await this._downloadLocalImage(broomPath);
+      this.broomImageLoaded = true;
+      console.log('[LoadingScene] 扫帚图片加载完成');
+    } catch (e) {
+      console.log('[LoadingScene] 扫帚图片加载失败:', e.message);
     }
   }
   
@@ -758,9 +758,7 @@ class LoadingScene extends Scene {
     if (this.progressBar) {
       this.progressBar.setProgress(this.progress);
     }
-    if (this.percentText) {
-      this.percentText.setText(`${Math.floor(this.progress * 100)}%`);
-    }
+    // percentText 已移除
     
     // 更新提示文字
     const tipIndex = Math.floor(this.progress * (this.tips.length - 1));
@@ -786,8 +784,7 @@ class LoadingScene extends Scene {
       this.progress = 1;
       
       if (this.progressBar) this.progressBar.setProgress(1);
-      if (this.percentText) this.percentText.setText('100%');
-      if (this.tipText) this.tipText.setText('准备就绪！');
+      // percentText 和 tipText 已移除
 
       // 同步缓存的图片到全局缓存，供其他场景使用
       this._syncToGlobalCache();
@@ -902,12 +899,41 @@ class LoadingScene extends Scene {
     this.titleText.onRender(ctx);
     if (this.subtitleText) this.subtitleText.onRender(ctx);
 
-    const s = this.screenWidth / 750;
-    this._drawLoadingIcon(ctx, width / 2, 620 * s, s);
-
     if (this.progressBar) this.progressBar.onRender(ctx);
-    if (this.percentText) this.percentText.onRender(ctx);
-    if (this.tipText) this.tipText.onRender(ctx);
+    
+    // 绘制扫帚图片（跟随进度条，带生动动画）
+    if (this.broomImageLoaded && this.broomImage) {
+      const s = this.screenWidth / 750;
+      const centerX = width / 2;
+      const progressBarX = centerX - 120 * s;  // 进度条起始 x
+      const progressBarWidth = 435 * s;        // 进度条宽度
+      const progressBarY = 1200 * s;           // 进度条 y
+      
+      // 扫帚位置：跟随进度
+      const broomX = progressBarX + progressBarWidth * this.progress;
+      const broomSize = 90 * s;                // 扫帚大小 90px
+      
+      // 动画效果
+      const time = Date.now() / 1000;
+      // 上下浮动（正弦波，周期1秒，幅度5px）
+      const floatY = Math.sin(time * Math.PI * 2) * 5 * s;
+      const broomY = progressBarY - 60 * s + floatY;  // 往上移动 20px
+      // 轻微旋转（根据进度和时间的组合）
+      const rotation = Math.sin(time * Math.PI * 3) * 0.1 + this.progress * 0.2;
+      
+      ctx.save();
+      ctx.translate(broomX, broomY);
+      ctx.rotate(rotation);
+      ctx.drawImage(
+        this.broomImage,
+        -broomSize / 2,
+        -broomSize / 2,
+        broomSize,
+        broomSize
+      );
+      ctx.restore();
+    }
+    
     if (this.versionText) this.versionText.onRender(ctx);
     
     // 绘制坐标网格（调试用）

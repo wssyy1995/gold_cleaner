@@ -79,6 +79,7 @@ export default class LiquidPreset {
     const liquidType = config.liquid_type || 'water';
     const viewType = config.view || 'perspective';
     const count = config.count || 1;
+    const scale = config.scale || 1; // 读取 scale 字段，默认 1
     
     const profile = LIQUID_PROFILES[liquidType] || LIQUID_PROFILES.water;
     
@@ -165,7 +166,7 @@ export default class LiquidPreset {
         continue;
       }
       
-      puddles.push(this._generatePuddle(px, py, radius * 1.2, viewType, s));
+      puddles.push(this._generatePuddle(px, py, radius * 1.2 * scale, viewType, s));
     }
     
     return {
@@ -296,6 +297,33 @@ export default class LiquidPreset {
   }
   
   /**
+   * 绘制路径 - 兼容小程序（不使用 Path2D）
+   */
+  static _drawPath(ctx, pathStr) {
+    if (!pathStr) return;
+    
+    const parts = pathStr.match(/[MLC][^MLC]*/g);
+    if (!parts) return;
+    
+    ctx.beginPath();
+    
+    for (const part of parts) {
+      const cmd = part[0];
+      const coords = part.slice(1).trim().split(/[\s,]+/).map(parseFloat).filter(n => !isNaN(n));
+      
+      if (cmd === 'M' && coords.length >= 2) {
+        ctx.moveTo(coords[0], coords[1]);
+      } else if (cmd === 'L' && coords.length >= 2) {
+        ctx.lineTo(coords[0], coords[1]);
+      } else if (cmd === 'C' && coords.length >= 6) {
+        ctx.bezierCurveTo(coords[0], coords[1], coords[2], coords[3], coords[4], coords[5]);
+      }
+    }
+    
+    ctx.closePath();
+  }
+  
+  /**
    * 在三角形内生成随机点
    */
   static _randomPointInTriangle(a, b, c) {
@@ -317,34 +345,38 @@ export default class LiquidPreset {
    * 渲染液体污渍
    */
   static render(ctx, dirt, s, pulseAlpha = 1, remainingRatio = 1, cx, cy) {
-    if (!dirt.presetData?.puddles) return;
-    
-    const { puddles, profile, viewType } = dirt.presetData;
-    const offsetX = cx - dirt.presetData.centerX;
-    const offsetY = cy - dirt.presetData.centerY;
-    
-    ctx.save();
-    ctx.globalAlpha = pulseAlpha;
-    
-    // 裁剪（清洁进度）
-    if (remainingRatio < 1) {
-      const clipHeight = dirt.presetData.radius * 2 * remainingRatio;
-      ctx.beginPath();
-      ctx.rect(
-        cx - dirt.presetData.radius,
-        cy - dirt.presetData.radius + (dirt.presetData.radius * 2 - clipHeight),
-        dirt.presetData.radius * 2,
-        clipHeight
-      );
-      ctx.clip();
+    try {
+      if (!dirt.presetData?.puddles) return;
+      
+      const { puddles, profile, viewType } = dirt.presetData;
+      const offsetX = cx - dirt.presetData.centerX;
+      const offsetY = cy - dirt.presetData.centerY;
+      
+      ctx.save();
+      ctx.globalAlpha = pulseAlpha;
+      
+      // 裁剪（清洁进度）
+      if (remainingRatio < 1) {
+        const clipHeight = dirt.presetData.radius * 2 * remainingRatio;
+        ctx.beginPath();
+        ctx.rect(
+          cx - dirt.presetData.radius,
+          cy - dirt.presetData.radius + (dirt.presetData.radius * 2 - clipHeight),
+          dirt.presetData.radius * 2,
+          clipHeight
+        );
+        ctx.clip();
+      }
+      
+      // 渲染每个水洼
+      puddles.forEach(puddle => {
+        this._renderPuddle(ctx, puddle, profile, viewType, offsetX, offsetY, s);
+      });
+      
+      ctx.restore();
+    } catch (e) {
+      console.error('[LiquidPreset.render] 渲染失败:', e);
     }
-    
-    // 渲染每个水洼
-    puddles.forEach(puddle => {
-      this._renderPuddle(ctx, puddle, profile, viewType, offsetX, offsetY, s);
-    });
-    
-    ctx.restore();
   }
   
   /**
@@ -372,7 +404,8 @@ export default class LiquidPreset {
     
     // Layer 1: Base fill (water-body gradient)
     ctx.fillStyle = this._createWaterBodyGradient(ctx, pcx, pcy, profile);
-    ctx.fill(new Path2D(mainPath));
+    this._drawPath(ctx, mainPath);
+    ctx.fill();
     
     // 关闭阴影
     ctx.shadowColor = 'transparent';
@@ -382,7 +415,8 @@ export default class LiquidPreset {
     
     // 创建 clipPath
     ctx.save();
-    ctx.clip(new Path2D(mainPath));
+    this._drawPath(ctx, mainPath);
+    ctx.clip();
     
     // Layer 2: Edge tint - thicker stroke clipped inside
     const edgeTintGrad = ctx.createLinearGradient(pcx - puddle.size, pcy - puddle.size, pcx + puddle.size, pcy + puddle.size);
@@ -391,7 +425,8 @@ export default class LiquidPreset {
     edgeTintGrad.addColorStop(1, this._hexToRgba(profile.edgeTint, profile.edgeTintOpacity));
     ctx.strokeStyle = edgeTintGrad;
     ctx.lineWidth = 10 * s;
-    ctx.stroke(new Path2D(mainPath));
+    this._drawPath(ctx, mainPath);
+    ctx.stroke();
     
     // Layer 3: Top-left inner shadow (Surface tension / Edge thickness)
     const innerDarkGrad = ctx.createLinearGradient(pcx - puddle.size, pcy - puddle.size, pcx + puddle.size, pcy + puddle.size);
@@ -403,7 +438,8 @@ export default class LiquidPreset {
     ctx.lineWidth = 12 * s;
     // 模拟 soft-blur: 通过透明度实现
     ctx.globalAlpha = 0.8;
-    ctx.stroke(new Path2D(mainPath));
+    this._drawPath(ctx, mainPath);
+    ctx.stroke();
     ctx.globalAlpha = 1;
     
     // Layer 4: Bottom-right rim light (Caustic reflection)
@@ -415,7 +451,8 @@ export default class LiquidPreset {
     ctx.strokeStyle = rimLightGrad;
     ctx.lineWidth = 8 * s;
     ctx.globalAlpha = 0.8;
-    ctx.stroke(new Path2D(mainPath));
+    this._drawPath(ctx, mainPath);
+    ctx.stroke();
     ctx.globalAlpha = 1;
     
     // Layer 5: Inner white glow - wide blurred stroke
@@ -423,7 +460,8 @@ export default class LiquidPreset {
     ctx.lineWidth = 14 * s;
     // 模拟 inner-glow-blur
     ctx.globalAlpha = 0.6;
-    ctx.stroke(new Path2D(mainPath));
+    this._drawPath(ctx, mainPath);
+    ctx.stroke();
     ctx.globalAlpha = 1;
     
     // Layer 6: Inner Reflection Spots
@@ -452,7 +490,8 @@ export default class LiquidPreset {
     outlineGrad.addColorStop(1, this._hexToRgba(profile.strokeColor, 1));
     ctx.strokeStyle = outlineGrad;
     ctx.lineWidth = 2 * s;
-    ctx.stroke(new Path2D(mainPath));
+    this._drawPath(ctx, mainPath);
+    ctx.stroke();
     
     ctx.restore();
     
@@ -474,11 +513,13 @@ export default class LiquidPreset {
     
     // Droplet body
     ctx.fillStyle = this._createWaterBodyGradient(ctx, dx, dy, profile);
-    ctx.fill(new Path2D(path));
+    this._drawPath(ctx, path);
+    ctx.fill();
     
     // Clip path for droplet
     ctx.save();
-    ctx.clip(new Path2D(path));
+    this._drawPath(ctx, path);
+    ctx.clip();
     
     // Top-left dark tension
     const innerDarkGrad = ctx.createLinearGradient(dx - size, dy - size, dx + size, dy + size);
@@ -487,7 +528,8 @@ export default class LiquidPreset {
     innerDarkGrad.addColorStop(0.5, 'transparent');
     ctx.strokeStyle = innerDarkGrad;
     ctx.lineWidth = 4 * s;
-    ctx.stroke(new Path2D(path));
+    this._drawPath(ctx, path);
+    ctx.stroke();
     
     // Bottom-right rim light
     const rimGrad = ctx.createLinearGradient(dx - size, dy - size, dx + size, dy + size);
@@ -497,13 +539,15 @@ export default class LiquidPreset {
     rimGrad.addColorStop(1, 'rgba(255,255,255,0.7)');
     ctx.strokeStyle = rimGrad;
     ctx.lineWidth = 3 * s;
-    ctx.stroke(new Path2D(path));
+    this._drawPath(ctx, path);
+    ctx.stroke();
     
     // Soft inner glow
     ctx.strokeStyle = profile.innerGlowColor;
     ctx.lineWidth = 6 * s;
     ctx.globalAlpha = 0.6;
-    ctx.stroke(new Path2D(path));
+    this._drawPath(ctx, path);
+    ctx.stroke();
     ctx.globalAlpha = 1;
     
     ctx.restore();
@@ -515,7 +559,8 @@ export default class LiquidPreset {
     outlineGrad.addColorStop(1, this._hexToRgba(profile.strokeColor, 1));
     ctx.strokeStyle = outlineGrad;
     ctx.lineWidth = 1.2 * s;
-    ctx.stroke(new Path2D(path));
+    this._drawPath(ctx, path);
+    ctx.stroke();
     
     // Dual highlights
     ctx.fillStyle = 'rgba(255,255,255,0.88)';

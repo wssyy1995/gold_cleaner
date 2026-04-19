@@ -28,7 +28,7 @@ const STAGE_1_LEVELS = [
       { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
         {
           type: 'preset_dust',
-          process:6,
+          process:4,
           rect: [
             { x: -10, y: 395 },   // 点1
             { x: 790, y: 55 },  // 点2
@@ -69,33 +69,55 @@ const STAGE_1_LEVELS = [
           { x: 410, y: 300 },
           { x: 410, y: 600 }
         ],
-        process: 5,
+        process: 4,
         count: 20
       },
       {
         type: 'preset_liquid',
         rect: [
-          { x: 200, y: 900 },
-          { x: 200, y: 900 },
-          { x: 500, y: 1200 },
-          { x: 500, y: 1200 }
+          { x: 200, y: 1100 },
+          { x: 200, y: 1100 },
+          { x: 450, y: 1300 },
+          { x: 450, y: 1300 }
         ],
         liquid_type:'water',
         view:'front',
-        count: 2
+        count: 1,
+        scale:2
+
+      },
+      {
+        type: 'preset_liquid',
+        rect: [
+          { x: 500, y: 1200 },
+          { x: 500, y: 1200 },
+          { x: 700, y: 1300 },
+          { x: 700, y: 1300 }
+        ],
+        liquid_type:'water',
+        view:'front',
+        count: 1,
+        scale:1.5
+      
       }
     ],
     dirts_deep_area: [
       { id: 1,x: 400, y: 800,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l2_toilet.png`,dirts: [
         { type: 'preset_urine', rect: [
-          { x: 200, y: 650 },
-          { x: 500, y: 550 },
-          { x: 200, y: 950 },
+          { x: 230, y: 650 },
+          { x: 500, y: 650 },
+          { x: 230, y: 950 },
           { x: 500, y: 950 }
         ],
-        count: 10}]},
+        count: 2,process:4}]},
         {id: 2, x: 100, y: 700,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l2_sink.png`,dirts: [
-          { type: 'preset_mildew', x: 400, y: 600,count:3 }]}
+          { type: 'preset_rust', rect: [
+            { x: 230, y: 650 },
+            { x: 500, y: 650 },
+            { x: 230, y: 950 },
+            { x: 500, y: 950 }
+          ],
+          count: 2,process:4}]}
     ],
     timeLimit: 100,
     targetScore: 150,

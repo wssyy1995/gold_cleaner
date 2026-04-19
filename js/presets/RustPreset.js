@@ -1,24 +1,28 @@
 /**
- * UrinePreset.js
- * 尿渍预制污垢生成器
- * 按照 urine_rust_Generator.html 中的 "生成圆环尿渍与尿垢" 实现
+ * RustPreset.js
+ * 铁锈预制污垢生成器
+ * 按照 urine_rust_Generator.html 中的 "生成铁锈" 实现
+ * 
+ * 特点：
+ * - 斑驳纹理（非圆环状，自由分布）
+ * - Perlin Noise 噪声
+ * - 红橙色系：深红橙 → 亮橙 → 深锈 → 暗棕红
  */
 
-export default class UrinePreset {
-  static URINE_STAIN_COLORS = [
-    { stop: 0.0, r: 255, g: 255, b: 180 },
-    { stop: 0.3, r: 245, g: 235, b: 100 },
-    { stop: 0.6, r: 220, g: 190, b: 80 },
-    { stop: 1.0, r: 180, g: 140, b: 50 }
-  ];
-  
-  static URINE_SCALE_COLORS = [
-    { stop: 0.0, r: 255, g: 255, b: 240 },
-    { stop: 0.3, r: 230, g: 230, b: 200 },
-    { stop: 0.6, r: 200, g: 190, b: 160 },
-    { stop: 1.0, r: 170, g: 160, b: 130 }
+export default class RustPreset {
+  // 铁锈颜色配置
+  static RUST_COLORS = [
+    { stop: 0.0, r: 180, g: 60, b: 0 },   // 深红橙色
+    { stop: 0.3, r: 200, g: 80, b: 0 },   // 亮橙色
+    { stop: 0.6, r: 150, g: 50, b: 0 },   // 深锈色
+    { stop: 1.0, r: 100, g: 30, b: 0 }    // 暗棕红色
   ];
 
+  /**
+   * 生成铁锈数据
+   * @param {Object} config - 配置 { rect, count }
+   * @param {number} s - 屏幕缩放比例
+   */
   static generate(config, s) {
     const count = config.count || 1;
     
@@ -26,6 +30,7 @@ export default class UrinePreset {
     let regionPoints = [];
     
     if (config.rect && Array.isArray(config.rect) && config.rect.length === 4) {
+      // 四边形区域
       const quad = config.rect;
       const p0 = { x: quad[0].x * s, y: quad[0].y * s };
       const p1 = { x: quad[1].x * s, y: quad[1].y * s };
@@ -44,14 +49,16 @@ export default class UrinePreset {
       
       regionPoints = [p0, p1, p2, p3];
     } else {
+      // 圆形区域
       centerX = config.x * s;
       centerY = config.y * s;
       radius = (config.radius || 80) * s;
     }
     
-    const innerRadiusRatio = config.innerRadiusRatio || 0.4;
-    const outerRadiusRatio = config.outerRadiusRatio || 0.9;
+    // 预计算 Perlin Noise 网格
+    const noiseGrid = this._createNoiseGrid(16);
     
+    // 生成多个铁锈
     const stains = [];
     for (let i = 0; i < count; i++) {
       let cx = centerX;
@@ -69,7 +76,7 @@ export default class UrinePreset {
         cy = point.y;
       }
       
-      stains.push(this._generateStain(cx, cy, radius, innerRadiusRatio, outerRadiusRatio, s));
+      stains.push(this._generateStain(cx, cy, radius, noiseGrid, s));
     }
     
     return {
@@ -89,85 +96,74 @@ export default class UrinePreset {
     };
   }
   
-  static _generateStain(cx, cy, baseRadius, innerRatio, outerRatio, s) {
-    const innerRadius = baseRadius * innerRatio;
-    const outerRadius = baseRadius * outerRatio;
-    const ringWidth = outerRadius - innerRadius;
+  /**
+   * 生成单个铁锈
+   */
+  static _generateStain(cx, cy, baseRadius, noiseGrid, s) {
+    // 铁锈参数：20个斑点，半径60-180，最大透明度0.8
+    const numPatches = 20;
+    const minRadius = baseRadius * 0.3;
+    const maxRadius = baseRadius * 0.9;
+    const maxAlpha = 0.8;
     
-    // 预计算 Perlin Noise 网格
-    const noiseGrid = this._createNoiseGrid(16);
+    // 生成铁锈斑点
+    const patches = [];
     
-    // 生成尿渍底色层斑点（15个）
-    const stainPatches = [];
-    for (let i = 0; i < 15; i++) {
-      stainPatches.push(this._generatePatch(
-        innerRadius, outerRadius, cx, cy, ringWidth, noiseGrid, s, this.URINE_STAIN_COLORS
-      ));
-    }
-    
-    // 生成尿垢层斑点（10个）
-    const scalePatches = [];
-    for (let i = 0; i < 10; i++) {
-      scalePatches.push(this._generatePatch(
-        innerRadius, outerRadius, cx, cy, ringWidth, noiseGrid, s, this.URINE_SCALE_COLORS
-      ));
+    for (let i = 0; i < numPatches; i++) {
+      // 在区域内随机生成斑点中心
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.random() * baseRadius * 0.8;
+      const pcx = cx + Math.cos(angle) * dist;
+      const pcy = cy + Math.sin(angle) * dist;
+      
+      const radius = minRadius + Math.random() * (maxRadius - minRadius);
+      const rotation = Math.random() * Math.PI * 2;
+      
+      // 预计算圆环边缘渐变的采样权重
+      const samplePoints = [];
+      const samples = 16;
+      
+      for (let j = 0; j < samples; j++) {
+        const a = (j / samples) * Math.PI * 2;
+        const sx = Math.cos(a) * radius;
+        const sy = Math.sin(a) * radius;
+        
+        // 旋转到世界坐标
+        const wx = pcx + sx * Math.cos(rotation) - sy * Math.sin(rotation);
+        const wy = pcy + sx * Math.sin(rotation) + sy * Math.cos(rotation);
+        
+        // 计算到中心的距离（用于边缘淡出）
+        const distFromCenter = Math.sqrt(Math.pow(wx - cx, 2) + Math.pow(wy - cy, 2));
+        const fade = Math.max(0, 1 - distFromCenter / (baseRadius * 1.2));
+        
+        samplePoints.push({ angle: a, fade });
+      }
+      
+      // 预计算颜色（基于中心点的噪声值）
+      const centerNoise = this._getPerlinNoise(noiseGrid, pcx, pcy);
+      const color = this._getColorFromStops(this.RUST_COLORS, centerNoise);
+      
+      patches.push({
+        cx: pcx,
+        cy: pcy,
+        radius,
+        rotation,
+        color,
+        samplePoints,
+        maxAlpha
+      });
     }
     
     return {
-      cx, cy,
-      innerRadius,
-      outerRadius,
-      stainPatches,
-      scalePatches
+      cx,
+      cy,
+      patches
     };
   }
   
-  static _generatePatch(innerRadius, outerRadius, centerX, centerY, ringWidth, noiseGrid, s, colorStops) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = innerRadius + Math.random() * ringWidth;
-    const cx = centerX + Math.cos(angle) * dist;
-    const cy = centerY + Math.sin(angle) * dist;
-    const radius = ringWidth / 3 + Math.random() * (ringWidth / 2);
-    const rotation = Math.random() * Math.PI * 2;
-    
-    // 预计算颜色（基于中心点的噪声值）
-    const centerNoise = this._getPerlinNoise(noiseGrid, cx, cy);
-    const color = this._getColorFromStops(colorStops, centerNoise);
-    
-    // 预计算圆环边缘渐变的采样权重
-    const fadeRange = 30 * s;
-    const samplePoints = [];
-    const samples = 16;
-    
-    for (let i = 0; i < samples; i++) {
-      const a = (i / samples) * Math.PI * 2;
-      const sx = Math.cos(a) * radius;
-      const sy = Math.sin(a) * radius;
-      
-      const wx = cx + sx * Math.cos(rotation) - sy * Math.sin(rotation);
-      const wy = cy + sx * Math.sin(rotation) + sy * Math.cos(rotation);
-      
-      const distFromRingCenter = Math.sqrt(
-        Math.pow(wx - centerX, 2) + Math.pow(wy - centerY, 2)
-      );
-      
-      let fade = 1;
-      if (distFromRingCenter < innerRadius + fadeRange) {
-        fade *= Math.max(0, (distFromRingCenter - innerRadius) / fadeRange);
-      }
-      if (distFromRingCenter > outerRadius - fadeRange) {
-        fade *= Math.max(0, (outerRadius - distFromRingCenter) / fadeRange);
-      }
-      if (distFromRingCenter < innerRadius || distFromRingCenter > outerRadius) {
-        fade = 0;
-      }
-      
-      samplePoints.push({ angle: a, fade });
-    }
-    
-    return { cx, cy, radius, rotation, color, samplePoints };
-  }
-  
+  /**
+   * 创建 Perlin Noise 网格
+   */
   static _createNoiseGrid(gridSize) {
     const grid = [];
     for (let y = 0; y <= gridSize; y++) {
@@ -183,7 +179,10 @@ export default class UrinePreset {
     return { grid, size: gridSize };
   }
   
-  static _getPerlinNoise(noiseGrid, x, y, scale = 1, octaves = 4, persistence = 0.5) {
+  /**
+   * 获取 Perlin Noise 值
+   */
+  static _getPerlinNoise(noiseGrid, x, y, scale = 1, octaves = 6, persistence = 0.5) {
     x *= scale * 0.05;
     y *= scale * 0.05;
     
@@ -227,6 +226,9 @@ export default class UrinePreset {
     return (total / maxVal + 1) / 2;
   }
   
+  /**
+   * 在三角形内生成随机点
+   */
   static _randomPointInTriangle(a, b, c) {
     let r1 = Math.random();
     let r2 = Math.random();
@@ -242,6 +244,9 @@ export default class UrinePreset {
     };
   }
   
+  /**
+   * 渲染铁锈
+   */
   static render(ctx, dirt, s, pulseAlpha = 1, remainingRatio = 1, cx, cy) {
     if (!dirt.presetData?.stains) return;
     
@@ -265,31 +270,39 @@ export default class UrinePreset {
       ctx.clip();
     }
     
+    // 预计算噪声网格（用于渲染时获取噪声值）
+    const noiseGrid = this._createNoiseGrid(16);
+    
     stains.forEach(stain => {
-      this._renderStain(ctx, stain, offsetX, offsetY, s);
+      this._renderStain(ctx, stain, offsetX, offsetY, noiseGrid, s);
     });
     
     ctx.restore();
   }
   
-  static _renderStain(ctx, stain, offsetX, offsetY, s) {
-    const { cx, cy, stainPatches, scalePatches } = stain;
+  /**
+   * 渲染单个铁锈
+   */
+  static _renderStain(ctx, stain, offsetX, offsetY, noiseGrid, s) {
+    const { cx, cy, patches } = stain;
     const pcx = cx + offsetX;
     const pcy = cy + offsetY;
     
-    // Layer 1: 尿渍底色
-    stainPatches.forEach(patch => {
-      this._renderPatch(ctx, patch, 0.7, pcx, pcy);
+    ctx.save();
+    
+    // 渲染每个斑点
+    patches.forEach(patch => {
+      this._renderPatch(ctx, patch, pcx, pcy, noiseGrid, s);
     });
     
-    // Layer 2: 尿垢高光（更高的不透明度）
-    scalePatches.forEach(patch => {
-      this._renderPatch(ctx, patch, 0.75, pcx, pcy);
-    });
+    ctx.restore();
   }
   
-  static _renderPatch(ctx, patch, maxAlpha, centerX, centerY) {
-    const { cx, cy, radius, color, samplePoints } = patch;
+  /**
+   * 渲染单个斑点
+   */
+  static _renderPatch(ctx, patch, centerX, centerY, noiseGrid, s) {
+    const { cx, cy, radius, rotation, color, samplePoints, maxAlpha } = patch;
     
     // 构建径向渐变
     const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
@@ -336,6 +349,9 @@ export default class UrinePreset {
     ctx.fill();
   }
   
+  /**
+   * 根据 stop 值获取颜色
+   */
   static _getColorFromStops(colorStops, value) {
     if (value <= colorStops[0].stop) return colorStops[0];
     if (value >= colorStops[colorStops.length - 1].stop) return colorStops[colorStops.length - 1];

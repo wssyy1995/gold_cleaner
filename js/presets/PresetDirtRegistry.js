@@ -8,6 +8,7 @@ import WaterIncrustationPreset from './WaterIncrustationPreset';
 import DustPreset from './DustPreset';
 import UrinePreset from './UrinePreset';
 import LiquidPreset from './LiquidPreset';
+import RustPreset from './RustPreset';
 
 // 预制污垢类型映射
 const PRESET_MAP = {
@@ -15,7 +16,8 @@ const PRESET_MAP = {
   'preset_water_incru': WaterIncrustationPreset,
   'preset_dust': DustPreset,
   'preset_urine': UrinePreset,
-  'preset_liquid': LiquidPreset
+  'preset_liquid': LiquidPreset,
+  'preset_rust': RustPreset
 };
 
 export default class PresetDirtRegistry {

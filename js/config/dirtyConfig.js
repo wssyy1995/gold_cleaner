@@ -9,13 +9,19 @@ export const DIRT_TYPES = {
   preset_urine: { 
     name: '尿渍', 
     difficulty: 1,
-    recipes: [['cloth']],
-    operate_type: 'wipe'
+    recipes: [['common_spray','cloth']],
+    operate_type: 'spray_wipe'
+  },
+  preset_rust: { 
+    name: '铁锈', 
+    difficulty: 1,
+    recipes: [['common_spray','cloth']],
+    operate_type: 'spray_wipe'
   },
   preset_liquid: { 
     name: '液体污渍', 
     difficulty: 1,
-    recipes: [['cloth']],
+    recipes: [['mop']],
     operate_type: 'wipe'
   },
   preset_mildew: { 

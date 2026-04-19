@@ -139,10 +139,16 @@ class FoamGenerator {
 
   /**
    * 在指定位置生成泡沫群
+   * @param {number} x - 中心X坐标
+   * @param {number} y - 中心Y坐标
+   * @param {number} scale - 屏幕缩放比例
+   * @param {number} dirtWidth - 污垢宽度（可选），用于计算泡沫大小
    */
-  spawnFoamCluster(x, y, scale = 1) {
+  spawnFoamCluster(x, y, scale = 1, dirtWidth = null) {
     const bubbles = [];
-    const brushSize = this.brushSize * scale;
+    // 如果有污垢宽度，泡沫宽度为污垢宽度的 1/2，否则使用默认 brushSize
+    const baseSize = dirtWidth ? dirtWidth / 2 : this.brushSize;
+    const brushSize = baseSize * scale;
     
     // 三类气泡
     const microCount = Math.floor(brushSize * 1.2);
@@ -184,7 +190,7 @@ class FoamGenerator {
       bubbles.push({
         x: x + Math.cos(angle) * radiusOffset,
         y: y + Math.sin(angle) * radiusOffset,
-        r: (Math.random() * 9 + 4) * scale, // 4-13px，整体调小
+        r: (Math.random() * 9 + 4) * scale,
         type: 'macro',
         baseX: x + Math.cos(angle) * radiusOffset,
         baseY: y + Math.sin(angle) * radiusOffset

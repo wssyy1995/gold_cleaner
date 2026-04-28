@@ -15,7 +15,7 @@ const STAGE_1_LEVELS = [
   {
     id: 1,
     stage: 1,
-    name: '老年人卧室',
+    name: '少女卧室',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l1_home.png`,
     dirts: [
       { type: 'banana', x: 320, y: 885},
@@ -25,7 +25,7 @@ const STAGE_1_LEVELS = [
       { type: 'blackmark', x: 135, y: 775 ,scale: 1.2}
     ],
     dirts_deep_area: [
-      { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bookshelf.png`,dirts: [
+      { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_desk.png`,dirts: [
         {
           type: 'preset_dust',
           process:4,

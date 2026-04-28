@@ -5,12 +5,43 @@
 // 基础工具
 export const BASE_TOOLS = [
   {
+    id: 'rubbish_bin',
+    name: '垃圾桶',
+    icon: '🗑️',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_rubbish_bin.png',
+    color: '#66BB6A',
+    description: '纸团，包装纸类的垃圾扔进去',
+    efficiency: 1.2,
+    type: 'base',
+    unlockLevel: 1
+  },
+  {
+    id: 'dc_basket',
+    name: '脏衣篓',
+    icon: '🗑️',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_dc_basket.png',
+    color: '#66BB6A',
+    description: '放脏衣服',
+    efficiency: 1.2,
+    type: 'base',
+    unlockLevel: 1
+  },{
+    id: 'storage_basket',
+    name: '收纳盒',
+    icon: '🗑️',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_storage_basket.png',
+    color: '#4A90D9',
+    description: '收纳小物件',
+    efficiency: 1.0,
+    type: 'base',
+    unlockLevel: 1
+  },{
     id: 'cloth',
     name: '抹布',
     icon: '🧽',
     imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_cloth.png',
     color: '#4A90D9',
-    description: '基础清洁工具，适合清理灰尘',
+    description: '基础清洁工具，适合清理灰尘,简单液体水渍',
     efficiency: 1.0,
     type: 'base',
     unlockLevel: 1
@@ -26,28 +57,7 @@ export const BASE_TOOLS = [
     type: 'base',
     unlockLevel: 3
   },
-  {
-    id: 'rubbish_bin',
-    name: '垃圾桶',
-    icon: '🗑️',
-    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_rubbish_bin.png',
-    color: '#66BB6A',
-    description: '纸团，包装纸类的垃圾扔进去',
-    efficiency: 1.2,
-    type: 'base',
-    unlockLevel: 1
-  },
-  {
-    id: 'dc_basket',
-    name: '脏衣篓',
-    icon: '👖',
-    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/tool/ui_tool_dc_basket.png',
-    color: '#66BB6A',
-    description: '放脏衣服',
-    efficiency: 1.2,
-    type: 'base',
-    unlockLevel: 1
-  },
+  
   {
     id: 'magnifier',
     name: '放大镜',

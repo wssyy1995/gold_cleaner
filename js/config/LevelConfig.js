@@ -15,28 +15,30 @@ const STAGE_1_LEVELS = [
   {
     id: 1,
     stage: 1,
+    clean_goal:100,
     name: '少女卧室',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l1_home.png`,
     dirts: [
       { type: 'banana', x: 320, y: 885},
       { type: 'paper2', x: 267, y: 700 },
-      { type: 'apple', x: 405, y: 875 },
       { type: 'pants', x: 450, y: 740 },
-      { type: 'blackmark', x: 135, y: 775 ,scale: 1.2}
+      { type: 'pencil1', x: 405, y: 875 }
+      // { type: 'blackmark', x: 135, y: 775 ,scale: 1.2}
     ],
     dirts_deep_area: [
       { id: 1,x: 120, y: 450,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_desk.png`,dirts: [
-        {
-          type: 'preset_dust',
-          process:4,
-          rect: [
-            { x: -10, y: 395 },   // 点1
-            { x: 790, y: 55 },  // 点2
-            { x: 800, y: 395 },  // 点3
-            { x: 220, y: 700 }   // 点4
-          ],
-          density: 2000
-        }]},
+        // {
+        //   type: 'preset_dust',
+        //   process:4,
+        //   rect: [
+        //     { x: -10, y: 395 },   // 点1
+        //     { x: 790, y: 55 },  // 点2
+        //     { x: 800, y: 395 },  // 点3
+        //     { x: 220, y: 700 }   // 点4
+        //   ],
+        //   density: 2000
+        // }, 
+        { type: 'pencil1', x: 405, y: 875 }]},
         {id: 2, x: 550, y: 950,image:`cloud://${CLOUD_ENV}/images/game/stage1/stage1_l1_bed.png`,dirts: [
           { type: 'socks2', x: 400, y: 700,scale: 1.5 ,mirror:''},{ type: 'socks3', x: 600, y: 900,scale: 1.5 ,mirror:''}]}
     ],
@@ -48,6 +50,7 @@ const STAGE_1_LEVELS = [
   {
     id: 2,
     stage: 1,
+    clean_goal:160,
     name: '卫生间',
     homeImagePath: `cloud://${CLOUD_ENV}/images/game/game_stage1_l2_home.png`,
     dirts: [

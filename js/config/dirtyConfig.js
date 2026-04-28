@@ -51,6 +51,15 @@ export const DIRT_TYPES = {
     operate_type: 'throw',
     scale: 1
   },
+  paper:{
+    name: '纸团',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_paper.png',
+    color: '#8B4513', 
+    difficulty: 1,
+    recipes: [['rubbish_bin']],
+    operate_type: 'throw',
+    scale: 1
+  },
   paper2:{
     name: '纸团2',
     imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_paper2.png',
@@ -84,6 +93,15 @@ export const DIRT_TYPES = {
     color: '#8B4513', 
     difficulty: 1,
     recipes: [['rubbish_bin']],
+    operate_type: 'throw',
+    scale: 0.8
+  },
+  pencil1:{
+    name: '铅笔',
+    imgPath: 'cloud://cloudbase-0gku48938517adc7.636c-cloudbase-0gku48938517adc7-1416711846/images/ui/dirty/ui_dirty_pencil1.png',
+    color: '#8B4513', 
+    difficulty: 1,
+    recipes: [['storage_basket']],
     operate_type: 'throw',
     scale: 0.8
   },

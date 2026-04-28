@@ -208,14 +208,17 @@ class GameplayScene extends Scene {
       targetRubbishBinDirt: null,    // 第一个需要 rubbish_bin 的污垢
       targetDcBasketDirt: null,      // 第一个需要 dc_basket 的污垢
       targetClothDirt: null,         // 第一个需要 cloth 的污垢
+      targetStorageBasketDirt: null, // 第一个需要 storage_basket 的污垢
       
       // 金色边框提示只显示一次
       rubbishBinGlowShown: false,
       dcBasketGlowShown: false,
       clothGlowShown: false,
+      storageBasketGlowShown: false,
       showingRubbishBinGlow: false,  // 当前是否正在显示 rubbish_bin 金色边框
       showingDcBasketGlow: false,    // 当前是否正在显示 dc_basket 金色边框
       showingClothGlow: false,       // 当前是否正在显示 cloth 金色边框
+      showingStorageBasketGlow: false, // 当前是否正在显示 storage_basket 金色边框
       
       // 生气 emoji
       showAngryEmoji: false,
@@ -231,11 +234,13 @@ class GameplayScene extends Scene {
       showRubbishBinDirtHint: false, // 是否显示 rubbish_bin 目标污垢的白色光圈+手指
       showDcBasketDirtHint: false,   // 是否显示 dc_basket 目标污垢的白色光圈+手指
       showClothDirtHint: false,      // 是否显示 cloth 目标污垢的 Z 字形动画
+      showStorageBasketDirtHint: false, // 是否显示 storage_basket 目标污垢的白色光圈+手指
       
       // 记录用户是否已正确使用
       rubbishBinUsed: false,
       dcBasketUsed: false,
       clothUsed: false,
+      storageBasketUsed: false,
       
       handAnim: {                     // 小手动画状态
         offset: 0,
@@ -345,15 +350,19 @@ class GameplayScene extends Scene {
     this.tutorial.rubbishBinGlowShown = false;
     this.tutorial.dcBasketGlowShown = false;
     this.tutorial.clothGlowShown = false;
+    this.tutorial.storageBasketGlowShown = false;
     this.tutorial.showingRubbishBinGlow = false;
     this.tutorial.showingDcBasketGlow = false;
     this.tutorial.showingClothGlow = false;
+    this.tutorial.showingStorageBasketGlow = false;
     this.tutorial.showRubbishBinDirtHint = false;
     this.tutorial.showDcBasketDirtHint = false;
     this.tutorial.showClothDirtHint = false;
+    this.tutorial.showStorageBasketDirtHint = false;
     this.tutorial.rubbishBinUsed = false;
     this.tutorial.dcBasketUsed = false;
     this.tutorial.clothUsed = false;
+    this.tutorial.storageBasketUsed = false;
     this.tutorial.handAnim.time = 0;
     this.tutorial.handAnim.offset = 0;
     
@@ -578,7 +587,13 @@ class GameplayScene extends Scene {
       return dirtType && dirtType.recipes && dirtType.recipes.some(r => r.includes('cloth'));
     });
     
-    if (!rubbishBinDirt && !dcBasketDirt && !clothDirt) {
+    // 找到第一个 recipes 包含 storage_basket 的污垢
+    const storageBasketDirt = this.dirtObjects.find(d => {
+      const dirtType = DIRT_TYPES[d.type];
+      return dirtType && dirtType.recipes && dirtType.recipes.some(r => r.includes('storage_basket'));
+    });
+    
+    if (!rubbishBinDirt && !dcBasketDirt && !clothDirt && !storageBasketDirt) {
       console.warn('[GameplayScene] 未找到适合引导的污垢，无法开启引导');
       console.log('[GameplayScene] 污垢类型:', this.dirtObjects.map(d => d.type));
       return;
@@ -588,12 +603,14 @@ class GameplayScene extends Scene {
     console.log('[GameplayScene] 开启被动式新手引导, 目标污垢:', {
       rubbishBin: rubbishBinDirt?.type,
       dcBasket: dcBasketDirt?.type,
-      cloth: clothDirt?.type
+      cloth: clothDirt?.type,
+      storageBasket: storageBasketDirt?.type
     });
     this.tutorial.isActive = true;
     this.tutorial.targetRubbishBinDirt = rubbishBinDirt || null;
     this.tutorial.targetDcBasketDirt = dcBasketDirt || null;
     this.tutorial.targetClothDirt = clothDirt || null;
+    this.tutorial.targetStorageBasketDirt = storageBasketDirt || null;
   }
   
   /**
@@ -605,10 +622,12 @@ class GameplayScene extends Scene {
     this.tutorial.showingRubbishBinGlow = false;
     this.tutorial.showingDcBasketGlow = false;
     this.tutorial.showingClothGlow = false;
+    this.tutorial.showingStorageBasketGlow = false;
     this.tutorial.showAngryEmoji = false;
     this.tutorial.showRubbishBinDirtHint = false;
     this.tutorial.showDcBasketDirtHint = false;
     this.tutorial.showClothDirtHint = false;
+    this.tutorial.showStorageBasketDirtHint = false;
     
     const game = getGame();
     const dataManager = game ? game.dataManager : null;
@@ -630,7 +649,7 @@ class GameplayScene extends Scene {
    */
   _checkTutorialComplete() {
     if (!this.tutorial.isActive) return;
-    if (this.tutorial.rubbishBinUsed && this.tutorial.dcBasketUsed && this.tutorial.clothUsed) {
+    if (this.tutorial.rubbishBinUsed && this.tutorial.dcBasketUsed && this.tutorial.clothUsed && this.tutorial.storageBasketUsed) {
       this._completeTutorial();
     }
   }
@@ -665,20 +684,25 @@ class GameplayScene extends Scene {
     this.tutorial.targetRubbishBinDirt = null;
     this.tutorial.targetDcBasketDirt = null;
     this.tutorial.targetClothDirt = null;
+    this.tutorial.targetStorageBasketDirt = null;
     this.tutorial.rubbishBinGlowShown = false;
     this.tutorial.dcBasketGlowShown = false;
     this.tutorial.clothGlowShown = false;
+    this.tutorial.storageBasketGlowShown = false;
     this.tutorial.showingRubbishBinGlow = false;
     this.tutorial.showingDcBasketGlow = false;
     this.tutorial.showingClothGlow = false;
+    this.tutorial.showingStorageBasketGlow = false;
     this.tutorial.showAngryEmoji = false;
     this.tutorial.angryEmojiEndTime = 0;
     this.tutorial.showRubbishBinDirtHint = false;
     this.tutorial.showDcBasketDirtHint = false;
     this.tutorial.showClothDirtHint = false;
+    this.tutorial.showStorageBasketDirtHint = false;
     this.tutorial.rubbishBinUsed = false;
     this.tutorial.dcBasketUsed = false;
     this.tutorial.clothUsed = false;
+    this.tutorial.storageBasketUsed = false;
     this.tutorial.handAnim = { offset: 0, time: 0 };
     this.tutorial.circularAnim = { time: 0, repeatCount: 0, maxRepeats: 2, duration: 1000 };
     
@@ -1851,6 +1875,123 @@ class GameplayScene extends Scene {
   }
   
   /**
+   * 渲染 storage_basket 槽位金色边框闪烁+呼吸感
+   */
+  _renderTutorialStorageBasketGlow(ctx, s) {
+    if (!this.tutorial.showingStorageBasketGlow) return;
+    
+    const toolIndex = this.tools.findIndex(t => t.id === 'storage_basket');
+    if (toolIndex === -1 || !this.toolSlot) return;
+    
+    const slotPos = this.toolSlot.slotPositions[toolIndex];
+    if (!slotPos) return;
+    
+    const { x, y, size } = slotPos;
+    
+    // 加强呼吸感：更快频率、更大振幅
+    const breath = (Math.sin(this.tutorial.handAnim.time * 0.008) + 1) / 2;
+    const alpha = 0.4 + breath * 0.6;
+    const lineWidth = 3 + breath * 4;
+    const glowBlur = 15 * s + breath * 20 * s;
+    
+    ctx.save();
+    
+    const padding = 6 * s;
+    const rx = x - padding;
+    const ry = y - padding;
+    const rw = size + padding * 2;
+    const rh = size + padding * 2;
+    const r = 16 * s;
+    
+    ctx.beginPath();
+    ctx.moveTo(rx + r, ry);
+    ctx.lineTo(rx + rw - r, ry);
+    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
+    ctx.lineTo(rx + rw, ry + rh - r);
+    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
+    ctx.lineTo(rx + r, ry + rh);
+    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
+    ctx.lineTo(rx, ry + r);
+    ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+    ctx.closePath();
+    
+    // 1. 最外层金色光晕（大范围呼吸）
+    ctx.lineWidth = 5 * s;
+    ctx.strokeStyle = `rgba(255, 215, 0, ${0.1 + breath * 0.15})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
+    ctx.shadowBlur = glowBlur + 10 * s;
+    ctx.stroke();
+    
+    // 2. 中层金色扩散
+    ctx.lineWidth = 3 * s;
+    ctx.strokeStyle = `rgba(255, 215, 0, ${0.25 + breath * 0.3})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+    ctx.shadowBlur = glowBlur;
+    ctx.stroke();
+    
+    // 3. 主金色呼吸边框（最亮）
+    ctx.lineWidth = lineWidth * s;
+    ctx.strokeStyle = `rgba(255, 235, 80, ${alpha})`;
+    ctx.shadowColor = 'rgba(255, 215, 0, 1.0)';
+    ctx.shadowBlur = glowBlur * 0.6;
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+  
+  /**
+   * 渲染 storage_basket 目标污垢提示：极简现代金色轮廓光圈
+   */
+  _renderTutorialStorageBasketDirtHint(ctx, s) {
+    if (!this.tutorial.showStorageBasketDirtHint) return;
+    
+    const dirt = this.tutorial.targetStorageBasketDirt;
+    if (!dirt || dirt.state === 'clean') return;
+    
+    const gameAreaY = this.screenHeight * 0.08;
+    const cx = dirt.x;
+    const cy = dirt.y + gameAreaY;
+    const baseRadius = dirt.size / 2 + 15 * s;
+    
+    // 白色光圈波纹扩散 + 手指图标（指尖朝上）
+    ctx.save();
+    
+    // 波纹扩散动画
+    const cycle = 1750;
+    const progress = (this.tutorial.handAnim.time % cycle) / cycle;
+    
+    ctx.lineWidth = 3.5 * s;
+    
+    // 2层波纹
+    for (let i = 0; i < 2; i++) {
+      const ringProgress = (progress + i * 0.5) % 1;
+      const radius = baseRadius + ringProgress * 20 * s;
+      const alpha = (1 - ringProgress) * 0.6;
+      
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+      ctx.shadowBlur = 6 * s;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    
+    // 主光圈圈
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = 2.5 * s;
+    ctx.shadowBlur = 8 * s;
+    ctx.beginPath();
+    ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.restore();
+    
+    // 手指（指尖朝上）- 更靠近光圈，频率适中
+    const handOffset = Math.sin(this.tutorial.handAnim.time * 0.008) * 4;
+    this._renderHandBig(ctx, s, cx, cy + baseRadius + 32 * s, handOffset, true);
+  }
+  
+  /**
    * 绘制手指引导图片（带摆动动画）
    * 使用预加载的手指图片替代emoji
    * @param {boolean} pointUp - 是否指尖朝上（默认朝下）
@@ -2383,6 +2524,7 @@ class GameplayScene extends Scene {
       this._renderTutorialRubbishBinDirtHint(ctx, s);
       this._renderTutorialDcBasketDirtHint(ctx, s);
       this._renderTutorialClothDirtHint(ctx, s);
+      this._renderTutorialStorageBasketDirtHint(ctx, s);
     }
 
     // 4. 绘制底部 15% 浅棕黄色背景（工具槽区域）
@@ -2423,6 +2565,7 @@ class GameplayScene extends Scene {
       this._renderTutorialRubbishBinGlow(ctx, s);
       this._renderTutorialDcBasketGlow(ctx, s);
       this._renderTutorialClothGlow(ctx, s);
+      this._renderTutorialStorageBasketGlow(ctx, s);
     }
     
   }
@@ -4238,6 +4381,7 @@ class GameplayScene extends Scene {
           // 熄灭其他金边，只保留当前提示
           this.tutorial.showingDcBasketGlow = false;
           this.tutorial.showingClothGlow = false;
+          this.tutorial.showingStorageBasketGlow = false;
           // 没有任何工具选中：rubbish_bin 槽位金色闪烁
           if (!this.tutorial.rubbishBinGlowShown) {
             this.tutorial.showingRubbishBinGlow = true;
@@ -4255,6 +4399,7 @@ class GameplayScene extends Scene {
           // 熄灭其他金边，只保留当前提示
           this.tutorial.showingRubbishBinGlow = false;
           this.tutorial.showingClothGlow = false;
+          this.tutorial.showingStorageBasketGlow = false;
           // 没有任何工具选中：dc_basket 槽位金色闪烁
           if (!this.tutorial.dcBasketGlowShown) {
             this.tutorial.showingDcBasketGlow = true;
@@ -4272,6 +4417,7 @@ class GameplayScene extends Scene {
           // 熄灭其他金边，只保留当前提示
           this.tutorial.showingRubbishBinGlow = false;
           this.tutorial.showingDcBasketGlow = false;
+          this.tutorial.showingStorageBasketGlow = false;
           // 没有任何工具选中：cloth 槽位金色闪烁
           if (!this.tutorial.clothGlowShown) {
             this.tutorial.showingClothGlow = true;
@@ -4280,6 +4426,24 @@ class GameplayScene extends Scene {
           }
         } else if (this.activeTool.id !== 'cloth') {
           // 有非 cloth 的工具已弹出：生气 emoji（已在上面全局检测中处理）
+        }
+      }
+      
+      // 4. 点击了需要 storage_basket 的污垢
+      if (allTools.includes('storage_basket')) {
+        if (!this.activeTool) {
+          // 熄灭其他金边，只保留当前提示
+          this.tutorial.showingRubbishBinGlow = false;
+          this.tutorial.showingDcBasketGlow = false;
+          this.tutorial.showingClothGlow = false;
+          // 没有任何工具选中：storage_basket 槽位金色闪烁
+          if (!this.tutorial.storageBasketGlowShown) {
+            this.tutorial.showingStorageBasketGlow = true;
+            this.tutorial.storageBasketGlowShown = true;
+            console.log('[GameplayScene] 引导：提示选择 storage_basket');
+          }
+        } else if (this.activeTool.id !== 'storage_basket') {
+          // 有非 storage_basket 的工具已弹出：生气 emoji（已在上面全局检测中处理）
         }
       }
     }
@@ -5443,6 +5607,7 @@ class GameplayScene extends Scene {
     if (this.tutorial.isActive) {
       this.tutorial.showRubbishBinDirtHint = false;
       this.tutorial.showDcBasketDirtHint = false;
+      this.tutorial.showStorageBasketDirtHint = false;
     }
     
     const s = this.screenWidth / 750; // 屏幕缩放比例
@@ -5523,6 +5688,9 @@ class GameplayScene extends Scene {
           } else if (this.activeTool && this.activeTool.id === 'dc_basket') {
             this.tutorial.dcBasketUsed = true;
             this.tutorial.showDcBasketDirtHint = false;
+          } else if (this.activeTool && this.activeTool.id === 'storage_basket') {
+            this.tutorial.storageBasketUsed = true;
+            this.tutorial.showStorageBasketDirtHint = false;
           }
           this._checkTutorialComplete();
         }
@@ -5635,6 +5803,7 @@ class GameplayScene extends Scene {
       this.tutorial.showRubbishBinDirtHint = false;
       this.tutorial.showDcBasketDirtHint = false;
       this.tutorial.showClothDirtHint = false;
+      this.tutorial.showStorageBasketDirtHint = false;
     }
     
     // 立即清除活动工具（防止竞态条件：用户在动画期间点击其他位置）
@@ -5700,6 +5869,7 @@ class GameplayScene extends Scene {
         this.tutorial.showRubbishBinDirtHint = true;
         this.tutorial.showDcBasketDirtHint = false;
         this.tutorial.showClothDirtHint = false;
+        this.tutorial.showStorageBasketDirtHint = false;
         this.tutorial.showAngryEmoji = false;
         console.log('[GameplayScene] 引导：选中 rubbish_bin，提示目标污垢');
       }
@@ -5710,6 +5880,7 @@ class GameplayScene extends Scene {
         this.tutorial.showDcBasketDirtHint = true;
         this.tutorial.showRubbishBinDirtHint = false;
         this.tutorial.showClothDirtHint = false;
+        this.tutorial.showStorageBasketDirtHint = false;
         this.tutorial.showAngryEmoji = false;
         console.log('[GameplayScene] 引导：选中 dc_basket，提示目标污垢');
       }
@@ -5720,6 +5891,7 @@ class GameplayScene extends Scene {
         this.tutorial.showClothDirtHint = true;
         this.tutorial.showRubbishBinDirtHint = false;
         this.tutorial.showDcBasketDirtHint = false;
+        this.tutorial.showStorageBasketDirtHint = false;
         this.tutorial.showAngryEmoji = false;
         // 重置 Z 字形动画
         this.tutorial.circularAnim.time = 0;
@@ -5727,14 +5899,27 @@ class GameplayScene extends Scene {
         console.log('[GameplayScene] 引导：选中 cloth，提示 Z 字形拖地');
       }
       
+      // 5. 点击了 storage_basket：显示目标污垢的白色光圈+手指
+      else if (tool.id === 'storage_basket') {
+        this.tutorial.showingStorageBasketGlow = false;
+        this.tutorial.showStorageBasketDirtHint = true;
+        this.tutorial.showRubbishBinDirtHint = false;
+        this.tutorial.showDcBasketDirtHint = false;
+        this.tutorial.showClothDirtHint = false;
+        this.tutorial.showAngryEmoji = false;
+        console.log('[GameplayScene] 引导：选中 storage_basket，提示目标污垢');
+      }
+      
       // 点击了其他工具：隐藏所有提示
       else {
         this.tutorial.showingRubbishBinGlow = false;
         this.tutorial.showingDcBasketGlow = false;
         this.tutorial.showingClothGlow = false;
+        this.tutorial.showingStorageBasketGlow = false;
         this.tutorial.showRubbishBinDirtHint = false;
         this.tutorial.showDcBasketDirtHint = false;
         this.tutorial.showClothDirtHint = false;
+        this.tutorial.showStorageBasketDirtHint = false;
       }
     }
     
